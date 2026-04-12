@@ -14,6 +14,7 @@ export { convertDelimiter } from './delimiter.js';
 export { convertSubscript } from './subscript.js';
 export { convertSuperscript } from './superscript.js';
 export { convertSubSuperscript } from './sub-superscript.js';
+export { convertPreSubSuperscript } from './pre-sub-superscript.js';
 export { convertRadical } from './radical.js';
 export { convertLowerLimit } from './lower-limit.js';
 export { convertUpperLimit } from './upper-limit.js';

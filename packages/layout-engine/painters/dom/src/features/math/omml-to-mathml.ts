@@ -19,6 +19,7 @@ import {
   convertSubscript,
   convertSuperscript,
   convertSubSuperscript,
+  convertPreSubSuperscript,
   convertRadical,
   convertLowerLimit,
   convertUpperLimit,
@@ -52,6 +53,7 @@ const MATH_OBJECT_REGISTRY: Record<string, MathObjectConverter | null> = {
   'm:sSub': convertSubscript, // Subscript
   'm:sSup': convertSuperscript, // Superscript
   'm:sSubSup': convertSubSuperscript, // Sub-superscript (both)
+  'm:sPre': convertPreSubSuperscript, // Pre-sub-superscript (left of base)
 
   // ── Not yet implemented (community contributions welcome) ────────────────
   'm:acc': null, // Accent (diacritical mark above base)
@@ -62,7 +64,6 @@ const MATH_OBJECT_REGISTRY: Record<string, MathObjectConverter | null> = {
   'm:m': null, // Matrix (grid of elements)
   'm:nary': null, // N-ary operator (integral, summation, product)
   'm:phant': null, // Phantom (invisible spacing placeholder)
-  'm:sPre': null, // Pre-sub-superscript (left of base)
 };
 
 /** OMML argument/container elements that wrap children in <mrow>. */
