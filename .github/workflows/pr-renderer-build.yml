@@ -1,4 +1,4 @@
-name: "Labs: PR Renderer Build"
+name: 'Labs: PR Renderer Build'
 
 on:
   pull_request:
@@ -337,8 +337,6 @@ jobs:
           echo "renderer_build_id=${RENDERER_BUILD_ID}" >> "${GITHUB_OUTPUT}"
           echo "renderer_build_status=${RENDERER_BUILD_STATUS}" >> "${GITHUB_OUTPUT}"
 
-<<<<<<< Updated upstream
-=======
       - name: Wait for Labs renderer artifact
         id: wait_renderer_artifact
         env:
@@ -644,7 +642,6 @@ jobs:
             echo "| New run created | \`${{ steps.dispatch.outputs.created }}\` |"
           } >> "${GITHUB_STEP_SUMMARY}"
 
->>>>>>> Stashed changes
   cleanup:
     name: Cleanup
     if: >-
