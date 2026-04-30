@@ -30,6 +30,27 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(__dirname, '..', '..');
 
 const skipPack = process.argv.includes('--skip-pack');
+const skipTypeCheck = process.argv.includes('--skip-public-types-check');
+
+// SD-2860: before doing any of the matrix work, fail fast if the public-type
+// surface drifted from the assertion list. Otherwise a developer who added a
+// new public typedef can ship past every other gate without an assertion for
+// the new type.
+if (!skipTypeCheck) {
+  console.log('Checking public-type surface against the assertion list...');
+  try {
+    execSync('node check-public-types.mjs', {
+      cwd: __dirname,
+      stdio: 'inherit',
+    });
+  } catch (e) {
+    console.error('\nPublic-type surface check failed (see message above).');
+    console.error('Run `node tests/consumer-typecheck/check-public-types.mjs --write` from the repo root (or `npm run check:types:write` from inside `tests/consumer-typecheck/`) to regenerate the assertion list, then commit the result.');
+    console.error('(`tests/consumer-typecheck` is intentionally outside the pnpm workspace, so `pnpm --filter` cannot reach it.)');
+    process.exit(1);
+  }
+  console.log();
+}
 
 if (!skipPack) {
   console.log('Packing superdoc and reinstalling fixture...');
