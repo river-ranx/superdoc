@@ -37,7 +37,7 @@
       {
         "title": "Ask on Discord",
         "description": "Join our support channel",
-        "icon": "messages-square",
+        "icon": "/public/icons/discord.svg",
         "href": "https://discord.com/channels/1299087524056010902/1299436491839246409"
       }
     ]
@@ -281,10 +281,9 @@
         "href": "https://github.com/superdoc-dev/superdoc"
       },
       {
-        "type": "button",
+        "type": "discord",
         "href": "https://discord.com/invite/b9UuaZRyaB",
-        "label": "Discord",
-        "icon": "messages-square"
+        "label": "Discord"
       }
     ]
   },
