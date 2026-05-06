@@ -132,7 +132,7 @@ function isOutsidePageBodyContent(layout: Layout, x: number, pageIndex?: number,
     return false;
   }
 
-  const page = layout.pages[pageIndex];
+  const page = layout?.pages?.[pageIndex];
   if (!page) {
     return false;
   }
@@ -1459,11 +1459,24 @@ export class EditorInputManager {
     }
 
     const isNoteEditing = activeNoteSession != null;
-    const useActiveSurfaceHitTest = sessionMode !== 'body' || activeStorySession != null;
-    const editor = sessionMode === 'body' && !isNoteEditing ? bodyEditor : this.#deps.getActiveEditor();
-    if (sessionMode !== 'body') {
+    let currentSessionMode = sessionMode;
+    let useActiveSurfaceHitTest = currentSessionMode !== 'body' || activeStorySession != null;
+    let editor = currentSessionMode === 'body' && !isNoteEditing ? bodyEditor : this.#deps.getActiveEditor();
+    if (currentSessionMode !== 'body') {
       if (this.#handleClickInHeaderFooterMode(event, x, y, normalizedPoint.pageIndex, normalizedPoint.pageLocalY))
         return;
+      // SD-2749: clicking on body content from inside a header/footer session
+      // exits the session synchronously, which also clears the backing story
+      // session. Re-read both so subsequent hit testing and selection dispatch
+      // target the body editor — otherwise ProseMirror's scrollIntoView would
+      // pull the viewport back to the header/footer the user just exited.
+      const refreshedSessionMode = this.#deps.getHeaderFooterSession()?.session?.mode ?? 'body';
+      if (refreshedSessionMode === 'body' && !isNoteEditing) {
+        activeStorySession = this.#deps.getActiveStorySession?.() ?? null;
+        currentSessionMode = 'body';
+        useActiveSurfaceHitTest = activeStorySession != null;
+        editor = bodyEditor;
+      }
     }
 
     // Check for header/footer region hit
@@ -1480,13 +1493,21 @@ export class EditorInputManager {
       }
     }
 
-    if (
-      !useActiveSurfaceHitTest &&
-      isOutsidePageBodyContent(layoutState.layout, x, normalizedPoint.pageIndex, normalizedPoint.pageLocalY)
-    ) {
-      event.preventDefault();
-      this.#focusEditor();
-      return;
+    // Bail when the click did not land on any page body. Two cases:
+    // - SD-2356: click inside a page's bounding box but in the margin/header/footer area.
+    // - SD-2749: click in the gap between pages (no .superdoc-page under the cursor),
+    //   in which case normalizeClientPoint leaves pageIndex undefined.
+    // Both should preserve the current selection and scroll position.
+    if (!useActiveSurfaceHitTest) {
+      const pointerOffAnyPage = !Number.isFinite(normalizedPoint.pageIndex);
+      if (
+        pointerOffAnyPage ||
+        isOutsidePageBodyContent(layoutState.layout, x, normalizedPoint.pageIndex, normalizedPoint.pageLocalY)
+      ) {
+        event.preventDefault();
+        this.#focusEditor();
+        return;
+      }
     }
 
     const { rawHit, hit } = this.#resolveSelectionPointerHit({
