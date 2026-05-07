@@ -15,6 +15,7 @@ import {
   normalizeFramePr,
   normalizeDropCap,
   computeParagraphAttrs,
+  resolveEffectiveParagraphDirection,
   computeRunAttrs,
   hasExplicitParagraphRunProperties,
 } from './paragraph.js';
@@ -159,6 +160,58 @@ describe('computeParagraphAttrs', () => {
     expect(paragraphAttrs.tabs?.[0]).toEqual({ val: 'start', pos: 720 });
   });
 
+  it('maps logical indent start/end to physical left/right for LTR paragraphs', () => {
+    const paragraph: PMNode = {
+      type: { name: 'paragraph' },
+      attrs: {
+        paragraphProperties: {
+          indent: { start: 720, end: 1440 },
+        },
+      },
+    };
+
+    const { paragraphAttrs } = computeParagraphAttrs(paragraph as never);
+
+    expect(paragraphAttrs.indent?.left).toBe(twipsToPx(720));
+    expect(paragraphAttrs.indent?.right).toBe(twipsToPx(1440));
+  });
+
+  it('maps logical indent start/end for RTL paragraphs and applies mirroring', () => {
+    const paragraph: PMNode = {
+      type: { name: 'paragraph' },
+      attrs: {
+        paragraphProperties: {
+          rightToLeft: true,
+          indent: { start: 720, end: 1440 },
+        },
+      },
+    };
+
+    const { paragraphAttrs } = computeParagraphAttrs(paragraph as never);
+
+    expect(paragraphAttrs.indent?.left).toBe(twipsToPx(1440));
+    expect(paragraphAttrs.indent?.right).toBe(twipsToPx(720));
+  });
+
+  it('mirrors physical indent values for RTL paragraphs', () => {
+    const paragraph: PMNode = {
+      type: { name: 'paragraph' },
+      attrs: {
+        paragraphProperties: {
+          rightToLeft: true,
+          indent: { left: 720, right: 1440, firstLine: 360, hanging: 240 },
+        },
+      },
+    };
+
+    const { paragraphAttrs } = computeParagraphAttrs(paragraph as never);
+
+    expect(paragraphAttrs.indent?.left).toBe(twipsToPx(1440));
+    expect(paragraphAttrs.indent?.right).toBe(twipsToPx(720));
+    expect(paragraphAttrs.indent?.firstLine).toBe(-twipsToPx(360));
+    expect(paragraphAttrs.indent?.hanging).toBe(-twipsToPx(240));
+  });
+
   it('exposes resolved paragraph properties when no converter context is provided', () => {
     const paragraph: PMNode = {
       type: { name: 'paragraph' },
@@ -273,7 +326,162 @@ describe('computeParagraphAttrs', () => {
     const { paragraphAttrs } = computeParagraphAttrs(paragraph as never);
 
     expect(paragraphAttrs.direction).toBe('rtl');
-    expect(paragraphAttrs.rtl).toBe(true);
+  });
+
+  it('does not use section direction fallback when paragraph direction is not explicit', () => {
+    const paragraph: PMNode = {
+      type: { name: 'paragraph' },
+      attrs: {
+        paragraphProperties: {},
+      },
+    };
+
+    const converterContext = {
+      sectionDirection: 'rtl',
+      translatedNumbering: {},
+      translatedLinkedStyles: { docDefaults: {}, styles: {} },
+      tableInfo: null,
+    };
+
+    const { paragraphAttrs } = computeParagraphAttrs(paragraph as never, converterContext as never);
+    expect(paragraphAttrs.direction).toBeUndefined();
+  });
+});
+
+describe('resolveEffectiveParagraphDirection', () => {
+  it('prefers resolved paragraph rightToLeft over section direction', () => {
+    const paragraph: PMNode = {
+      type: { name: 'paragraph' },
+      attrs: {
+        paragraphProperties: {
+          rightToLeft: true,
+        },
+      },
+    };
+
+    const direction = resolveEffectiveParagraphDirection(paragraph as never, { rightToLeft: true } as never, 'ltr');
+    expect(direction).toBe('rtl');
+  });
+
+  it('does not use section direction when paragraph direction is not explicit', () => {
+    const paragraph: PMNode = {
+      type: { name: 'paragraph' },
+      attrs: {
+        paragraphProperties: {},
+      },
+    };
+
+    const direction = resolveEffectiveParagraphDirection(paragraph as never, {} as never, 'rtl');
+    expect(direction).toBeUndefined();
+  });
+
+  it('uses run inference before docDefaults direction', () => {
+    const paragraph: PMNode = {
+      type: { name: 'paragraph' },
+      content: [
+        { type: 'run', attrs: { runProperties: { rightToLeft: true } }, content: [{ type: 'text', text: 'אבג' }] },
+      ],
+    };
+
+    const direction = resolveEffectiveParagraphDirection(paragraph as never, {} as never, undefined, 'ltr');
+    expect(direction).toBe('rtl');
+  });
+
+  it('uses run inference when rtl is set on runProperties', () => {
+    const paragraph: PMNode = {
+      type: { name: 'paragraph' },
+      content: [{ type: 'run', attrs: { runProperties: { rtl: true } }, content: [{ type: 'text', text: 'אבג' }] }],
+    };
+
+    const direction = resolveEffectiveParagraphDirection(paragraph as never, {} as never, undefined, 'ltr');
+    expect(direction).toBe('rtl');
+  });
+
+  it('uses docDefaults when no explicit run direction exists', () => {
+    const paragraph: PMNode = {
+      type: { name: 'paragraph' },
+      content: [{ type: 'run', attrs: { runProperties: {} }, content: [{ type: 'text', text: 'abc' }] }],
+    };
+
+    const direction = resolveEffectiveParagraphDirection(paragraph as never, {} as never, undefined, 'rtl');
+    expect(direction).toBe('rtl');
+  });
+
+  it('infers rtl when all runs with explicit direction are rtl', () => {
+    const paragraph: PMNode = {
+      type: { name: 'paragraph' },
+      content: [
+        { type: 'run', attrs: { runProperties: { rightToLeft: true } }, content: [{ type: 'text', text: 'אבג' }] },
+        { type: 'run', attrs: { runProperties: { rightToLeft: true } }, content: [{ type: 'text', text: 'דהו' }] },
+      ],
+    };
+
+    const direction = resolveEffectiveParagraphDirection(paragraph as never, {} as never);
+    expect(direction).toBe('rtl');
+  });
+
+  it('does not infer rtl when any explicit ltr run is present', () => {
+    const paragraph: PMNode = {
+      type: { name: 'paragraph' },
+      content: [
+        { type: 'run', attrs: { runProperties: { rightToLeft: true } }, content: [{ type: 'text', text: 'אבג' }] },
+        { type: 'run', attrs: { runProperties: { rightToLeft: false } }, content: [{ type: 'text', text: 'abc' }] },
+        { type: 'run', attrs: { runProperties: { rightToLeft: false } }, content: [{ type: 'text', text: 'def' }] },
+      ],
+    };
+
+    const direction = resolveEffectiveParagraphDirection(paragraph as never, {} as never);
+    expect(direction).toBeUndefined();
+  });
+
+  it('does not infer rtl when rtl and explicit ltr rtl=false are mixed', () => {
+    const paragraph: PMNode = {
+      type: { name: 'paragraph' },
+      content: [
+        { type: 'run', attrs: { runProperties: { rtl: true } }, content: [{ type: 'text', text: 'אבג' }] },
+        { type: 'run', attrs: { runProperties: { rtl: false } }, content: [{ type: 'text', text: 'abc' }] },
+      ],
+    };
+
+    const direction = resolveEffectiveParagraphDirection(paragraph as never, {} as never);
+    expect(direction).toBeUndefined();
+  });
+
+  it('does not infer rtl when explicit rtl and ltr runs are mixed', () => {
+    const paragraph: PMNode = {
+      type: { name: 'paragraph' },
+      content: [
+        { type: 'run', attrs: { runProperties: { rightToLeft: false } }, content: [{ type: 'text', text: 'abc' }] },
+        { type: 'run', attrs: { runProperties: { rightToLeft: true } }, content: [{ type: 'text', text: 'אבג' }] },
+        { type: 'run', attrs: { runProperties: { rightToLeft: true } }, content: [{ type: 'text', text: 'דהו' }] },
+      ],
+    };
+
+    const direction = resolveEffectiveParagraphDirection(paragraph as never, {} as never);
+    expect(direction).toBeUndefined();
+  });
+
+  it('does not infer rtl on mixed explicit directions (tie case)', () => {
+    const paragraph: PMNode = {
+      type: { name: 'paragraph' },
+      content: [
+        { type: 'run', attrs: { runProperties: { rightToLeft: true } }, content: [{ type: 'text', text: 'אבג' }] },
+        { type: 'run', attrs: { runProperties: { rightToLeft: false } }, content: [{ type: 'text', text: 'abc' }] },
+      ],
+    };
+
+    const direction = resolveEffectiveParagraphDirection(paragraph as never, {} as never);
+    expect(direction).toBeUndefined();
+  });
+
+  it('returns undefined when no direction signal exists', () => {
+    const paragraph: PMNode = {
+      type: { name: 'paragraph' },
+      content: [{ type: 'run', attrs: { runProperties: {} }, content: [{ type: 'text', text: 'plain text' }] }],
+    };
+
+    const direction = resolveEffectiveParagraphDirection(paragraph as never, {} as never);
+    expect(direction).toBeUndefined();
   });
 });
 

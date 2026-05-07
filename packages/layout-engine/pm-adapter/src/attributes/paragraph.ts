@@ -23,6 +23,7 @@ import { pickNumber, twipsToPx, isFiniteNumber, ptToPx } from '../utilities.js';
 import { normalizeAlignment, normalizeParagraphSpacing } from './spacing-indent.js';
 import { normalizeOoxmlTabs } from './tabs.js';
 import { normalizeParagraphBorders, normalizeParagraphShading } from './borders.js';
+import { mirrorIndentForRtl } from './bidi.js';
 import type { ConverterContext } from '../converter-context.js';
 
 import {
@@ -37,6 +38,7 @@ import {
 
 const DEFAULT_DECIMAL_SEPARATOR = '.';
 const DEFAULT_TAB_INTERVAL_TWIPS = 720; // 0.5 inch
+type ParagraphDirection = 'ltr' | 'rtl';
 
 const normalizeColor = (value?: unknown): string | undefined => {
   if (typeof value !== 'string') return undefined;
@@ -62,6 +64,43 @@ export const deepClone = <T>(obj: T): T => {
   return clone as T;
 };
 
+const inferDirectionFromRuns = (para: PMNode): ParagraphDirection | undefined => {
+  const content = Array.isArray(para.content) ? para.content : [];
+  let hasExplicitRtl = false;
+  let hasExplicitLtr = false;
+
+  for (const node of content) {
+    if (node?.type !== 'run') continue;
+    const runProps = (node.attrs?.runProperties as { rightToLeft?: unknown; rtl?: unknown } | undefined) ?? {};
+    const runDirection = runProps.rightToLeft ?? runProps.rtl;
+    if (runDirection === true) {
+      hasExplicitRtl = true;
+      continue;
+    }
+    if (runDirection === false) {
+      hasExplicitLtr = true;
+    }
+  }
+
+  if (!hasExplicitRtl && !hasExplicitLtr) return undefined;
+  if (hasExplicitLtr) return undefined;
+  return 'rtl';
+};
+
+export const resolveEffectiveParagraphDirection = (
+  para: PMNode,
+  resolvedParagraphProperties: ParagraphProperties,
+  _sectionDirection?: ParagraphDirection,
+  docDefaultsDirection?: ParagraphDirection,
+): ParagraphDirection | undefined => {
+  if (resolvedParagraphProperties.rightToLeft === true) return 'rtl';
+  if (resolvedParagraphProperties.rightToLeft === false) return 'ltr';
+  const inferredFromRuns = inferDirectionFromRuns(para);
+  if (inferredFromRuns) return inferredFromRuns;
+  if (docDefaultsDirection) return docDefaultsDirection;
+  return undefined;
+};
+
 /**
  * Convert indent from twips to pixels.
  */
@@ -84,6 +123,29 @@ const normalizeIndentTwipsToPx = (indent?: ParagraphIndent | null): ParagraphInd
   if (firstLine != null) result.firstLine = twipsToPx(firstLine);
   if (hanging != null) result.hanging = twipsToPx(hanging);
   return Object.keys(result).length > 0 ? result : undefined;
+};
+
+const resolveLogicalIndentToPhysical = (
+  indent: ParagraphIndent | undefined,
+  _direction: ParagraphDirection | undefined,
+): ParagraphIndent | undefined => {
+  if (!indent) return undefined;
+
+  const resolved: ParagraphIndent = { ...indent };
+  const source = indent as ParagraphIndent & { start?: unknown; end?: unknown };
+
+  if (source.start != null) {
+    resolved.left = source.start as number;
+  }
+
+  if (source.end != null) {
+    resolved.right = source.end as number;
+  }
+
+  delete (resolved as ParagraphIndent & { start?: unknown }).start;
+  delete (resolved as ParagraphIndent & { end?: unknown }).end;
+
+  return resolved;
 };
 
 export const normalizeFramePr = (value: ParagraphFrameProperties | undefined): ParagraphFrame | undefined => {
@@ -273,13 +335,29 @@ export const computeParagraphAttrs = (
     );
   }
 
-  const isRtl = resolvedParagraphProperties.rightToLeft === true;
+  const normalizedDirection = resolveEffectiveParagraphDirection(
+    para,
+    resolvedParagraphProperties,
+    converterContext?.sectionDirection,
+    converterContext?.translatedLinkedStyles?.docDefaults?.paragraphProperties?.rightToLeft === true
+      ? 'rtl'
+      : converterContext?.translatedLinkedStyles?.docDefaults?.paragraphProperties?.rightToLeft === false
+        ? 'ltr'
+        : undefined,
+  );
+  const isRtl = normalizedDirection === 'rtl';
 
   const normalizedSpacing = normalizeParagraphSpacing(
     resolvedParagraphProperties.spacing,
     Boolean(resolvedParagraphProperties.numberingProperties),
   );
-  const normalizedIndent = normalizeIndentTwipsToPx(resolvedParagraphProperties.indent as ParagraphIndent);
+  const indentWithPhysicalSides = resolveLogicalIndentToPhysical(
+    resolvedParagraphProperties.indent as ParagraphIndent,
+    normalizedDirection,
+  );
+  const normalizedIndentBase = normalizeIndentTwipsToPx(indentWithPhysicalSides);
+  const normalizedIndent =
+    isRtl && normalizedIndentBase ? mirrorIndentForRtl(normalizedIndentBase) : normalizedIndentBase;
   const normalizedTabStops = normalizeOoxmlTabs(resolvedParagraphProperties.tabStops);
   const normalizedAlignment = normalizeAlignment(resolvedParagraphProperties.justification, isRtl);
   const normalizedBorders = normalizeParagraphBorders(resolvedParagraphProperties.borders);
@@ -287,12 +365,6 @@ export const computeParagraphAttrs = (
   const paragraphDecimalSeparator = DEFAULT_DECIMAL_SEPARATOR;
   const tabIntervalTwips = DEFAULT_TAB_INTERVAL_TWIPS;
   const normalizedFramePr = normalizeFramePr(resolvedParagraphProperties.framePr);
-  const normalizedDirection =
-    resolvedParagraphProperties.rightToLeft === true
-      ? 'rtl'
-      : resolvedParagraphProperties.rightToLeft === false
-        ? 'ltr'
-        : undefined;
   const floatAlignment = normalizedFramePr?.xAlign;
   const normalizedNumberingProperties = normalizeNumberingProperties(resolvedParagraphProperties.numberingProperties);
   const dropCapDescriptor = normalizeDropCap(resolvedParagraphProperties.framePr, para, converterContext);
@@ -322,7 +394,7 @@ export const computeParagraphAttrs = (
     keepLines: resolvedParagraphProperties.keepLines,
     floatAlignment: floatAlignment,
     pageBreakBefore: resolvedParagraphProperties.pageBreakBefore,
-    ...(normalizedDirection ? { direction: normalizedDirection as 'rtl' | 'ltr', rtl: isRtl } : {}),
+    ...(normalizedDirection ? { direction: normalizedDirection } : {}),
   };
 
   if (normalizedNumberingProperties && normalizedListRendering) {
