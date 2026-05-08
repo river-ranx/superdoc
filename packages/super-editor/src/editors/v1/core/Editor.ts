@@ -825,7 +825,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
         html: options?.html,
         markdown: options?.markdown,
         jsonOverride: options?.json ?? null,
-        fragment: options?.fragment ?? this.options.fragment ?? null,
+        fragment: options?.fragment ?? null,
       };
 
       // Password for encrypted .docx — threaded to loadXmlData, then cleared
@@ -1093,6 +1093,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
     this.options.initialState = null;
     this.options.content = '';
     this.options.fileSource = null;
+    this.options.fragment = null;
 
     // Reset internal state
     this._state = undefined!;
