@@ -176,6 +176,7 @@ describe('Editor collaboration seeding', () => {
     try {
       await seedEditor.open(undefined, { mode: 'docx' });
       const crossReferenceDoc = createCrossReferencePmDoc(seedEditor);
+      // Replacing the full doc range with a doc node unwraps its children into the existing root.
       seedEditor.dispatch(seedEditor.state.tr.replaceWith(0, seedEditor.state.doc.content.size, crossReferenceDoc));
 
       const seededCrossReferences = collectCrossReferences(seedEditor);
