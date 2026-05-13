@@ -61,6 +61,7 @@ import {
   computeLinePmRange,
   expandRunsForInlineNewlines,
   getCellSpacingPx,
+  getParagraphInlineDirection,
   normalizeColumnLayout,
   normalizeBaselineShift,
   resolveBaseFontSizeForVerticalText,
@@ -3178,7 +3179,7 @@ export class DomPainter {
             fragment.markerTextWidth,
             resolvedLine.indentOffset,
           );
-          const isRtl = block.attrs?.direction === 'rtl';
+          const isRtl = getParagraphInlineDirection(block.attrs) === 'rtl';
           const lineEl = this.renderLine(
             block,
             resolvedLine.line,
@@ -3285,7 +3286,7 @@ export class DomPainter {
         const paraIndent = block.attrs?.indent;
         const paraIndentLeft = paraIndent?.left ?? 0;
         const paraIndentRight = paraIndent?.right ?? 0;
-        const isRtl = block.attrs?.direction === 'rtl';
+        const isRtl = getParagraphInlineDirection(block.attrs) === 'rtl';
         const {
           anchorIndentPx: paraMarkerAnchorIndent,
           firstLinePx: markerFirstLine,
@@ -7774,7 +7775,7 @@ const deriveBlockVersion = (block: FlowBlock): string => {
           attrs.borders ? hashParagraphBorders(attrs.borders) : '',
           attrs.shading?.fill ?? '',
           attrs.shading?.color ?? '',
-          attrs.direction ?? '',
+          getParagraphInlineDirection(attrs) ?? '',
           attrs.tabs?.length ? JSON.stringify(attrs.tabs) : '',
         ].join(':')
       : '';
@@ -7960,7 +7961,7 @@ const deriveBlockVersion = (block: FlowBlock): string => {
               hash = hashNumber(hash, attrs.indent?.hanging ?? 0);
               hash = hashString(hash, attrs.shading?.fill ?? '');
               hash = hashString(hash, attrs.shading?.color ?? '');
-              hash = hashString(hash, attrs.direction ?? '');
+              hash = hashString(hash, getParagraphInlineDirection(attrs) ?? '');
               if (attrs.borders) {
                 hash = hashString(hash, hashParagraphBorders(attrs.borders));
               }
