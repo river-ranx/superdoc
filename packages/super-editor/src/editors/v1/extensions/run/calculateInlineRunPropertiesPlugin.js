@@ -9,12 +9,17 @@ import {
 } from '@extensions/paragraph/resolvedPropertiesCache.js';
 import { collectChangedRangesThroughTransactions } from '@utils/rangeUtils.js';
 
+// SD-2912: `boldCs` / `italicCs` are NOT marks. The OOXML companions for complex-script
+// bold/italic are independent properties (ECMA-376 §17.3.2.1, §17.3.2.16) carried by the
+// run's stored runProperties. Listing them here caused the plugin to overwrite their
+// preserved value on every appendTransaction, which combined with the auto-propagation in
+// `decodeRPrFromMarks` injected a `<w:bCs/>` / `<w:iCs/>` element into every run on round-
+// trip even when the source rPr had none. Keeping them out of this set lets the existing-
+// runProperties branch in `getInlineRunProperties` preserve them verbatim.
 const RUN_PROPERTIES_DERIVED_FROM_MARKS = new Set([
   'strike',
   'italic',
-  'italicCs',
   'bold',
-  'boldCs',
   'underline',
   'highlight',
   'textTransform',
@@ -203,6 +208,7 @@ export const calculateInlineRunPropertiesPlugin = (editor) =>
           tableInfo,
           $pos,
           editor,
+          removedKeys,
           preservedDerivedKeys,
           preferExistingKeys,
         );
@@ -320,6 +326,8 @@ export const calculateInlineRunPropertiesPlugin = (editor) =>
               if (!runProperties) runProperties = {};
               lostKeys.forEach((k) => {
                 if (removedKeys.has(k)) return;
+                const baseKey = COMPANION_INLINE_KEYS[k];
+                if (baseKey && removedKeys.has(baseKey)) return;
                 if (runNode.attrs?.runProperties?.[k] !== undefined) {
                   runProperties[k] = runNode.attrs.runProperties[k];
                 }
@@ -475,6 +483,7 @@ function segmentRunByInlineProps(
   tableInfo,
   $pos,
   editor,
+  removedKeys,
   preservedDerivedKeys,
   preferExistingKeys,
 ) {
@@ -491,6 +500,7 @@ function segmentRunByInlineProps(
         tableInfo,
         $pos,
         editor,
+        removedKeys,
         preservedDerivedKeys,
         preferExistingKeys,
       );
@@ -538,6 +548,7 @@ function computeInlineRunProps(
   tableInfo,
   $pos,
   editor,
+  removedKeys,
   preservedDerivedKeys,
   preferExistingKeys,
 ) {
@@ -561,6 +572,7 @@ function computeInlineRunProps(
     runPropertiesFromStyles,
     existingRunProperties,
     editor,
+    removedKeys,
     preservedDerivedKeys,
     preferExistingKeys,
   );
@@ -583,6 +595,7 @@ function getInlineRunProperties(
   runPropertiesFromStyles,
   existingRunProperties,
   editor,
+  removedKeys = new Set(),
   preservedDerivedKeys = new Set(),
   preferExistingKeys = new Set(),
 ) {
@@ -643,6 +656,8 @@ function getInlineRunProperties(
   if (existingRunProperties != null) {
     Object.keys(existingRunProperties).forEach((key) => {
       if (RUN_PROPERTIES_DERIVED_FROM_MARKS.has(key) && !preservedDerivedKeys.has(key)) return;
+      const baseKey = COMPANION_INLINE_KEYS[key];
+      if (baseKey && removedKeys.has(baseKey)) return;
       if (
         key === 'styleId' &&
         TRANSIENT_HYPERLINK_STYLE_IDS.has(existingRunProperties[key]) &&
