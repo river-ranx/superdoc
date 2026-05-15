@@ -54,8 +54,6 @@ export function handleDocumentPartObjectNode(node: PMNode, context: NodeHandlerC
         docPartObjectId,
         tocInstruction,
         sdtMetadata: docPartSdtMetadata,
-        // docPartObject `uniqueId` is the stable group key for the TOC.
-        // Falls back to undefined when the SDT omits w:id (per-entry hover still works).
         tocId: docPartObjectId ?? undefined,
       },
       {

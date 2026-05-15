@@ -241,9 +241,7 @@ const LINK_AND_TOC_STYLES = `
   color: inherit !important;
   text-decoration: none !important;
   cursor: default;
-  /* Anchors are draggable by default. The browser starts a native
-     link drag on mousedown, which preempts our pointer-driven text-selection
-     loop. Disabling the user-drag affordance keeps drag-select responsive. */
+  /* Disable native link drag so our pointer loop can run text-selection. */
   -webkit-user-drag: none;
   user-drag: none;
 }
@@ -257,20 +255,15 @@ const LINK_AND_TOC_STYLES = `
   outline: none;
 }
 
-/* TOC hover affordance — mirrors structured-content block behavior.
-   The plain :hover covers the entry under the cursor; the .toc-group-hover
-   class is set by PresentationEditor on every entry that shares the same
-   data-toc-id so the entire TOC greys out as a single block. */
+/* TOC hover. .toc-group-hover is set by PresentationEditor on every entry
+   sharing a data-toc-id so the whole TOC greys out together. The ::after
+   stripe (height set via --toc-gap-below) fills the paragraph-spacing gap
+   between adjacent entries so the hover reads as one continuous block. */
 .superdoc-toc-entry:hover,
 .superdoc-toc-entry.toc-group-hover {
   background-color: var(--sd-content-controls-block-hover-bg, #f2f2f2);
 }
 
-/* Each TOC entry is its own absolutely-positioned paragraph fragment, so
-   adjacent entries have a vertical gap from paragraph spacing. Without this
-   pseudo-element the hover state renders as striped bands. PresentationEditor
-   measures the gap to the next same-page entry and writes it to --toc-gap-below;
-   the ::after stripe spans that gap so the TOC reads as one continuous block. */
 .superdoc-toc-entry.toc-group-hover::after {
   content: '';
   position: absolute;

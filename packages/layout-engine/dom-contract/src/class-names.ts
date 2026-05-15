@@ -45,11 +45,7 @@ export const DOM_CLASS_NAMES = {
   /** Paragraph fragment rendered as a Table of Contents entry. */
   TOC_ENTRY: 'superdoc-toc-entry',
 
-  /**
-   * Grouped hover highlight applied to all paragraph fragments of the same TOC.
-   * Set by PresentationEditor's hover coordination so the entire TOC greys
-   * out together, mirroring `SDT_GROUP_HOVER` for structured content.
-   */
+  /** TOC analogue of `SDT_GROUP_HOVER`, applied to every fragment sharing a `data-toc-id`. */
   TOC_GROUP_HOVER: 'toc-group-hover',
 
   /** Block-level image fragment (ImageBlock). */

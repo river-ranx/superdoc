@@ -205,21 +205,14 @@ export function processTocChildren(
 export function handleTableOfContentsNode(node: PMNode, context: NodeHandlerContext): void {
   if (!Array.isArray(node.content)) return;
 
-  // Direct PM `tableOfContents` nodes carry an `sdBlockId` attribute that is
-  // stable for the lifetime of the node, so use it to group hover state across
-  // all rendered TOC paragraphs.
-  const directTocId =
-    typeof (node.attrs as { sdBlockId?: unknown } | undefined)?.sdBlockId === 'string'
-      ? ((node.attrs as { sdBlockId?: string }).sdBlockId as string)
-      : undefined;
-
+  // Direct tableOfContents nodes have no enclosing SDT — use sdBlockId as the
+  // hover group key, and omit gallery so applyTocMetadata doesn't fabricate one.
+  const sdBlockId = (node.attrs as { sdBlockId?: unknown } | undefined)?.sdBlockId;
   processTocChildren(
     node.content,
     {
-      // No enclosing SDT — omit gallery so applyTocMetadata does not fabricate
-      // a docPartObject sdt entry on each TOC paragraph.
       tocInstruction: getNodeInstruction(node),
-      tocId: directTocId,
+      tocId: typeof sdBlockId === 'string' ? sdBlockId : undefined,
     },
     {
       nextBlockId: context.nextBlockId,
