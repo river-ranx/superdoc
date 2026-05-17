@@ -99,7 +99,14 @@ function snapshotName(subpath) {
   return 'superdoc-' + subpath.replace(/^\.\//, '').replace(/\//g, '-') + '.txt';
 }
 
-function listExportedNames(entryFile) {
+function formatDiagnostic(diagnostic) {
+  const message = ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n');
+  if (!diagnostic.file || diagnostic.start == null) return message;
+  const { line, character } = diagnostic.file.getLineAndCharacterOfPosition(diagnostic.start);
+  return `${diagnostic.file.fileName}:${line + 1}:${character + 1} ${message}`;
+}
+
+function listExportedNames(subpath, entryFile) {
   const program = ts.createProgram({
     rootNames: [entryFile],
     options: {
@@ -107,11 +114,21 @@ function listExportedNames(entryFile) {
       module: ts.ModuleKind.ESNext,
       target: ts.ScriptTarget.ESNext,
       noEmit: true,
-      skipLibCheck: true,
+      skipLibCheck: false,
       allowJs: false,
       declaration: false,
     },
   });
+  const diagnostics = [
+    ...program.getSyntacticDiagnostics(),
+    ...program.getSemanticDiagnostics(),
+    ...program.getDeclarationDiagnostics(),
+  ];
+  if (diagnostics.length > 0) {
+    const details = diagnostics.slice(0, 10).map((diagnostic) => `  - ${formatDiagnostic(diagnostic)}`).join('\n');
+    const suffix = diagnostics.length > 10 ? `\n  ... ${diagnostics.length - 10} more diagnostics` : '';
+    throw new Error(`${subpath} declaration has TypeScript diagnostics:\n${details}${suffix}`);
+  }
   const checker = program.getTypeChecker();
   const source = program.getSourceFile(entryFile);
   if (!source) throw new Error('Cannot load source: ' + entryFile);
@@ -139,7 +156,7 @@ for (const subpath of SUBPATHS) {
 
   let names;
   try {
-    names = listExportedNames(importFile);
+    names = listExportedNames(subpath, importFile);
   } catch (err) {
     console.error(`[SD-3176] Failed to enumerate ${subpath}: ${err.message}`);
     failed = true;
@@ -160,7 +177,7 @@ for (const subpath of SUBPATHS) {
     }
     let cjsNames;
     try {
-      cjsNames = listExportedNames(requireFile);
+      cjsNames = listExportedNames(subpath, requireFile);
     } catch (err) {
       console.error(`[SD-3176] Failed to enumerate CJS for ${subpath}: ${err.message}`);
       failed = true;

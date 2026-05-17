@@ -33,8 +33,15 @@
  *
  * Adding a new facade file:
  *   - Create `packages/superdoc/src/public/<name>.ts` with named exports.
- *   - Wire it into `vite.config.js` (`rollupOptions.input`) and the CJS
- *     shim list in `scripts/ensure-types.cjs`.
+ *   - Wire it into `vite.config.js` (`rollupOptions.input`).
+ *   - If the new entry is intended to ship with both ESM and CJS type
+ *     declarations (i.e. `package.json#exports` will use a `types.import` /
+ *     `types.require` pair), also add it to `cjsDeclarationShims` in
+ *     `scripts/ensure-types.cjs` and set `cjs` on the `FACADE_ENTRIES`
+ *     entry below. If the entry will use a single `types` string instead
+ *     (matching the SD-3180 legacy leaf entries), leave `cjs: null` and
+ *     the parity check is skipped. Phase 4 of SD-3175 owns the contract
+ *     flip and decides per-entry which shape ships.
  *   - Append a `FACADE_ENTRIES` entry below with the expected symbol set.
  *   - If the new entry re-exports `EditorCommands`, set
  *     `runsCommandSignatureProbe: true`.
@@ -97,6 +104,44 @@ const FACADE_ENTRIES = [
     runsCommandSignatureProbe: false,
     ticket: 'SD-3179',
   },
+  // SD-3180: legacy leaf entries. These match the existing single-types
+  // pattern of the live `superdoc/converter` / `superdoc/docx-zipper` /
+  // `superdoc/file-zipper` subpaths, which do not have `.d.cts` shims
+  // today. `cjs: null` skips the ESM/CJS parity check. Phase 4 decides
+  // whether to add CJS shims when the contract flips.
+  {
+    name: 'legacy/converter',
+    esm: path.join(PUBLIC_DIST, 'legacy', 'converter.d.ts'),
+    cjs: null,
+    // AIDEV-NOTE: `hasBodyNumberingReferences` is in the runtime contract
+    // of today's `superdoc/converter` (see
+    // `packages/superdoc/dist/super-editor/converter.es.js`) but missing
+    // from the existing types entry. The facade types both so Phase 4
+    // can flip without regressing JS consumers.
+    expectedNames: ['SuperConverter', 'hasBodyNumberingReferences'],
+    runsCommandSignatureProbe: false,
+    ticket: 'SD-3180',
+  },
+  {
+    name: 'legacy/docx-zipper',
+    esm: path.join(PUBLIC_DIST, 'legacy', 'docx-zipper.d.ts'),
+    cjs: null,
+    // AIDEV-NOTE: `default`, not `DocxZipper`. The current public contract
+    // is `import DocxZipper from 'superdoc/docx-zipper'`. The resolved
+    // exported name is therefore `default`. Changing to a named export
+    // would break consumers.
+    expectedNames: ['default'],
+    runsCommandSignatureProbe: false,
+    ticket: 'SD-3180',
+  },
+  {
+    name: 'legacy/file-zipper',
+    esm: path.join(PUBLIC_DIST, 'legacy', 'file-zipper.d.ts'),
+    cjs: null,
+    expectedNames: ['createZip'],
+    runsCommandSignatureProbe: false,
+    ticket: 'SD-3180',
+  },
 ];
 
 function loadFile(file) {
@@ -108,7 +153,15 @@ function loadFile(file) {
   return fs.readFileSync(file, 'utf8');
 }
 
-function listExportedNames(file) {
+function formatDiagnostic(diagnostic) {
+  const message = ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n');
+  if (!diagnostic.file || diagnostic.start == null) return message;
+  const { line, character } = diagnostic.file.getLineAndCharacterOfPosition(diagnostic.start);
+  const relative = path.relative(repoRoot, diagnostic.file.fileName);
+  return `${relative}:${line + 1}:${character + 1} ${message}`;
+}
+
+function listExportedNames(entry, file) {
   const program = ts.createProgram({
     rootNames: [file],
     options: {
@@ -116,19 +169,39 @@ function listExportedNames(file) {
       module: ts.ModuleKind.ESNext,
       target: ts.ScriptTarget.ESNext,
       noEmit: true,
-      skipLibCheck: true,
+      skipLibCheck: false,
     },
   });
+  const diagnostics = [
+    ...program.getSyntacticDiagnostics(),
+    ...program.getSemanticDiagnostics(),
+    ...program.getDeclarationDiagnostics(),
+  ];
+  if (diagnostics.length > 0) {
+    console.error(`[verify-public-facade-emit] ${entry.name}: facade declaration has TypeScript diagnostics.`);
+    for (const diagnostic of diagnostics.slice(0, 10)) {
+      console.error('  - ' + formatDiagnostic(diagnostic));
+    }
+    if (diagnostics.length > 10) {
+      console.error(`  ... ${diagnostics.length - 10} more diagnostics`);
+    }
+    return { ok: false, names: [] };
+  }
   const checker = program.getTypeChecker();
   const src = program.getSourceFile(file);
   const symbol = checker.getSymbolAtLocation(src) ?? (src && src.symbol);
-  if (!symbol) return [];
-  return [...new Set(checker.getExportsOfModule(symbol).map((s) => s.getName()))].sort();
+  if (!symbol) return { ok: true, names: [] };
+  return {
+    ok: true,
+    names: [...new Set(checker.getExportsOfModule(symbol).map((s) => s.getName()))].sort(),
+  };
 }
 
 function checkSymbolSet(entry) {
   const expected = [...entry.expectedNames].sort();
-  const actual = listExportedNames(entry.esm);
+  const result = listExportedNames(entry, entry.esm);
+  if (!result.ok) return { ok: false, actual: result.names };
+  const actual = result.names;
   if (JSON.stringify(actual) === JSON.stringify(expected)) {
     return { ok: true, actual };
   }
@@ -141,7 +214,9 @@ function checkSymbolSet(entry) {
 }
 
 function checkEsmCjsParity(entry, esmNames) {
-  const cjsNames = listExportedNames(entry.cjs);
+  const result = listExportedNames(entry, entry.cjs);
+  if (!result.ok) return false;
+  const cjsNames = result.names;
   if (JSON.stringify(esmNames) === JSON.stringify(cjsNames)) return true;
   const importOnly = esmNames.filter((n) => !cjsNames.includes(n));
   const requireOnly = cjsNames.filter((n) => !esmNames.includes(n));
@@ -218,7 +293,9 @@ const LEAK_PATTERNS = [
 
 function checkLeaks(entry) {
   let ok = true;
-  for (const file of [entry.esm, entry.cjs]) {
+  const files = [entry.esm];
+  if (entry.cjs) files.push(entry.cjs);
+  for (const file of files) {
     const code = stripComments(loadFile(file));
     for (const pattern of LEAK_PATTERNS) {
       const matches = code.match(pattern.re);
@@ -239,7 +316,10 @@ for (const entry of FACADE_ENTRIES) {
   const symbolResult = checkSymbolSet(entry);
   if (!symbolResult.ok) failed = true;
 
-  if (!checkEsmCjsParity(entry, symbolResult.actual)) failed = true;
+  // Entries with `cjs: null` (e.g. SD-3180 legacy leaf entries that match
+  // the existing single-types pattern) skip the parity check until Phase 4
+  // decides whether to add proper CJS shims.
+  if (entry.cjs && !checkEsmCjsParity(entry, symbolResult.actual)) failed = true;
 
   if (entry.runsCommandSignatureProbe && !checkCommandSignatureProbe(entry)) {
     failed = true;

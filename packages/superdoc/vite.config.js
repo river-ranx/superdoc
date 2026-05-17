@@ -252,6 +252,12 @@ export default defineConfig(({ mode, command }) => {
           // custom UI integrations should use the `superdoc/ui` /
           // `superdoc/ui/react` entries instead.
           'public/legacy/headless-toolbar': 'src/public/legacy/headless-toolbar.ts',
+          // SD-3180: legacy leaf facade entries mirroring the existing
+          // single-export legacy subpaths. Same classification as
+          // headless-toolbar above.
+          'public/legacy/converter': 'src/public/legacy/converter.ts',
+          'public/legacy/docx-zipper': 'src/public/legacy/docx-zipper.ts',
+          'public/legacy/file-zipper': 'src/public/legacy/file-zipper.ts',
         },
         external: [
           'yjs',
