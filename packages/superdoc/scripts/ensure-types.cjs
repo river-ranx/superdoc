@@ -132,6 +132,14 @@ const cjsDeclarationShims = [
     source: path.join(distRoot, 'superdoc/src/super-editor.d.ts'),
     target: './super-editor.js',
   },
+  // SD-3178: explicit public facade root entry. The CJS shim is generated
+  // now so that Phase 4 (the `package.json#exports` flip) does not need a
+  // separate pipeline change.
+  {
+    file: path.join(distRoot, 'superdoc/src/public/index.d.cts'),
+    source: path.join(distRoot, 'superdoc/src/public/index.d.ts'),
+    target: './index.js',
+  },
 ];
 
 function isValidIdentifier(name) {
