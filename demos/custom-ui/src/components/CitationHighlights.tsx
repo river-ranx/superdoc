@@ -17,7 +17,14 @@ import { useCitations } from './useCitations';
  * wrapped span — so line-wrapped citations get clean per-line
  * underlines without spilling across the page margin.
  *
- * Scroll and resize trigger a re-measure so the highlights stay glued.
+ * Remeasure triggers: window scroll/resize, ResizeObserver on the
+ * editor canvas (catches pagination/zoom), and MutationObserver on
+ * the canvas DOM (catches text edits that move cited spans without
+ * resizing the canvas). All paths funnel through a single rAF tick
+ * to coalesce bursts of keystrokes into one remeasure per frame.
+ *
+ * This is demo-tier instrumentation. A library would expose a
+ * dedicated layout/transaction event rather than observing the DOM.
  */
 type HighlightEntry = { metadataId: string; tooltip: string; rects: ViewportRect[] };
 
@@ -65,12 +72,41 @@ export function CitationHighlights() {
       setEntries(next);
     };
 
+    // Coalesce burst triggers (multi-mutation keystrokes, ResizeObserver
+    // firing alongside MutationObserver, etc.) into one remeasure per frame.
+    let rafHandle: number | null = null;
+    const scheduleRemeasure = () => {
+      if (rafHandle !== null) return;
+      rafHandle = requestAnimationFrame(() => {
+        rafHandle = null;
+        remeasure();
+      });
+    };
+
     remeasure();
-    window.addEventListener('scroll', remeasure, true);
-    window.addEventListener('resize', remeasure);
+    window.addEventListener('scroll', scheduleRemeasure, true);
+    window.addEventListener('resize', scheduleRemeasure);
+
+    const canvas = document.querySelector('.editor-canvas');
+    const resizeObserver = canvas ? new ResizeObserver(scheduleRemeasure) : null;
+    if (canvas && resizeObserver) resizeObserver.observe(canvas);
+
+    // Skip the DOM-mutation observer when there are no citations to track —
+    // keeps the demo from observing the editor body when there's nothing to update.
+    const mutationObserver =
+      canvas && citations.length > 0
+        ? new MutationObserver(scheduleRemeasure)
+        : null;
+    if (canvas && mutationObserver) {
+      mutationObserver.observe(canvas, { childList: true, subtree: true, characterData: true });
+    }
+
     return () => {
-      window.removeEventListener('scroll', remeasure, true);
-      window.removeEventListener('resize', remeasure);
+      window.removeEventListener('scroll', scheduleRemeasure, true);
+      window.removeEventListener('resize', scheduleRemeasure);
+      resizeObserver?.disconnect();
+      mutationObserver?.disconnect();
+      if (rafHandle !== null) cancelAnimationFrame(rafHandle);
     };
   }, [ui, citations, tagToNodeId]);
 

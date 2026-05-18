@@ -1,8 +1,10 @@
 import { useMemo, useState } from 'react';
 import { useSuperDocUI } from 'superdoc/ui/react';
-import { selectionTargetToTextTarget, type CitationInfo } from './citations-types';
+import { selectionTargetToTextTarget, type CitationInfo, type CitationPayload } from './citations-types';
 import { useCitations } from './useCitations';
 import { GenerateDraftButton } from './GenerateDraftButton';
+
+type UpdateCitation = (id: string, payload: CitationPayload) => { error?: string };
 
 /**
  * References panel. Renders citations grouped by `sourceId` — the
@@ -13,7 +15,7 @@ import { GenerateDraftButton } from './GenerateDraftButton';
  */
 export function CitationsPanel() {
   const ui = useSuperDocUI();
-  const { citations, resolve, remove, loading } = useCitations();
+  const { citations, resolve, remove, update, loading } = useCitations();
   const [editingId, setEditingId] = useState<string | null>(null);
 
   const groups = useMemo(() => groupBySource(citations), [citations]);
@@ -69,7 +71,7 @@ export function CitationsPanel() {
                     )}
                   </div>
                   {editingId === c.id ? (
-                    <CitationEditor citation={c} onClose={() => setEditingId(null)} />
+                    <CitationEditor citation={c} update={update} onClose={() => setEditingId(null)} />
                   ) : (
                     <div className="reference-citation-actions">
                       <button onClick={() => void scrollTo(c.id)}>Scroll to</button>
@@ -124,9 +126,23 @@ function groupBySource(citations: CitationInfo[]): ReferenceGroup[] {
  * locked here because changing those would mean a different citation,
  * not an edit of this one. A real product would offer "replace this
  * citation with a different source" as a separate flow.
+ *
+ * `update` is passed from the parent `CitationsPanel` rather than read
+ * via a child-local `useCitations()`. A payload-only `metadata.update`
+ * does not change the SDT structure, so the parent's content-controls
+ * slice does not tick — a child-local hook would only refresh the
+ * child's own copy of `citations`, leaving the parent panel stale on
+ * Save.
  */
-function CitationEditor({ citation, onClose }: { citation: CitationInfo; onClose(): void }) {
-  const { update } = useCitations();
+function CitationEditor({
+  citation,
+  update,
+  onClose,
+}: {
+  citation: CitationInfo;
+  update: UpdateCitation;
+  onClose(): void;
+}) {
   const [displayText, setDisplayText] = useState(citation.payload.displayText);
   const [locator, setLocator] = useState(citation.payload.locator ?? '');
   const [excerpt, setExcerpt] = useState(citation.payload.excerpt);
