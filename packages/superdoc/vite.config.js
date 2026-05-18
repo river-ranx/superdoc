@@ -262,6 +262,11 @@ export default defineConfig(({ mode, command }) => {
           // `superdoc/ui/react` subpath is the strategic React binding
           // surface. SD-3147 classification: 12 public + 1 legacy/public-compat.
           'public/ui-react': 'src/public/ui-react.ts',
+          // SD-3183: ui controller facade. 70 symbols (49 public + 21
+          // legacy/public-compat per SD-3147). Re-export source MUST stay
+          // `@superdoc/super-editor/ui` (narrow), not the root barrel —
+          // `audit-bundle.cjs` enforces shape on `dist/public/ui.es.js`.
+          'public/ui': 'src/public/ui.ts',
         },
         external: [
           'yjs',
