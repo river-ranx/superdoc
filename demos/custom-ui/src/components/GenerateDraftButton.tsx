@@ -60,8 +60,12 @@ export function GenerateDraftButton() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Single-shot: hide once the demo already has citations.
-  if (citations.length > 0) return null;
+  // Single-shot: hide once the demo already has citations — unless a
+  // partial-attach failure left an error mid-flight. Keeping the
+  // component mounted while there's an error preserves the message
+  // (and the button, so the user can retry or read it) instead of
+  // silently disappearing on the next render.
+  if (citations.length > 0 && !error) return null;
 
   const generate = () => {
     setError(null);

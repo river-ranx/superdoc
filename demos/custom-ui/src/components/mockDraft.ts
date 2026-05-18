@@ -1,20 +1,13 @@
 /**
- * Mocked AI draft generation for the SD-3208 demo.
+ * Mocked stand-in for an AI/RAG pipeline. Holds pre-canned text plus
+ * pre-canned citation specs — the shape a generator would emit (text
+ * plus an array of cited spans plus payloads). The demo inserts the
+ * text and attaches each citation to the span it references; no model
+ * is invoked.
  *
- * Production legal-AI tools (Harvey, CoCounsel, Lexis+, Legora, etc.)
- * drive citation creation through a RAG pipeline: a chat/prompt
- * interface kicks off retrieval, the model emits prose plus citations,
- * and the result is inserted into the document with citations already
- * attached. The lawyer's UI is verification (hover, click, accept), not
- * creation.
- *
- * This module is the **mocked stand-in** for that pipeline. It holds
- * pre-canned text + pre-canned citation specs, inserts the text into
- * the editor, and attaches citations to the spans the generation would
- * have produced. The "Generate draft with sources" button is a button
- * in the demo only — it is not the recommended product UX. A real
- * integration plugs a chat panel + an "Insert into document" action
- * here.
+ * A real integration replaces this with whatever surface drives
+ * generation in the customer's product (typically a chat panel plus
+ * an Insert into document action).
  */
 import type { CitationPayload, SelectionTarget } from './citations-types';
 
