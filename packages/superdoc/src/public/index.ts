@@ -2,10 +2,11 @@
  * SuperDoc public facade: root entry.
  *
  * SD-3178 + SD-3185 (Phase 3 of SD-3175). The path-as-contract source of
- * truth for `superdoc` consumers: anything exported here is supported
- * public API; anything outside is implementation detail. Phase 4 (the
- * contract switch) flips `package.json#exports` to point at the emitted
- * declarations under this tree.
+ * truth for `superdoc` consumers: anything exported here is part of the
+ * public contract: either supported public API or explicitly documented
+ * legacy compatibility. Anything outside is implementation detail. Phase
+ * 4 (the contract switch) flips `package.json#exports` to point at the
+ * emitted declarations under this tree.
  *
  * Surface organization:
  *
