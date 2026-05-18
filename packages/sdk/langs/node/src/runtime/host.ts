@@ -41,6 +41,21 @@ const FORWARD_HOST_STDERR =
 const JSON_RPC_TIMEOUT_CODE = -32011;
 
 /**
+ * Builds the argv passed to `spawn` for `superdoc host --stdio`. Propagates
+ * `requestTimeoutMs` to the host via `--request-timeout-ms`, since the SDK
+ * option alone cannot raise the host's 30s per-invoke ceiling otherwise.
+ *
+ * Exported for unit testing.
+ */
+export function buildHostSpawnArgs(prefixArgs: readonly string[], options: { requestTimeoutMs?: number }): string[] {
+  const args = [...prefixArgs, 'host', '--stdio'];
+  if (options.requestTimeoutMs != null) {
+    args.push('--request-timeout-ms', String(options.requestTimeoutMs));
+  }
+  return args;
+}
+
+/**
  * Transport that communicates with a long-lived CLI host process over JSON-RPC stdio.
  */
 export class HostTransport {
@@ -170,7 +185,7 @@ export class HostTransport {
 
   private async startHostProcess(): Promise<void> {
     const { command, prefixArgs } = resolveInvocation(this.cliBin);
-    const args = [...prefixArgs, 'host', '--stdio'];
+    const args = buildHostSpawnArgs(prefixArgs, { requestTimeoutMs: this.requestTimeoutMs });
 
     const child = spawn(command, args, {
       env: {
