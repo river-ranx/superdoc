@@ -43,19 +43,25 @@ function findBlockIdContaining(editor: EditorHandle, text: string): string | nul
 /**
  * Mocked "AI draft with sources" entry point.
  *
- * Clicks rotate through `MOCK_DRAFTS`, insert the paragraph at the
- * end of the document via `editor.doc.insert`, then call
- * `metadata.attach` once per citation in the draft. The button is a
- * stand-in for a chat/prompt-driven RAG flow; a real integration
- * replaces this with whatever surface drives generation in the
- * customer's product.
+ * Single-shot: one click inserts every `MOCK_DRAFTS` paragraph at the
+ * end of the document via `editor.doc.insert` and attaches each
+ * citation via `metadata.attach`. The button is hidden once the demo
+ * already has citations — repeat clicks would collide on the hardcoded
+ * sample citation ids. To re-run the demo, remove the citations from
+ * the sidebar or reload the page.
+ *
+ * The button is a stand-in for a chat/prompt-driven RAG flow; a real
+ * integration replaces this with whatever surface drives generation in
+ * the customer's product.
  */
 export function GenerateDraftButton() {
   const host = useSuperDocHost();
-  const { attach } = useCitations();
+  const { citations, attach } = useCitations();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [index, setIndex] = useState(0);
+
+  // Single-shot: hide once the demo already has citations.
+  if (citations.length > 0) return null;
 
   const generate = () => {
     setError(null);
@@ -67,26 +73,23 @@ export function GenerateDraftButton() {
     }
 
     setBusy(true);
-    const draft = MOCK_DRAFTS[index % MOCK_DRAFTS.length]!;
     try {
-      insert({ value: draft.text });
-      // Walk the doc to find the block that now contains the inserted
-      // text. The insert receipt does not reliably carry blockId in the
-      // browser build; the doc walk is more robust.
-      const blockId = findBlockIdContaining(editor!, draft.text.slice(0, 40));
-      if (!blockId) {
-        setError('Could not locate the inserted paragraph in the document.');
-        return;
-      }
-      const targets = computeCitationTargets(draft, blockId);
-      for (const { target, payload } of targets) {
-        const r = attach(target, payload, payload.citationId);
-        if ('error' in r) {
-          setError(`metadata.attach failed for ${payload.citationId}: ${r.error}`);
+      for (const draft of MOCK_DRAFTS) {
+        insert({ value: draft.text });
+        const blockId = findBlockIdContaining(editor!, draft.text.slice(0, 40));
+        if (!blockId) {
+          setError('Could not locate the inserted paragraph in the document.');
           return;
         }
+        const targets = computeCitationTargets(draft, blockId);
+        for (const { target, payload } of targets) {
+          const r = attach(target, payload, payload.citationId);
+          if ('error' in r) {
+            setError(`metadata.attach failed for ${payload.citationId}: ${r.error}`);
+            return;
+          }
+        }
       }
-      setIndex((i) => i + 1);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
