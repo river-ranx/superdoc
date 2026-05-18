@@ -9,10 +9,14 @@
  *
  *   1. The expected symbol set is exported from each declaration file.
  *   2. The ESM and CJS declarations agree on the exported names.
- *   3. (Root entry only) The command signature surface survives the
- *      facade emit. This is the SD-2965 regression vector: specific
- *      command signatures getting dropped or failing to flow through the
- *      facade. `EditorCommands` is `CoreCommands & ExtensionCommands &
+ *   3. (Root entry only) **Legacy command-signature compatibility check.**
+ *      `editor.commands.*` and `EditorCommands` are deprecated per
+ *      `Editor.ts` `@deprecated` tags and `AGENTS.md` — the supported
+ *      programmatic surface is the Document API (`editor.doc.*`). They
+ *      remain typed and exported under legacy/public-compat so existing
+ *      TS consumers keep compiling. This probe protects against silent
+ *      augmentation-drop regressions on that legacy surface (SD-2965):
+ *      `EditorCommands` is `CoreCommands & ExtensionCommands &
  *      AllCommandSignatures & Record<string, AnyCommand>`, so the
  *      trailing `Record<string, AnyCommand>` makes any indexer lookup
  *      resolve even when the specific signatures are missing. The probe
@@ -20,6 +24,8 @@
  *      `insertComment`) is `boolean`, not the `AnyCommand` fallback's
  *      `unknown`. Two commands from two signature sources (formatting +
  *      comments) catch partial drops a single-command probe would miss.
+ *      The probe is a backward-compat regression detector, not a
+ *      supported-API guarantee.
  *   4. The emitted declarations contain no private workspace specifiers
  *      (`@superdoc/*`), no package-manager internals (`.pnpm/`), and no
  *      absolute local paths into the repo or `node_modules`.
@@ -71,13 +77,52 @@ try {
 // this gate. Link the PR to SD-3175 (path-as-contract umbrella) for
 // reviewer sign-off when growth is intentional.
 const FACADE_ENTRIES = [
+  // SD-3178 + SD-3185: root facade. The supported programmatic surface
+  // is the Document API (`editor.doc.*`); see `packages/superdoc/AGENTS.md`
+  // and the @deprecated tags on `editor.commands` in `Editor.ts`. The
+  // 20 Document API types preserved here mirror the JSDoc @typedef block
+  // in `packages/superdoc/src/index.js` and the assertions in
+  // `tests/consumer-typecheck/src/all-public-types.ts` — they were already
+  // typed via the root entry; this just makes the path-as-contract
+  // version explicit.
+  //
+  // EditorCommands stays in the surface for backward compatibility but is
+  // tagged @deprecated at the re-export site. The command-signature probe
+  // continues to run on this entry: it is now a *legacy command-signature
+  // compatibility check* (catches SD-2965-style augmentation drops on the
+  // deprecated surface) rather than a guarantee about supported API.
   {
     name: 'root (./index)',
     esm: path.join(PUBLIC_DIST, 'index.d.ts'),
     cjs: path.join(PUBLIC_DIST, 'index.d.cts'),
-    expectedNames: ['Config', 'Editor', 'EditorCommands', 'SuperDoc'],
+    expectedNames: [
+      'BlockNavigationAddress',
+      'BlocksListResult',
+      'BookmarkAddress',
+      'BookmarkInfo',
+      'CommentAddress',
+      'Config',
+      'DocumentApi',
+      'DocumentProtectionState',
+      'Editor',
+      'EditorCommands',
+      'EntityAddress',
+      'NavigableAddress',
+      'ResolveRangeOutput',
+      'ScrollIntoViewInput',
+      'ScrollIntoViewOutput',
+      'SelectionApi',
+      'SelectionCurrentInput',
+      'SelectionInfo',
+      'StoryLocator',
+      'SuperDoc',
+      'TextAddress',
+      'TextSegment',
+      'TextTarget',
+      'TrackedChangeAddress',
+    ],
     runsCommandSignatureProbe: true,
-    ticket: 'SD-3178',
+    ticket: 'SD-3185',
   },
   {
     name: 'legacy/headless-toolbar',
@@ -523,9 +568,10 @@ function checkCommandSignatureProbe(entry) {
       ...program.getDeclarationDiagnostics(),
     ];
     if (diagnostics.length === 0) return true;
-    console.error(`[verify-public-facade-emit] ${entry.name}: command signature probe failed.`);
+    console.error(`[verify-public-facade-emit] ${entry.name}: legacy command-signature compatibility check failed.`);
     console.error('  A command (setBold or insertComment) does not return `boolean` through the facade.');
     console.error('  This is the SD-2965 regression vector: specific command signatures were dropped or failed to flow through the facade, and EditorCommands fell back to the `AnyCommand` indexer.');
+    console.error('  Note: `editor.commands.*` is deprecated (use `editor.doc.*`). This check guards backward compatibility of the legacy typed surface; it is not a supported-API guarantee.');
     for (const d of diagnostics) {
       const msg = typeof d.messageText === 'string'
         ? d.messageText
