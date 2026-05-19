@@ -157,20 +157,6 @@
     "review": "Candidate for an import/export or Document Engine example."
   },
   {
-    "id": "docxtemplater",
-    "title": "Docxtemplater integration",
-    "description": "Use SuperDoc with Docxtemplater.",
-    "category": "Integrations",
-    "sourceRepo": "superdoc-dev/superdoc",
-    "sourcePath": "demos/docxtemplater",
-    "docs": null,
-    "thumbnail": "demos/docxtemplater/demo-thumbnail.png",
-    "liveUrl": null,
-    "homepage": false,
-    "stackblitz": true,
-    "review": "Decide whether this belongs in monorepo demos or live integrations."
-  },
-  {
     "id": "fields-source",
     "title": "Fields source demo",
     "description": "Field annotations, drag and drop fields, and final export behavior.",
@@ -199,20 +185,6 @@
     "review": "Move to Advanced unless document sections become a primary docs surface."
   },
   {
-    "id": "text-selection",
-    "title": "Programmatic text selection",
-    "description": "Programmatic selection using low-level editor state.",
-    "category": "Advanced",
-    "sourceRepo": "superdoc-dev/superdoc",
-    "sourcePath": "demos/text-selection",
-    "docs": "https://docs.superdoc.dev/editor/custom-ui/selection-and-viewport",
-    "thumbnail": "demos/text-selection/demo-thumbnail.png",
-    "liveUrl": null,
-    "homepage": false,
-    "stackblitz": true,
-    "review": "Review against the Custom UI selection and viewport APIs."
-  },
-  {
     "id": "html-editor",
     "title": "HTML editor",
     "description": "Direct SuperEditor HTML mode.",
@@ -227,20 +199,6 @@
     "review": "Move to Advanced or archive as a legacy compatibility shim."
   },
   {
-    "id": "loading-from-json",
-    "title": "Load from JSON",
-    "description": "Load editor JSON into SuperDoc.",
-    "category": "Advanced",
-    "sourceRepo": "superdoc-dev/superdoc",
-    "sourcePath": "demos/loading-from-json",
-    "docs": null,
-    "thumbnail": "demos/loading-from-json/demo-thumbnail.png",
-    "liveUrl": null,
-    "homepage": false,
-    "stackblitz": true,
-    "review": "Keep only if JSON import remains a supported public path."
-  },
-  {
     "id": "nextjs-ssr",
     "title": "Next.js SSR",
     "description": "Next.js SSR-safe SuperDoc loading.",
@@ -253,48 +211,6 @@
     "homepage": false,
     "stackblitz": false,
     "review": "Compare with examples/getting-started/nextjs before keeping."
-  },
-  {
-    "id": "nodejs",
-    "title": "Node.js headless server",
-    "description": "Headless Node server using legacy Editor commands.",
-    "category": "Document Engine",
-    "sourceRepo": "superdoc-dev/superdoc",
-    "sourcePath": "demos/nodejs",
-    "docs": "https://docs.superdoc.dev/document-engine/overview",
-    "thumbnail": "demos/nodejs/demo-thumbnail.png",
-    "liveUrl": null,
-    "homepage": false,
-    "stackblitz": false,
-    "review": "Rewrite or replace with Document Engine SDK/CLI examples."
-  },
-  {
-    "id": "replace-content",
-    "title": "Replace content",
-    "description": "Replace document or selection content with HTML or JSON.",
-    "category": "Document Engine",
-    "sourceRepo": "superdoc-dev/superdoc",
-    "sourcePath": "demos/replace-content",
-    "docs": "https://docs.superdoc.dev/document-api/common-workflows",
-    "thumbnail": "demos/replace-content/demo-thumbnail.png",
-    "liveUrl": null,
-    "homepage": false,
-    "stackblitz": true,
-    "review": "Update to Document API before moving."
-  },
-  {
-    "id": "toolbar",
-    "title": "Toolbar customization",
-    "description": "Built-in toolbar custom button plus custom node authoring.",
-    "category": "Advanced",
-    "sourceRepo": "superdoc-dev/superdoc",
-    "sourcePath": "demos/toolbar",
-    "docs": "https://docs.superdoc.dev/editor/built-in-ui/toolbar",
-    "thumbnail": "demos/toolbar/demo-thumbnail.png",
-    "liveUrl": null,
-    "homepage": false,
-    "stackblitz": true,
-    "review": "Split toolbar configuration from custom node authoring."
   },
   {
     "id": "shim-react",
