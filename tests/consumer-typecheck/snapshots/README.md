@@ -16,6 +16,8 @@ These files lock the public TypeScript surface that ships through SuperDoc's leg
 | `superdoc-headless-toolbar-vue.txt` | Resolved exports through `superdoc/headless-toolbar/vue` | Framework helper paired with `superdoc/headless-toolbar`. Migration target: tracked separately. |
 | `superdoc-root-exports.json` | 4-source root inventory (`types.import` / `types.require` / `import` / `require`) | SD-3212 PR A0. Drift gate on each source's name set independently. Cross-source mismatches (typed-only, runtime-only, ESM vs CJS) reported in the companion `.md` as evidence for the SD-3212 classification pass. |
 | `superdoc-root-exports.md` | Companion evidence report for the above | Regenerated on `--write`; not a drift gate. Includes per-name evidence: presence in each source, fixture import count, JSDoc typedef membership, docs/examples/demos mentions, `package-boundaries.md` reference. |
+| `superdoc-root-classification.json` | SD-3212 PR A1 classification | Each of the 200 root names assigned a bucket (`supported-root` / `legacy-root` / `move-to-subpath` / `internal-candidate`) with rationale and confidence. Decision document for PR B (re-curation) and PR C (root types flip). Applies dependency-closure rule: any type required by a supported-root or legacy-root exported class/method is at least `legacy-root`. Not a drift gate. |
+| `superdoc-root-classification.md` | Companion human-review surface for the classification | Grouped by bucket with per-name rationale. |
 
 Snapshot scripts:
 
