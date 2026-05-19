@@ -155,6 +155,14 @@ jobs:
           node tests/consumer-typecheck/snapshot-super-editor-package-exports.mjs --check
           node tests/consumer-typecheck/snapshot-superdoc-legacy-exports.mjs --check
 
+      - name: Root no-growth + 4-source inventory (SD-3212 PR A0)
+        # Same gate as PR CI. Catches releases that bypass PR CI.
+        run: node tests/consumer-typecheck/snapshot-superdoc-root-exports.mjs --check
+
+      - name: Root classification closure gate (SD-3212 PR A1b)
+        # Same gate as PR CI. Catches releases that bypass PR CI.
+        run: node tests/consumer-typecheck/check-root-classification-closure.mjs
+
       # PR preview: publish with pr-<number> dist-tag
       - name: Publish PR preview
         if: inputs.pr_number
