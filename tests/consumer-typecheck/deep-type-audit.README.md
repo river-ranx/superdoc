@@ -160,14 +160,20 @@ default `auto-seeded from inventory` rationale.
 - **tier-3-helpers** (~61 entries): `trackChangesHelpers` and
   `fieldAnnotationHelpers`. JS files exported via the `helpers` namespace
   with no JSDoc. Best fix is probably JS to TS conversion.
-- **tier-4-public-contract**: currently expected to be **zero** after the
-  SD-3213c drain. Historically included two classes of finding: (1) the
-  hand-written shim files `SuperConverter.d.ts` and `DocxZipper.d.ts`
-  (`constructor(...args: any[])`, `[key: string]: any`) — drained in
-  SD-3213c by replacing them with real typed shims; (2) curated entries
-  in `core/types/index.ts` like `transaction: any` that should import
-  `Transaction` from `prosemirror-state`. Any future entries here are
-  surgical fixes and should not survive a PR.
+- **tier-4-public-contract**: currently **1 residual finding**
+  (`SuperConverter.d.ts`'s `[key: string]: any` catchall). Historically
+  included two classes of finding: (1) the hand-written shim files
+  `SuperConverter.d.ts` and `DocxZipper.d.ts`
+  (`constructor(...args: any[])`, `[key: string]: any`) — partially
+  drained in SD-3213c (DocxZipper fully typed; SuperConverter constructor
+  + named statics typed); (2) curated entries in `core/types/index.ts`
+  like `transaction: any` that should import `Transaction` from
+  `prosemirror-state`. The residual `SuperConverter[key: string]: any`
+  cannot be removed without converting `SuperConverter.js` to TypeScript
+  (or formalizing a public/internal contract split) because internal
+  callers across `Editor.ts`, `PresentationEditor.ts`,
+  `HeaderFooterRegistry.ts`, and list-level helpers read dozens of
+  instance members through it. Tracked as a follow-up to SD-3213.
 - **tier-5-other**: catchall for anything that doesn't match the patterns
   above.
 
