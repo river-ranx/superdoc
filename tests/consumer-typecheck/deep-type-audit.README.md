@@ -102,6 +102,61 @@ entries (SD-3213 follow-up). Each entry has a stable key
 (`kind|file|symbolPath|snippet`) so reformatting and line shifts won't
 churn it.
 
+## Attribution (SD-3213d)
+
+Each report now prints three breakdowns alongside the historical tier
+and top-files tables, and writes a machine-readable JSON to
+`tmp/deep-type-audit-attribution.json` (gitignored). The point is to
+distinguish supported-root leaks from legacy compat reach from raw
+`./super-editor` noise, so PR 3 can scope a strict gate to the curated
+facade subset without guessing.
+
+The tables in a typical run look like:
+
+```
+[audit] By export entry (reachedFrom; one finding can count under several):
+   1237  .
+    728  ./super-editor
+     79  ./ui/react
+     70  ./headless-toolbar
+     56  ./types
+     ...
+
+[audit] By root bucket (only for findings reached from root '.'):
+    950  supported-root
+    190  legacy-root
+     97  internal-candidate
+
+[audit] Curated facade entries vs raw ./super-editor reach:
+   1089  reached only from curated facade entries
+    324  reached only from ./super-editor
+    404  reached from both
+```
+
+How to read these:
+
+- **By entry** sums to more than the distinct-finding total because one
+  finding can be reachable from several public entries. The same row in
+  the deduped findings table contributes a count to each entry in its
+  `reachedFrom` set.
+- **By root bucket** counts only findings whose `reachedFrom` includes
+  the root entry `.`, attributed via the top-level symbol in
+  `symbolPath` (e.g. `SuperDoc.provider.on(event)` → `SuperDoc` →
+  bucket from `snapshots/superdoc-root-classification.json`). If the
+  top-level parser fails or the symbol isn't in the classification, the
+  finding is counted as `unknown-root-export` so the parse failure rate
+  is visible.
+- **Curated facade vs raw** partitions every distinct finding into one
+  of three buckets (sums to the distinct total). "Curated facade
+  entries" means every public entry except `./super-editor` — i.e. the
+  set of entries routing through `src/public/**`. PR 3's strict scope
+  will live somewhere in this partition.
+
+The JSON artifact mirrors the text breakdown and also lists every
+finding with its `reachedFrom` and `rootBuckets` sets, so downstream
+tooling (e.g. PR 3's strict-scope selector) does not need to re-run the
+walker.
+
 ## Commands
 
 ```bash

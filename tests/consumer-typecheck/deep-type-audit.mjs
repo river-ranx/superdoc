@@ -442,10 +442,51 @@ for (const root of roots) {
 function keyOf(f) {
   return [f.kind, f.file, f.symbolPath, f.snippet].join('|');
 }
+// Dedup preserves the existing stable key (kind|file|symbolPath|snippet)
+// so allowlist identity does not churn. SD-3213d enriches each deduped
+// row with attribution: `reachedFrom` is the set of package export entries
+// (subpaths) through which the same finding was recorded. The first
+// observation's other fields (line, symbolPath, etc.) win the row.
 const distinctFindings = new Map();
 for (const f of findings) {
   const k = keyOf(f);
-  if (!distinctFindings.has(k)) distinctFindings.set(k, f);
+  if (!distinctFindings.has(k)) {
+    distinctFindings.set(k, { ...f, reachedFrom: new Set([f.subpath]) });
+  } else {
+    distinctFindings.get(k).reachedFrom.add(f.subpath);
+  }
+}
+
+// SD-3213d: attribute root-entry findings to their root-classification
+// bucket (supported-root / legacy-root / internal-candidate). The
+// classification artifact lives in-repo, not in the installed fixture.
+// For findings not reached from the root entry, `rootBuckets` stays empty.
+// For root-reached findings whose top-level symbol isn't in the
+// classification, `rootBuckets` is ['unknown-root-export'] (counted
+// explicitly so reviewers can see the parse failure rate).
+const classificationPath = resolve(here, 'snapshots', 'superdoc-root-classification.json');
+const classification = existsSync(classificationPath)
+  ? JSON.parse(readFileSync(classificationPath, 'utf8'))
+  : { rows: [] };
+const rootBucketByName = new Map(classification.rows.map((r) => [r.name, r.bucket]));
+
+// symbolPath starts with the root export name followed by `.member`,
+// `(param)`, `[]`, `<N>`, `=>return`, `.<value>`, etc. The top-level
+// segment is everything before the first member/param/index/generic
+// boundary.
+function topLevelSymbolFrom(symbolPath) {
+  const m = symbolPath.match(/^([^.([<=]+)/);
+  return m ? m[1] : null;
+}
+
+for (const f of distinctFindings.values()) {
+  const buckets = new Set();
+  if (f.reachedFrom.has('.')) {
+    const top = topLevelSymbolFrom(f.symbolPath);
+    const bucket = top ? rootBucketByName.get(top) : null;
+    buckets.add(bucket ?? 'unknown-root-export');
+  }
+  f.rootBuckets = buckets;
 }
 
 const allowlistPath = resolve(here, 'deep-type-audit.allowlist.json');
@@ -533,6 +574,73 @@ console.log(``);
 console.log(`[audit] Top files:`);
 for (const [k, v] of Object.entries(fileCounts).sort((a, b) => b[1] - a[1]).slice(0, 10)) {
   console.log(`  ${v.toString().padStart(5)}  ${k}`);
+}
+
+// SD-3213d attribution tables. The point of these breakdowns is to
+// distinguish supported-root leaks from legacy compat reach from raw
+// ./super-editor noise, so PR 3 can scope the strict gate to the
+// curated facade subset without guessing.
+const entryCounts = {};
+const rootBucketCounts = {};
+let curatedOnly = 0;
+let rawOnly = 0;
+let both = 0;
+for (const f of tieredFindings) {
+  for (const e of f.reachedFrom) entryCounts[e] = (entryCounts[e] ?? 0) + 1;
+  for (const b of f.rootBuckets) rootBucketCounts[b] = (rootBucketCounts[b] ?? 0) + 1;
+  const reachesCurated = [...f.reachedFrom].some((e) => e !== './super-editor');
+  const reachesRaw = f.reachedFrom.has('./super-editor');
+  if (reachesCurated && reachesRaw) both++;
+  else if (reachesCurated) curatedOnly++;
+  else if (reachesRaw) rawOnly++;
+}
+console.log(``);
+console.log(`[audit] By export entry (reachedFrom; one finding can count under several):`);
+for (const [k, v] of Object.entries(entryCounts).sort((a, b) => b[1] - a[1])) {
+  console.log(`  ${v.toString().padStart(5)}  ${k}`);
+}
+console.log(``);
+console.log(`[audit] By root bucket (only for findings reached from root '.'):`);
+for (const [k, v] of Object.entries(rootBucketCounts).sort((a, b) => b[1] - a[1])) {
+  console.log(`  ${v.toString().padStart(5)}  ${k}`);
+}
+console.log(``);
+console.log(`[audit] Curated facade entries vs raw ./super-editor reach:`);
+console.log(`  ${curatedOnly.toString().padStart(5)}  reached only from curated facade entries`);
+console.log(`  ${rawOnly.toString().padStart(5)}  reached only from ./super-editor`);
+console.log(`  ${both.toString().padStart(5)}  reached from both`);
+
+// JSON attribution report. Lives under tmp/ (gitignored). PR 3 reads
+// this to drive strict-scope selection without re-running the walker.
+const tmpDir = resolve(repoRoot, 'tmp');
+try {
+  require('node:fs').mkdirSync(tmpDir, { recursive: true });
+  const reportPath = join(tmpDir, 'deep-type-audit-attribution.json');
+  const report = {
+    generatedAt: new Date().toISOString(),
+    totals: {
+      distinct: distinctFindings.size,
+      byTier: tierCounts,
+      byEntry: entryCounts,
+      byRootBucket: rootBucketCounts,
+      curatedFacadeVsRaw: { curatedOnly, rawOnly, both },
+    },
+    findings: tieredFindings.map((f) => ({
+      kind: f.kind,
+      file: f.file,
+      line: f.line,
+      symbolPath: f.symbolPath,
+      snippet: f.snippet,
+      tier: f.tier,
+      reachedFrom: [...f.reachedFrom].sort(),
+      rootBuckets: [...f.rootBuckets].sort(),
+    })),
+  };
+  writeFileSync(reportPath, JSON.stringify(report, null, 2) + '\n');
+  console.log(``);
+  console.log(`[audit] Wrote attribution report: ${relative(repoRoot, reportPath)}`);
+} catch (err) {
+  console.warn(`[audit] WARN: could not write attribution report: ${err.message}`);
 }
 
 const haveAllowlist = existsSync(allowlistPath);
