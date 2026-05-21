@@ -343,9 +343,11 @@ export const Link = Mark.create({
               if (textStyleMarkType) {
                 tr.doc.nodesBetween(from, to, (node, pos) => {
                   if (!node.isText) return;
+
                   node.marks.forEach((mark) => {
                     if (mark.type !== textStyleMarkType) return;
                     if (!TRANSIENT_HYPERLINK_STYLE_IDS.has(mark.attrs?.styleId)) return;
+
                     const clearedAttrs = { ...mark.attrs, styleId: null };
                     tr.removeMark(pos, pos + node.nodeSize, mark);
                     tr.addMark(pos, pos + node.nodeSize, textStyleMarkType.create(clearedAttrs));

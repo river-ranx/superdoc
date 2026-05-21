@@ -13,6 +13,7 @@ import {
   inferDryRunWouldRelease,
   splitPreviewArgs,
 } from '../release-local.mjs';
+import { shouldRecoverPackageRelease } from '../release-recovery-state.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '../../');
@@ -176,19 +177,28 @@ test('stable orchestrator prunes before snapshot and reports would-release previ
   );
 });
 
-test('stable tooling bundle releases CLI, SDK, then MCP in order', async () => {
+test('stable orchestrator releases tools chain (CLI, SDK, MCP) and core chain (superdoc, react, vscode-ext) in order', async () => {
   const content = await readRepoFile('scripts/release-local-stable.mjs');
   assertOrder(content, "name: 'cli'", "name: 'sdk'", 'scripts/release-local-stable.mjs (cli before sdk)');
   assertOrder(content, "name: 'sdk'", "name: 'mcp'", 'scripts/release-local-stable.mjs (sdk before mcp)');
-  assert.equal(
+  assertOrder(content, "name: 'superdoc'", "name: 'react'", 'scripts/release-local-stable.mjs (superdoc before react)');
+  assertOrder(content, "name: 'react'", "name: 'vscode-ext'", 'scripts/release-local-stable.mjs (react before vscode-ext)');
+  assert.ok(
     content.includes("name: 'superdoc'"),
-    false,
-    'scripts/release-local-stable.mjs: superdoc has its own per-package stable workflow, not this bundle',
+    'scripts/release-local-stable.mjs: orchestrator must release superdoc so the v* tag drives docs-stable promotion in the same workflow',
+  );
+  assert.ok(
+    content.includes("name: 'react'"),
+    'scripts/release-local-stable.mjs: orchestrator must release react after superdoc so consumers see them ship together',
+  );
+  assert.ok(
+    content.includes("name: 'vscode-ext'") && content.includes("vsCodeExtensionId: 'superdoc-dev.superdoc-vscode-ext'"),
+    'scripts/release-local-stable.mjs: orchestrator must release vscode-ext with its marketplace extension id so publishComplete checks the marketplace, not npm',
   );
   assert.equal(
-    content.includes("name: 'esign'") || content.includes("name: 'react'") || content.includes("name: 'template-builder'") || content.includes("name: 'vscode-ext'"),
+    content.includes("name: 'esign'") || content.includes("name: 'template-builder'"),
     false,
-    'scripts/release-local-stable.mjs: only CLI/SDK/MCP belong in the tooling bundle',
+    'scripts/release-local-stable.mjs: esign and template-builder are not yet brought into the orchestrator',
   );
 });
 
@@ -258,12 +268,13 @@ test('stable release workflows serialize on the shared release-stable concurrenc
     '.github/workflows/release-stable.yml: skip-ci writeback runs must still no-op when they start',
   );
 
+  // Per-package workflows that still auto-fire on stable directly.
+  // superdoc, react, and vscode-ext are excluded because release-stable.yml
+  // drives their stable releases now. The remaining workflows have not yet
+  // been brought into the orchestrator.
   const perPackageStableWorkflows = [
-    '.github/workflows/release-superdoc.yml',
-    '.github/workflows/release-react.yml',
     '.github/workflows/release-esign.yml',
     '.github/workflows/release-template-builder.yml',
-    '.github/workflows/release-vscode-ext.yml',
   ];
   for (const file of perPackageStableWorkflows) {
     const content = await readRepoFile(file);
@@ -272,6 +283,150 @@ test('stable release workflows serialize on the shared release-stable concurrenc
       `${file}: must trigger on push to both main and stable`,
     );
   }
+
+  // Workflows that no longer auto-fire on stable - the orchestrator is
+  // their single stable release path.
+  const orchestratorOnlyOnStable = [
+    '.github/workflows/release-superdoc.yml',
+    '.github/workflows/release-react.yml',
+    '.github/workflows/release-vscode-ext.yml',
+  ];
+  for (const file of orchestratorOnlyOnStable) {
+    const content = await readRepoFile(file);
+    assert.equal(
+      /branches:\s*\n\s*-\s*main\s*\n\s*-\s*stable/.test(content),
+      false,
+      `${file}: stable releases are driven by release-stable.yml; this workflow only fires on main`,
+    );
+  }
+});
+
+test('release workflows queue (do not cancel) and use queue: max so multi-package stable pushes do not drop runs', async () => {
+  // GitHub Actions default concurrency queue allows one running + one
+  // pending per group. With three release workflows joining the shared
+  // `release-stable` group on a stable push that touches multiple
+  // wrapper packages, the third arrival is silently cancelled. queue: max
+  // raises the pending limit; cancel-in-progress: false ensures release
+  // runs are never cancelled by a newer release run (each merge is a
+  // release-worthy state). queue: max cannot be combined with
+  // cancel-in-progress: true (validation error).
+  const releaseWorkflows = [
+    '.github/workflows/release-cli.yml',
+    '.github/workflows/release-create.yml',
+    '.github/workflows/release-esign.yml',
+    '.github/workflows/release-mcp.yml',
+    '.github/workflows/release-react.yml',
+    '.github/workflows/release-sdk.yml',
+    '.github/workflows/release-stable.yml',
+    '.github/workflows/release-superdoc.yml',
+    '.github/workflows/release-template-builder.yml',
+    '.github/workflows/release-vscode-ext.yml',
+  ];
+
+  for (const file of releaseWorkflows) {
+    const content = await readRepoFile(file);
+    assert.ok(
+      /\n {2}cancel-in-progress: false\b/.test(content),
+      `${file}: cancel-in-progress must be the literal \`false\` (not a branch-conditional expression) so release runs never get cancelled by newer release runs`,
+    );
+    assert.equal(
+      /cancel-in-progress: \$\{\{/.test(content),
+      false,
+      `${file}: cancel-in-progress must not be a conditional expression; queue: max forbids cancel-in-progress: true on any branch`,
+    );
+    assert.ok(
+      /\n {2}queue: max\b/.test(content),
+      `${file}: must set queue: max so GitHub does not silently drop older pending stable releases when multiple release workflows fire on the same push`,
+    );
+
+    // Queued release runs may start against a stale checkout. Each workflow must
+    // refresh to the current branch head before semantic-release runs, otherwise
+    // @semantic-release/git push fails non-fast-forward against a branch that
+    // moved while the run was queued. The stable-only refresh that predates
+    // queue: max would leave main-firing queued runs against stale SHAs.
+    assert.equal(
+      /if: github\.ref_name == 'stable'\s*\n\s*run: \|\s*\n\s*git fetch origin/.test(content),
+      false,
+      `${file}: refresh step must not be gated on stable-only; queued main runs also need to refresh to avoid stale-checkout pushes`,
+    );
+    assert.ok(
+      /git fetch origin "\$\{\{ github\.ref_name \}\}" --tags\s*\n\s*git checkout -B "\$\{\{ github\.ref_name \}\}" "origin\/\$\{\{ github\.ref_name \}\}"/.test(content) ||
+        // release-stable.yml is stable-only and refreshes against the literal `stable` ref.
+        /git fetch origin stable --tags\s*\n\s*git checkout -B stable origin\/stable/.test(content),
+      `${file}: must refresh to the current branch head before semantic-release runs`,
+    );
+  }
+});
+
+test('stable-to-main sync waits for stable release completion', async () => {
+  const workflow = await readRepoFile('.github/workflows/sync-patches.yml');
+
+  assert.ok(
+    workflow.includes('workflow_run:'),
+    '.github/workflows/sync-patches.yml: must trigger from release workflow completion, not directly from stable pushes',
+  );
+  assert.ok(
+    /workflows:\s*\n\s*-\s*"📦 Release stable tooling \(CLI\/SDK\/MCP\)"/.test(workflow),
+    '.github/workflows/sync-patches.yml: must trigger after the stable release orchestrator completes',
+  );
+  assert.equal(
+    /push:\s*\n\s*branches:\s*\n\s*-\s*stable/.test(workflow),
+    false,
+    '.github/workflows/sync-patches.yml: must not fire immediately on stable branch pushes',
+  );
+  assert.ok(
+    workflow.includes("github.event.workflow_run.head_branch == 'stable'"),
+    '.github/workflows/sync-patches.yml: must scope automatic syncs to stable release runs',
+  );
+  assert.ok(
+    workflow.includes("github.event.workflow_run.conclusion == 'success'") &&
+      workflow.includes("github.event.workflow_run.conclusion == 'failure'"),
+    '.github/workflows/sync-patches.yml: must wait for release completion while still surfacing failed-release sync PRs for review',
+  );
+  assert.ok(
+    workflow.includes('actions: read'),
+    '.github/workflows/sync-patches.yml: must be able to inspect release workflow runs before syncing',
+  );
+  assert.ok(
+    workflow.includes('Wait for stable release lane to drain') &&
+      workflow.includes('"📦 Release esign"') &&
+      workflow.includes('"📦 Release template-builder"'),
+    '.github/workflows/sync-patches.yml: must wait for the remaining stable release workflows before syncing origin/stable',
+  );
+});
+
+test('stable-to-main sync preserves stable release ancestry', async () => {
+  const workflow = await readRepoFile('.github/workflows/sync-patches.yml');
+
+  assert.equal(
+    workflow.includes('git merge --squash'),
+    false,
+    '.github/workflows/sync-patches.yml: stable-to-main sync must not squash because semantic-release needs stable tags reachable from main',
+  );
+  assert.ok(
+    workflow.includes('git merge --no-ff --no-edit origin/stable'),
+    '.github/workflows/sync-patches.yml: stable-to-main sync must create a real merge commit',
+  );
+  assert.ok(
+    workflow.includes('git merge-base --is-ancestor origin/stable origin/main') &&
+      workflow.includes('git merge-base --is-ancestor origin/stable HEAD'),
+    '.github/workflows/sync-patches.yml: sync must guard on and verify stable ancestry',
+  );
+  assert.ok(
+    workflow.includes('release_artifact_only_conflict') &&
+      workflow.includes('version-only') &&
+      workflow.includes('git checkout --theirs "$f"'),
+    '.github/workflows/sync-patches.yml: release artifact conflicts must resolve to stable only when the conflict is version-only',
+  );
+  assert.equal(
+    workflow.includes('git add -A'),
+    false,
+    '.github/workflows/sync-patches.yml: sync must not commit unresolved conflict markers into review PRs',
+  );
+  assert.ok(
+    workflow.includes("This PR must be merged with GitHub's merge-commit option"),
+    '.github/workflows/sync-patches.yml: generated PRs must warn reviewers not to squash away stable ancestry',
+  );
 });
 
 test('MCP releaserc builds the package before publish so the tarball ships dist/', async () => {
@@ -292,6 +447,110 @@ test('stable recovery filters prerelease tags so *-next.* never resumes as @late
     content.includes("expectedBranch === 'stable'") && content.includes('listStableMergedTags(pkg.tagPattern, branchRef)'),
     'scripts/release-local-stable.mjs: stable recovery must consult the prerelease-filtered list',
   );
+});
+
+test('stable recovery ignores PyPI gaps when SDK PyPI publishing is disabled', async () => {
+  assert.equal(
+    shouldRecoverPackageRelease({
+      publishComplete: true,
+      githubComplete: true,
+      pythonPublished: false,
+      hasPythonPackages: false,
+      tagAtHead: false,
+    }),
+    false,
+    'missing PyPI packages must not trigger recovery when the descriptor is not tracking Python packages',
+  );
+  assert.equal(
+    shouldRecoverPackageRelease({
+      publishComplete: true,
+      githubComplete: true,
+      pythonPublished: false,
+      hasPythonPackages: true,
+      tagAtHead: false,
+    }),
+    true,
+    'missing PyPI packages must trigger recovery once SDK PyPI tracking is restored',
+  );
+  assert.equal(
+    shouldRecoverPackageRelease({
+      publishComplete: false,
+      githubComplete: true,
+      pythonPublished: false,
+      hasPythonPackages: false,
+      tagAtHead: false,
+    }),
+    true,
+    'npm publish gaps must still trigger recovery while SDK PyPI publishing is disabled',
+  );
+  assert.equal(
+    shouldRecoverPackageRelease({
+      publishComplete: true,
+      githubComplete: false,
+      pythonPublished: false,
+      hasPythonPackages: false,
+      tagAtHead: false,
+    }),
+    true,
+    'GitHub release gaps must still trigger recovery while SDK PyPI publishing is disabled',
+  );
+
+  const content = await readRepoFile('scripts/release-local-stable.mjs');
+  assert.ok(
+    content.includes('const SDK_PYPI_ENABLED = false'),
+    'scripts/release-local-stable.mjs: must keep the SDK PyPI disabled state next to the recovery decision',
+  );
+  assert.ok(
+    /name: 'sdk'[\s\S]*\.\.\.\(SDK_PYPI_ENABLED[\s\S]*pythonPackages: SDK_PYTHON_PACKAGES[\s\S]*preparePythonSnapshot: prepareSdkPythonSnapshot/.test(content),
+    'scripts/release-local-stable.mjs: SDK Python tracking and snapshot recovery must move together behind SDK_PYPI_ENABLED',
+  );
+});
+
+test('release configs suppress per-PR comment spam on prereleases', async () => {
+  const releasercPaths = [
+    'packages/superdoc/.releaserc.cjs',
+    'packages/react/.releaserc.cjs',
+    'packages/sdk/.releaserc.cjs',
+    'packages/template-builder/.releaserc.cjs',
+    'packages/esign/.releaserc.cjs',
+    'apps/cli/.releaserc.cjs',
+    'apps/mcp/.releaserc.cjs',
+    'apps/vscode-ext/.releaserc.cjs',
+    'apps/create/.releaserc.cjs',
+  ];
+
+  for (const releasercPath of releasercPaths) {
+    const content = await readRepoFile(releasercPath);
+
+    const usesGithubPlugin = content.includes("'@semantic-release/github'");
+    const usesLinearPlugin = content.includes("'semantic-release-linear-app'");
+
+    if (!usesGithubPlugin && !usesLinearPlugin) continue;
+
+    assert.ok(
+      content.includes('const shouldCommentOnRelease = !isPrerelease'),
+      `${releasercPath}: must define shouldCommentOnRelease = !isPrerelease so the prerelease comment gate is consistent across configs`,
+    );
+
+    if (usesGithubPlugin) {
+      assert.ok(
+        content.includes('successCommentCondition: shouldCommentOnRelease ? undefined : false'),
+        `${releasercPath}: @semantic-release/github must gate successCommentCondition through shouldCommentOnRelease so prereleases don't re-comment on every PR after a stable -> main sync`,
+      );
+    }
+
+    if (usesLinearPlugin) {
+      assert.ok(
+        content.includes('addComment: shouldCommentOnRelease'),
+        `${releasercPath}: semantic-release-linear-app addComment must be gated through shouldCommentOnRelease so prereleases don't post duplicate Linear comments after a stable -> main sync`,
+      );
+      assert.equal(
+        content.includes('addComment: true'),
+        false,
+        `${releasercPath}: semantic-release-linear-app must not hardcode addComment: true`,
+      );
+    }
+  }
 });
 
 test('release-state probes wrap fetch in bounded retry to absorb transient blips', async () => {
@@ -319,37 +578,63 @@ test('release-state probes wrap fetch in bounded retry to absorb transient blips
   );
 });
 
-test('docs promotion is keyed to SuperDoc only', async () => {
+test('docs promotion is keyed to a real superdoc tag from the orchestrator run', async () => {
   const promoteWorkflow = await readRepoFile('.github/workflows/promote-stable-docs.yml');
+  const workflowRunBlock = promoteWorkflow.match(/workflow_run:[\s\S]*?workflow_dispatch:/)?.[0] ?? '';
   assert.ok(
     promoteWorkflow.includes('workflow_run:'),
     '.github/workflows/promote-stable-docs.yml: must trigger on workflow_run completion',
   );
   assert.ok(
-    /workflows:\s*\n\s*-\s*"📦 Release superdoc"/.test(promoteWorkflow),
-    '.github/workflows/promote-stable-docs.yml: must trigger only on the SuperDoc release workflow',
+    /workflows:\s*\n\s*-\s*"📦 Release stable tooling \(CLI\/SDK\/MCP\)"/.test(promoteWorkflow),
+    '.github/workflows/promote-stable-docs.yml: must trigger off the stable orchestrator workflow',
   );
   assert.equal(
-    /Release CLI|Release SDK|Release MCP|Release react|Release esign|Release template-builder|Release vscode-ext/.test(promoteWorkflow),
+    /"📦 Release CLI"|"📦 Release SDK"|"📦 Release MCP"|"📦 Release react"|"📦 Release esign"|"📦 Release template-builder"|"📦 Release vscode-ext"/.test(workflowRunBlock),
     false,
-    '.github/workflows/promote-stable-docs.yml: docs-stable tracks SuperDoc only, not other packages',
+    '.github/workflows/promote-stable-docs.yml: must trigger only off the orchestrator, not per-package workflows',
   );
+  // Chain-independent failures (e.g. tools fail, superdoc releases) must
+  // still promote docs. The git-tag detection is the source of truth.
   assert.ok(
-    promoteWorkflow.includes("github.event.workflow_run.conclusion == 'success'"),
-    '.github/workflows/promote-stable-docs.yml: must only promote on successful SuperDoc runs',
+    promoteWorkflow.includes("github.event.workflow_run.conclusion == 'success'") &&
+      promoteWorkflow.includes("github.event.workflow_run.conclusion == 'failure'"),
+    '.github/workflows/promote-stable-docs.yml: must accept both success and failure conclusions so a tools-chain failure does not block superdoc-driven docs promotion',
   );
   assert.ok(
     promoteWorkflow.includes("github.event.workflow_run.head_branch == 'stable'"),
     '.github/workflows/promote-stable-docs.yml: must scope promotion to stable',
   );
   assert.ok(
+    promoteWorkflow.includes('Wait for stable release lane to drain') &&
+      promoteWorkflow.includes('gh run list') &&
+      promoteWorkflow.includes('"📦 Release stable tooling (CLI/SDK/MCP)" or .name == "📦 Release esign" or .name == "📦 Release template-builder"'),
+    '.github/workflows/promote-stable-docs.yml: must wait for the stable release lane to drain before inspecting origin/stable',
+  );
+  assert.ok(
     promoteWorkflow.includes("git tag --merged origin/stable --list 'v[0-9]*'") &&
       promoteWorkflow.includes('git tag --merged "${HEAD_SHA}" --list'),
     '.github/workflows/promote-stable-docs.yml: must detect a real SuperDoc release (not a no-op) before pushing docs-stable',
   );
+  // semantic-release pushes the v* tag during prepare, before publish runs.
+  // A failed publish leaves the tag on origin without the npm tarball, so
+  // tag presence alone is not sufficient evidence that the release shipped.
+  assert.ok(
+    promoteWorkflow.includes('npm view "superdoc@${version}"') &&
+      promoteWorkflow.includes('npm view "@harbour-enterprises/superdoc@${version}"'),
+    '.github/workflows/promote-stable-docs.yml: must verify npm publish completed for both superdoc and @harbour-enterprises/superdoc before promoting docs-stable, otherwise a tag-without-publish failure would advance docs to an unshipped version',
+  );
   assert.ok(
     promoteWorkflow.includes('refs/heads/docs-stable'),
     '.github/workflows/promote-stable-docs.yml: must push to docs-stable',
+  );
+  assert.ok(
+    promoteWorkflow.includes('git log --oneline origin/stable..origin/docs-stable -- apps/docs/'),
+    '.github/workflows/promote-stable-docs.yml: must refuse to overwrite docs commits that exist only on docs-stable',
+  );
+  assert.ok(
+    promoteWorkflow.includes('git push --force-with-lease=refs/heads/docs-stable:"${expected}" origin "${target}:refs/heads/docs-stable"'),
+    '.github/workflows/promote-stable-docs.yml: must use force-with-lease when promoting the docs-stable pointer',
   );
 });
 
@@ -372,6 +657,18 @@ test('docs promotion supports manual workflow_dispatch with optional sha input',
   assert.ok(
     /Push docs-stable \(manual\)[\s\S]*if:\s*github\.event_name == 'workflow_dispatch'/.test(promoteWorkflow),
     '.github/workflows/promote-stable-docs.yml: manual push step must gate on workflow_dispatch only, not on detect.outputs',
+  );
+  assert.ok(
+    /Push docs-stable \(manual\)[\s\S]*git log --oneline "\$\{target\}"\.\.origin\/docs-stable -- apps\/docs\//.test(
+      promoteWorkflow,
+    ),
+    '.github/workflows/promote-stable-docs.yml: manual promotion must guard against overwriting docs commits unique to docs-stable',
+  );
+  assert.ok(
+    /Push docs-stable \(manual\)[\s\S]*git push --force-with-lease=refs\/heads\/docs-stable:"\$\{expected\}" origin "\$\{target\}:refs\/heads\/docs-stable"/.test(
+      promoteWorkflow,
+    ),
+    '.github/workflows/promote-stable-docs.yml: manual promotion must use force-with-lease',
   );
 });
 
@@ -434,11 +731,11 @@ test('stable orchestrator recovers incomplete merged tags and defers stale check
     'scripts/release-local-stable.mjs: SDK reruns must resume npm publish explicitly',
   );
   assert.ok(
-    content.includes("case 'mcp'") && content.includes('apps/mcp'),
+    content.includes('resumeMcpPublish') && content.includes('apps/mcp'),
     'scripts/release-local-stable.mjs: MCP reruns must have an explicit resume path',
   );
   assert.ok(
-    content.includes("case 'cli'") && content.includes('apps/cli/scripts/publish.js'),
+    content.includes('resumeCliPublish') && content.includes('apps/cli/scripts/publish.js'),
     'scripts/release-local-stable.mjs: CLI reruns must resume via its dedicated publish script',
   );
   assert.ok(

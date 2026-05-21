@@ -35,13 +35,22 @@ export interface Subscribable<T> {
 }
 
 /**
- * Structural typing for the SuperDoc instance — keeps the UI controller
+ * Event names the UI controller (`createSuperDocUI`) subscribes to on
+ * a SuperDoc-like host. Narrower than
+ * `HeadlessToolbarSuperdocHostEvent` (which adds
+ * `formatting-marks-change`); a custom UI host stub only has to
+ * support the three events the UI controller actually consumes.
+ */
+export type SuperDocUIHostEvent = 'editorCreate' | 'document-mode-change' | 'zoomChange';
+
+/**
+ * Structural typing for the SuperDoc instance. Keeps the UI controller
  * loose from the SuperDoc Vue package's specific class type. The
  * controller only needs an event bus and an `activeEditor` reference.
  */
 export interface SuperDocLike {
-  on?(event: string, handler: (...args: unknown[]) => void): unknown;
-  off?(event: string, handler: (...args: unknown[]) => void): unknown;
+  on?(event: SuperDocUIHostEvent, handler: (...args: unknown[]) => void): unknown;
+  off?(event: SuperDocUIHostEvent, handler: (...args: unknown[]) => void): unknown;
   activeEditor?: SuperDocEditorLike | null;
   config?: { documentMode?: 'editing' | 'suggesting' | 'viewing' };
   /**
@@ -111,6 +120,31 @@ export interface SuperDocEditorLike {
     trackChanges?: {
       list?(query?: unknown): unknown;
       decide?(input: unknown, options?: unknown): unknown;
+    };
+    /**
+     * Content-controls (SDT) member on the Document API. Used by
+     * `ui.contentControls.*` for the snapshot list. List signature is
+     * loose to mirror comments / trackChanges; the controller asserts
+     * the concrete `ContentControlsListResult` shape after calling.
+     */
+    contentControls?: {
+      list?(query?: unknown): unknown;
+    };
+    /**
+     * Anchored-metadata member on the Document API. Used by
+     * `ui.metadata.*` to look up an entry's resolved range from its
+     * id, and to verify (via `get`) that the id actually maps to a
+     * stored payload before delegating to the SDT-keyed geometry
+     * path — a w:tag on its own can come from a Word-authored
+     * content control with no metadata payload, so the payload side
+     * has to agree. Structurally typed loose for the same
+     * stub-friendly reason as `comments` / `trackChanges` /
+     * `contentControls`; the controller asserts the concrete shapes
+     * after calling.
+     */
+    metadata?: {
+      get?(input: { id: string }): unknown | null;
+      resolve?(input: { id: string }): unknown | null;
     };
     /**
      * Insert content at a positional target. Surfaces the typed
@@ -246,6 +280,13 @@ export interface SuperDocUIState {
    * slice; refreshes on tracked-change events.
    */
   trackChanges: TrackChangesSlice;
+  /**
+   * Content-controls slice (SD-3157). Same cache + refresh posture as
+   * `comments` and `trackChanges`: items source from
+   * `editor.doc.contentControls.list()`, cached and refreshed on
+   * document transactions; `activeIds` derives from the selection.
+   */
+  contentControls: ContentControlsSlice;
 }
 
 /**
@@ -371,6 +412,138 @@ export interface SelectionSlice {
  * that contract see no shape mismatch. `activeIds` is a denormalized
  * convenience driven by `selection.current().activeCommentIds`.
  */
+/**
+ * Content-controls slice exposed on `state.contentControls`.
+ *
+ * Items source from `editor.doc.contentControls.list()` and are
+ * cached at the controller level — the list refreshes on document
+ * transactions, not on every selection update, so typing through
+ * unrelated content doesn't churn the slice.
+ *
+ * `activeIds` and `activeId` track which content controls contain
+ * the caret / selection anchor. Nested SDTs are real (a block SDT
+ * can wrap an inline SDT), so we expose the chain rather than
+ * picking one — consumers can switch on `activeIds[0]` for the
+ * tightest match or walk the chain for context-aware UI.
+ */
+export interface ContentControlsSlice {
+  /** Total count from the list result (before pagination, if any). */
+  total: number;
+  /** Items from `editor.doc.contentControls.list()`. Empty array on error or no editor. */
+  items: import('@superdoc/document-api').ContentControlsListResult['items'];
+  /**
+   * Content control ids whose painted wrapper contains the current
+   * selection anchor, innermost first. A caret inside an inline SDT
+   * nested in a block SDT surfaces both ids with the inline-SDT id
+   * first. Empty array when the cursor is not inside any SDT.
+   */
+  activeIds: string[];
+  /**
+   * Convenience for the common case of "what is the tightest active
+   * content control?". Always equal to `activeIds[0] ?? null`.
+   * Derived, not a separate source of truth — use `activeIds` when
+   * the chain matters.
+   */
+  activeId: string | null;
+}
+
+/**
+ * Content-controls domain handle exposed on `ui.contentControls`.
+ * Read / observe / look-up only — there are no mutation methods in
+ * v1. Consumers run all mutations through `editor.doc.contentControls.*`
+ * directly, matching the architectural rule that this handle is a UI
+ * surface, not a parallel mutation contract.
+ *
+ * The handle does not include `scrollIntoView` in v1: that path
+ * widens `ui.viewport.scrollIntoView` and is a separate slice from
+ * `ui.viewport.getRect` (SD-3156).
+ */
+export interface ContentControlsHandle {
+  /** Snapshot the current content-controls slice synchronously. */
+  getSnapshot(): ContentControlsSlice;
+  /**
+   * Subscribe to slice changes. Listener fires once synchronously with
+   * the current snapshot, then again whenever `items`, `activeIds`,
+   * `activeId`, or `total` change (shallow equality). Returns an
+   * unsubscribe.
+   */
+  subscribe(listener: (event: { snapshot: ContentControlsSlice }) => void): () => void;
+  /**
+   * Value-shaped alias of {@link subscribe}: listener receives the
+   * snapshot directly.
+   */
+  observe(listener: (snapshot: ContentControlsSlice) => void): () => void;
+  /**
+   * Look up a single content control by id. Reads from the cached
+   * slice (not a fresh Document API call), so the returned record is
+   * always consistent with what subscribers last saw on the same
+   * snapshot. Returns `null` when the id isn't in the current list.
+   */
+  get(input: { id: string }): import('@superdoc/document-api').ContentControlInfo | null;
+  /**
+   * Painter rect for the content control identified by `id`. Sugar
+   * over {@link ViewportHandle.getRect} with a UI-local
+   * `ContentControlViewportAddress` target. Returns the same shape as
+   * the underlying `getRect` (success + `rect` + `rects`, or a
+   * failure reason).
+   */
+  getRect(input: { id: string }): ViewportRectResult;
+}
+
+/**
+ * Anchored-metadata domain handle exposed on `ui.metadata`. Sugar over
+ * the metadata-id → content-control-id → painter geometry bridge that
+ * custom UI would otherwise compose by hand: callers carry only the
+ * metadata id (the value they passed to `editor.doc.metadata.attach`)
+ * and never see the SDT node id underneath.
+ *
+ * Read / scroll only — there are no mutation methods in v1. All
+ * mutations (`attach` / `update` / `remove`) stay on
+ * `editor.doc.metadata.*`; this handle is a UI surface, not a parallel
+ * mutation contract.
+ *
+ * No `namespace` parameter: `editor.doc.metadata.attach` enforces
+ * globally unique ids within a document (collisions fail with
+ * `INVALID_INPUT`), so the id is sufficient to identify an entry.
+ * No `getRects` either — `getRect`'s success variant already exposes
+ * the per-line `rects[]` array; a second method with the same return
+ * shape would just add API noise.
+ */
+export interface MetadataHandle {
+  /**
+   * Painter rect for the anchor identified by metadata `id`. Internally
+   * resolves metadata-id → SDT node-id via the cached content-controls
+   * slice and delegates to {@link ContentControlsHandle.getRect}, so
+   * the success shape and failure reasons match the rest of the
+   * `ui.*.getRect` family exactly.
+   *
+   * Failure mapping:
+   *   - empty id → `'invalid-target'`
+   *   - unknown id in current document → `'unresolved'`
+   *   - SDT exists but not painted (virtualized / pre-paint) → the
+   *     reason from `contentControls.getRect` (typically
+   *     `'not-mounted'` or `'not-ready'`) is propagated as-is.
+   */
+  getRect(input: { id: string }): ViewportRectResult;
+  /**
+   * Scroll the viewport to the anchored span identified by metadata
+   * `id`. Internally calls `editor.doc.metadata.resolve` to get a
+   * `SelectionTarget`, converts it to a `TextTarget` (the shape
+   * `ui.viewport.scrollIntoView` accepts), and forwards
+   * `block`/`behavior` unchanged. Returns the same
+   * `ScrollIntoViewOutput` shape as `ui.viewport.scrollIntoView`;
+   * unknown ids, `nodeEdge` endpoints, and other shapes that can't be
+   * cleanly represented as a `TextTarget` resolve to
+   * `{ success: false }` rather than silently scrolling to an
+   * approximation.
+   */
+  scrollIntoView(input: {
+    id: string;
+    block?: import('@superdoc/document-api').ScrollIntoViewInput['block'];
+    behavior?: import('@superdoc/document-api').ScrollIntoViewInput['behavior'];
+  }): Promise<import('@superdoc/document-api').ScrollIntoViewOutput>;
+}
+
 export interface CommentsSlice {
   /** Total count from the list result (before pagination, if any). */
   total: number;
@@ -472,6 +645,26 @@ export interface SuperDocUI {
    * `ui.comments.items` and `ui.trackChanges.items` themselves.
    */
   trackChanges: TrackChangesHandle;
+
+  /**
+   * Content-controls (SDT) domain — single subscription + read
+   * surface for chip overlays, citation popovers, and field-aware
+   * side panels. Subscribe to receive snapshot updates (items +
+   * activeIds + total); call `get` / `getRect` for synchronous
+   * lookups. v1 has no mutation methods — `editor.doc.contentControls.*`
+   * is the mutation contract.
+   */
+  contentControls: ContentControlsHandle;
+
+  /**
+   * Anchored-metadata domain — read + scroll surface keyed on the
+   * metadata id (= the value passed to `editor.doc.metadata.attach`).
+   * Hides the metadata-id → SDT-node-id bridge so custom UI doesn't
+   * have to compose `useSuperDocContentControls` + a tag → nodeId map
+   * + `ui.contentControls.getRect` itself. v1 has no mutation methods
+   * — `editor.doc.metadata.*` is the mutation contract.
+   */
+  metadata: MetadataHandle;
 
   /**
    * Selection domain — single subscription + read surface for
@@ -1521,19 +1714,40 @@ export interface ViewportRect {
   pageIndex: number;
 }
 
+/**
+ * UI-local address for a content control (SDT) target. Not part of
+ * the Document API's `EntityAddress` union because content controls
+ * are not a Document API navigation primitive (no
+ * `editor.doc.contentControls.navigateTo`). The viewport rect surface
+ * is purely a presentation-layer concern, so the type lives here next
+ * to {@link ViewportGetRectInput}.
+ */
+export type ContentControlViewportAddress = {
+  kind: 'entity';
+  entityType: 'contentControl';
+  entityId: string;
+};
+
+/**
+ * Targets accepted by {@link ViewportHandle.getRect}. Extends the
+ * Document API's `EntityAddress` (comment / tracked change) with the
+ * UI-local content-control address.
+ */
+export type ViewportEntityAddress = import('@superdoc/document-api').EntityAddress | ContentControlViewportAddress;
+
 export interface ViewportGetRectInput {
   /**
-   * Entity to look up — comment or tracked change by id. Today
-   * `getRect` resolves rects via the painter's data attributes
-   * (`data-comment-ids`, `data-track-change-id`) which only stamp
-   * entity addresses, not text-anchored ranges. Text targets
-   * (`TextAddress` / `TextTarget`) are intentionally not in the
-   * union: surface should match real behavior so a typed call site
-   * isn't lying about what works at runtime. They land via a
-   * follow-up that adds story-aware text resolution to the rect
-   * helper.
+   * Entity to look up — comment, tracked change, or content control
+   * (SDT) by id. Today `getRect` resolves rects via the painter's
+   * data attributes (`data-comment-ids`, `data-track-change-id`,
+   * `data-sdt-id`) which only stamp entity addresses, not
+   * text-anchored ranges. Text targets (`TextAddress` / `TextTarget`)
+   * are intentionally not in the union: surface should match real
+   * behavior so a typed call site isn't lying about what works at
+   * runtime. They land via a follow-up that adds story-aware text
+   * resolution to the rect helper.
    */
-  target: import('@superdoc/document-api').EntityAddress;
+  target: ViewportEntityAddress;
 }
 
 export type ViewportRectResult =
@@ -1803,9 +2017,19 @@ export interface ViewportEntityAtInput {
 /**
  * One hit returned by {@link ViewportHandle.entityAt}.
  *
- * The union is intentionally narrow today (`comment` /
- * `trackedChange`); other entity types land via additive union
- * members so a `switch` on `hit.type` with a default branch stays
- * forward compatible.
+ * Each entity type lands as its own union member so a `switch` on
+ * `hit.type` with a default branch stays forward compatible.
+ *
+ * `contentControl` hits carry only the fields already stamped on the
+ * painted DOM today: `id`, `scope` (block vs inline), and `tag` (the
+ * ECMA-376 SDT tag). Full property data (alias, controlType, lockMode,
+ * etc.) is not in the hit by design — call the Document API with a
+ * `ContentControlTarget` (`{ kind, nodeType: 'sdt', nodeId }`) when
+ * needed; `nodeId` is the `id` returned in this hit. Keeping the hit
+ * minimal avoids gating viewport reads on metadata plumbing that does
+ * not exist on every property yet.
  */
-export type ViewportEntityHit = { type: 'comment'; id: string } | { type: 'trackedChange'; id: string };
+export type ViewportEntityHit =
+  | { type: 'comment'; id: string }
+  | { type: 'trackedChange'; id: string }
+  | { type: 'contentControl'; id: string; scope?: 'block' | 'inline'; tag?: string };

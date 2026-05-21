@@ -1,12 +1,12 @@
 import { loadTestDataForEditorTests, initTestEditor } from '@tests/helpers/helpers.js';
 import { expect } from 'vitest';
-import { TextSelection } from 'prosemirror-state';
 import { getDocumentRelationshipElements } from '@core/super-converter/docx-helpers/document-rels.js';
 import {
   uploadAndInsertImage,
   replaceSelectionWithImagePlaceholder,
 } from '@extensions/image/imageHelpers/startImageUpload.js';
 import { findPlaceholder } from '@extensions/image/imageHelpers/imageRegistrationPlugin.js';
+import { handlePlainTextUrlPaste } from '@core/inputRules/paste-link-normalizer.js';
 import { imageBase64 } from './data/imageBase64.js';
 
 describe('Relationships tests', () => {
@@ -220,6 +220,89 @@ describe('Relationships tests', () => {
 
     expect(linkCountAfter).toBe(0);
     expect(importedUnderlineAfter).toBeGreaterThan(0);
+  });
+
+  it('does not throw when setLink replaces the selection with longer text', () => {
+    editor.commands.insertContent('hi');
+    editor.commands.selectAll();
+    expect(() => {
+      editor.commands.setLink({
+        href: 'https://www.superdoc.dev',
+        text: 'this is a much longer replacement text',
+      });
+    }).not.toThrow();
+  });
+
+  it('removes link-added underline only from segments without pre-existing underline', () => {
+    editor.commands.insertContent('abcdef');
+
+    let textStart = null;
+    editor.state.doc.descendants((node, pos) => {
+      if (node.isText && node.text && node.text.includes('abcdef')) {
+        textStart = pos;
+      }
+    });
+
+    editor.commands.setTextSelection({ from: textStart, to: textStart + 3 });
+    editor.commands.setUnderline();
+    editor.commands.setTextSelection({ from: textStart, to: textStart + 6 });
+    editor.commands.setLink({ href: 'https://www.superdoc.dev' });
+    editor.commands.unsetLink();
+
+    const charUnderline = {};
+    editor.state.doc.descendants((node) => {
+      if (!node.isText) return;
+      const hasUnderline = node.marks.some((m) => m.type.name === 'underline');
+      for (const ch of node.text || '') charUnderline[ch] = hasUnderline;
+    });
+
+    expect(charUnderline.a).toBe(true);
+    expect(charUnderline.b).toBe(true);
+    expect(charUnderline.c).toBe(true);
+    expect(charUnderline.d).toBe(false);
+    expect(charUnderline.e).toBe(false);
+    expect(charUnderline.f).toBe(false);
+  });
+
+  it('removes link-added underline after editing the link URL and unlinking', () => {
+    editor.commands.insertContent('hi');
+    editor.commands.selectAll();
+    editor.commands.setLink({ href: 'https://first.example.com' });
+    editor.commands.selectAll();
+    editor.commands.setLink({ href: 'https://second.example.com' });
+    editor.commands.unsetLink();
+
+    let hasUnderline = false;
+    editor.state.doc.descendants((node) => {
+      if (!node.isText) return;
+      if (node.marks.some((m) => m.type.name === 'underline')) hasUnderline = true;
+    });
+    expect(hasUnderline).toBe(false);
+  });
+
+  it('removes paste-added underline when removing a pasted URL link', () => {
+    editor.commands.setTextSelection({ from: 1, to: 1 });
+    const url = 'https://www.superdoc.dev';
+    handlePlainTextUrlPaste(editor, editor.view, url, { href: url });
+
+    let linkedAndUnderlined = false;
+    editor.state.doc.descendants((node) => {
+      if (!node.isText) return;
+      const hasLink = node.marks.some((m) => m.type.name === 'link');
+      const hasUnderline = node.marks.some((m) => m.type.name === 'underline');
+      if (hasLink && hasUnderline) linkedAndUnderlined = true;
+    });
+    expect(linkedAndUnderlined).toBe(true);
+
+    editor.commands.selectAll();
+    editor.commands.unsetLink();
+
+    let stuckUnderline = false;
+    editor.state.doc.descendants((node) => {
+      if (!node.isText) return;
+      if (node.marks.some((m) => m.type.name === 'underline')) stuckUnderline = true;
+    });
+    expect(stuckUnderline).toBe(false);
   });
 
   it('tests that the uploaded image has a rId and a relationship', async () => {

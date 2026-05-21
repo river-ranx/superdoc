@@ -96,6 +96,8 @@ import type {
   ListsAttachInput,
   ListsDetachInput,
   ListsDetachResult,
+  ListsDeleteInput,
+  ListsDeleteResult,
   ListsJoinInput,
   ListsJoinResult,
   ListsCanJoinInput,
@@ -261,6 +263,32 @@ import type {
 } from '../bookmarks/bookmarks.types.js';
 
 import type {
+  CustomXmlPartsListInput,
+  CustomXmlPartsListResult,
+  CustomXmlPartsGetInput,
+  CustomXmlPartInfo,
+  CustomXmlPartsCreateInput,
+  CustomXmlPartsCreateResult,
+  CustomXmlPartsPatchInput,
+  CustomXmlPartsRemoveInput,
+  CustomXmlPartsMutationResult,
+} from '../customXml/customXml.types.js';
+
+import type {
+  AnchoredMetadataAttachInput,
+  AnchoredMetadataAttachResult,
+  AnchoredMetadataListInput,
+  AnchoredMetadataListResult,
+  AnchoredMetadataGetInput,
+  AnchoredMetadataInfo,
+  AnchoredMetadataUpdateInput,
+  AnchoredMetadataRemoveInput,
+  AnchoredMetadataResolveInput,
+  AnchoredMetadataMutationResult,
+  AnchoredMetadataResolveInfo,
+} from '../metadata/anchored-metadata.types.js';
+
+import type {
   FootnoteListInput,
   FootnotesListResult,
   FootnoteGetInput,
@@ -391,6 +419,7 @@ import type {
   TablesUnmergeCellsInput,
   TablesSplitCellInput,
   TablesSetCellPropertiesInput,
+  TablesSetCellTextInput,
   TablesSortInput,
   TablesSetAltTextInput,
   TablesSetStyleInput,
@@ -408,6 +437,7 @@ import type {
   TablesApplyStyleInput,
   TablesSetBordersInput,
   TablesSetTableOptionsInput,
+  TablesApplyPresetInput,
   TableMutationResult,
   TablesGetInput,
   TablesGetOutput,
@@ -673,6 +703,7 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
   'lists.create': { input: ListsCreateInput; options: MutationOptions; output: ListsCreateResult };
   'lists.attach': { input: ListsAttachInput; options: MutationOptions; output: ListsMutateItemResult };
   'lists.detach': { input: ListsDetachInput; options: MutationOptions; output: ListsDetachResult };
+  'lists.delete': { input: ListsDeleteInput; options: MutationOptions; output: ListsDeleteResult };
   'lists.indent': { input: ListTargetInput; options: MutationOptions; output: ListsMutateItemResult };
   'lists.outdent': { input: ListTargetInput; options: MutationOptions; output: ListsMutateItemResult };
   'lists.join': { input: ListsJoinInput; options: MutationOptions; output: ListsJoinResult };
@@ -906,6 +937,7 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
     options: MutationOptions;
     output: TableMutationResult;
   };
+  'tables.setCellText': { input: TablesSetCellTextInput; options: MutationOptions; output: TableMutationResult };
   'tables.sort': { input: TablesSortInput; options: MutationOptions; output: TableMutationResult };
   'tables.setAltText': { input: TablesSetAltTextInput; options: MutationOptions; output: TableMutationResult };
   'tables.setStyle': { input: TablesSetStyleInput; options: MutationOptions; output: TableMutationResult };
@@ -939,6 +971,7 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
     options: MutationOptions;
     output: TableMutationResult;
   };
+  'tables.applyPreset': { input: TablesApplyPresetInput; options: MutationOptions; output: TableMutationResult };
 
   // --- tables.* reads ---
   'tables.get': { input: TablesGetInput; options: never; output: TablesGetOutput };
@@ -1536,6 +1569,65 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
     input: PermissionRangesUpdatePrincipalInput;
     options: MutationOptions;
     output: PermissionRangeMutationResult;
+  };
+
+  // --- customXml.parts.* ---
+  'customXml.parts.list': {
+    input: CustomXmlPartsListInput | undefined;
+    options: never;
+    output: CustomXmlPartsListResult;
+  };
+  'customXml.parts.get': {
+    input: CustomXmlPartsGetInput;
+    options: never;
+    output: CustomXmlPartInfo | null;
+  };
+  'customXml.parts.create': {
+    input: CustomXmlPartsCreateInput;
+    options: MutationOptions;
+    output: CustomXmlPartsCreateResult;
+  };
+  'customXml.parts.patch': {
+    input: CustomXmlPartsPatchInput;
+    options: MutationOptions;
+    output: CustomXmlPartsMutationResult;
+  };
+  'customXml.parts.remove': {
+    input: CustomXmlPartsRemoveInput;
+    options: MutationOptions;
+    output: CustomXmlPartsMutationResult;
+  };
+
+  // --- metadata.* (anchored metadata) ---
+  'metadata.attach': {
+    input: AnchoredMetadataAttachInput;
+    options: MutationOptions;
+    output: AnchoredMetadataAttachResult;
+  };
+  'metadata.list': {
+    input: AnchoredMetadataListInput | undefined;
+    options: never;
+    output: AnchoredMetadataListResult;
+  };
+  'metadata.get': {
+    input: AnchoredMetadataGetInput;
+    options: never;
+    output: AnchoredMetadataInfo | null;
+  };
+  'metadata.update': {
+    input: AnchoredMetadataUpdateInput;
+    options: MutationOptions;
+    output: AnchoredMetadataMutationResult;
+  };
+  'metadata.remove': {
+    input: AnchoredMetadataRemoveInput;
+    options: MutationOptions;
+    output: AnchoredMetadataMutationResult;
+  };
+  'metadata.resolve': {
+    input: AnchoredMetadataResolveInput;
+    options: never;
+    output: AnchoredMetadataResolveInfo | null;
   };
 }
 

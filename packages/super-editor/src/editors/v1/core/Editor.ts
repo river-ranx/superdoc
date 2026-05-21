@@ -265,9 +265,17 @@ export class Editor extends EventEmitter<EditorEventMap> {
 
   /**
    * ProseMirror schema for the editor.
+   *
+   * Typed as `Schema<string, string>` rather than bare `Schema` to
+   * drop the implicit `Schema<any, any>` default through the SD-3213
+   * supported-root audit. Node and mark name spaces are typed as
+   * `string` (the established ProseMirror constraint shape); consumer
+   * schemas with literal-typed names like `Schema<'paragraph', 'em'>`
+   * remain assignable.
+   *
    * @deprecated Direct ProseMirror access will be removed in a future version. Use the Document API (`editor.doc`) instead.
    */
-  schema!: Schema;
+  schema!: Schema<string, string>;
 
   /**
    * ProseMirror view instance.
@@ -1947,10 +1955,22 @@ export class Editor extends EventEmitter<EditorEventMap> {
 
   /**
    * Register PM plugin.
+   *
+   * `PluginState` is a call-site generic so the incoming plugin's
+   * state shape is preserved into the `handlePlugins` callback's
+   * `plugin` argument. The existing plugin list is heterogeneous
+   * (each entry can have a different state type) so it stays as
+   * `Plugin<unknown>[]` instead of being inferred under one specific
+   * state. Default `PluginState = unknown` removes the previous
+   * implicit `Plugin<any>` SD-3213 supported-root finding.
+   *
    * @param plugin PM plugin.
    * @param handlePlugins Optional function for handling plugin merge.
    */
-  registerPlugin(plugin: Plugin, handlePlugins?: (plugin: Plugin, plugins: Plugin[]) => Plugin[]): void {
+  registerPlugin<PluginState = unknown>(
+    plugin: Plugin<PluginState>,
+    handlePlugins?: (plugin: Plugin<PluginState>, plugins: Plugin<unknown>[]) => Plugin<unknown>[],
+  ): void {
     if (this.isDestroyed) return;
     if (!this.state?.plugins) return;
     const plugins =
@@ -2543,7 +2563,12 @@ export class Editor extends EventEmitter<EditorEventMap> {
    *       the cursor is inside a table cell, in which case the cell width is returned.
    */
   getMaxContentSize(): { width?: number; height?: number } {
-    if (!this.converter) return {};
+    const localPageStyles = this.converter?.pageStyles;
+    const parentPageStyles = this.options.parentEditor?.converter?.pageStyles;
+    const localPageSize = localPageStyles?.pageSize;
+    const pageStyles =
+      localPageSize?.width && localPageSize?.height ? localPageStyles : (parentPageStyles ?? localPageStyles);
+    if (!pageStyles) return {};
 
     // When the cursor is inside a table cell, constrain width to the cell's content
     // width so images inserted into a cell are never wider than that cell.
@@ -2569,7 +2594,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
       return {};
     }
 
-    const { pageSize = {}, pageMargins = {} } = this.converter.pageStyles ?? {};
+    const { pageSize = {}, pageMargins = {} } = pageStyles;
     const { width, height } = pageSize;
 
     if (!width || !height) return {};
@@ -3248,7 +3273,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
       });
 
       const numberingData = this.converter.convertedXml['word/numbering.xml'];
-      const numbering = this.converter.schemaToXml(numberingData.elements[0]);
+      const numbering = numberingData?.elements?.[0] ? this.converter.schemaToXml(numberingData.elements[0]) : null;
 
       const appXmlData = this.converter.convertedXml['docProps/app.xml'];
       const appXml = appXmlData?.elements?.[0] ? this.converter.schemaToXml(appXmlData.elements[0]) : null;
@@ -3262,7 +3287,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
         'word/document.xml': String(documentXml),
         'docProps/custom.xml': String(customXml),
         'word/_rels/document.xml.rels': String(rels),
-        'word/numbering.xml': String(numbering),
+        ...(numbering ? { 'word/numbering.xml': String(numbering) } : {}),
         'word/styles.xml': String(styles),
         ...updatedHeadersFooters,
         ...(appXml ? { 'docProps/app.xml': String(appXml) } : {}),
@@ -3328,6 +3353,24 @@ export class Editor extends EventEmitter<EditorEventMap> {
         const partData = this.converter.convertedXml[path] as { elements?: unknown[] } | undefined;
         if (partData?.elements?.[0]) {
           updatedDocs[path] = String(this.converter.schemaToXml(partData.elements[0]));
+        }
+      }
+
+      // Emit ZIP tombstones for custom XML parts that were removed via the
+      // Document API but originated in the imported DOCX. Without this,
+      // the exporter would copy the original zip entry through, and the
+      // removed part would reappear on the next import.
+      // AIDEV-NOTE: `removedCustomXmlPaths` is set by `removeCustomXmlPart`
+      // (super-converter/custom-xml-parts.js) on the converter instance.
+      // Typed via cast rather than on SuperConverter.d.ts because adding
+      // an explicit field there triggers weak-type errors against
+      // ConverterWithDocumentSettings / ConverterLike structural types in
+      // sibling files that don't reference this field.
+      const removedCustomXmlPaths = (this.converter as unknown as { removedCustomXmlPaths?: Set<string> })
+        .removedCustomXmlPaths;
+      if (removedCustomXmlPaths instanceof Set) {
+        for (const path of removedCustomXmlPaths) {
+          updatedDocs[path] = null;
         }
       }
 
@@ -3892,6 +3935,13 @@ export class Editor extends EventEmitter<EditorEventMap> {
     if (!this.options.ydoc) {
       this.#initComments();
     }
+
+    // AIDEV-NOTE: In collaboration mode, parts are seeded into Y.Doc directly
+    // (not through `mutateParts`), so no `partChanged` fires on this client.
+    // Remote tabs refresh via the consumer → `mutateParts` → `partChanged` path,
+    // but the importer relies on this signal to rebuild header/footer state
+    // bound to the previous document (SD-2643).
+    this.emit('documentReplaced', { editor: this });
   }
 
   /**

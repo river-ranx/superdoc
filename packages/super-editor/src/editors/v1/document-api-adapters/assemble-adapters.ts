@@ -61,6 +61,7 @@ import {
   listsCreateWrapper,
   listsAttachWrapper,
   listsDetachWrapper,
+  listsDeleteWrapper,
   listsJoinWrapper,
   listsCanJoinWrapper,
   listsSeparateWrapper,
@@ -154,6 +155,7 @@ import {
   tablesUnmergeCellsWrapper,
   tablesSplitCellWrapper,
   tablesSetCellPropertiesWrapper,
+  tablesSetCellTextWrapper,
   tablesSortWrapper,
   tablesSetStyleWrapper,
   tablesClearStyleWrapper,
@@ -170,6 +172,7 @@ import {
   tablesApplyStyleWrapper,
   tablesSetBordersWrapper,
   tablesSetTableOptionsWrapper,
+  tablesApplyPresetWrapper,
 } from './plan-engine/tables-wrappers.js';
 import {
   tablesGetAdapter,
@@ -253,6 +256,8 @@ import {
   bookmarksRenameWrapper,
   bookmarksRemoveWrapper,
 } from './plan-engine/bookmark-wrappers.js';
+import { createCustomXmlPartsAdapter } from './plan-engine/custom-xml-wrappers.js';
+import { createAnchoredMetadataAdapter } from './plan-engine/anchored-metadata-wrappers.js';
 import {
   protectionGetAdapter,
   protectionSetEditingRestrictionAdapter,
@@ -460,6 +465,7 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
       create: (input, options) => listsCreateWrapper(editor, input, options),
       attach: (input, options) => listsAttachWrapper(editor, input, options),
       detach: (input, options) => listsDetachWrapper(editor, input, options),
+      delete: (input, options) => listsDeleteWrapper(editor, input, options),
       indent: (input, options) => listsIndentWrapper(editor, input, options),
       outdent: (input, options) => listsOutdentWrapper(editor, input, options),
       join: (input, options) => listsJoinWrapper(editor, input, options),
@@ -538,6 +544,7 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
       unmergeCells: (input, options) => tablesUnmergeCellsWrapper(editor, input, options),
       splitCell: (input, options) => tablesSplitCellWrapper(editor, input, options),
       setCellProperties: (input, options) => tablesSetCellPropertiesWrapper(editor, input, options),
+      setCellText: (input, options) => tablesSetCellTextWrapper(editor, input, options),
       sort: (input, options) => tablesSortWrapper(editor, input, options),
       setAltText: (input, options) => tablesSetAltTextWrapper(editor, input, options),
       setStyle: (input, options) => tablesSetStyleWrapper(editor, input, options),
@@ -555,6 +562,7 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
       applyStyle: (input, options) => tablesApplyStyleWrapper(editor, input, options),
       setBorders: (input, options) => tablesSetBordersWrapper(editor, input, options),
       setTableOptions: (input, options) => tablesSetTableOptionsWrapper(editor, input, options),
+      applyPreset: (input, options) => tablesApplyPresetWrapper(editor, input, options),
       get: (input) => tablesGetAdapter(editor, input),
       getCells: (input) => tablesGetCellsAdapter(editor, input),
       getProperties: (input) => tablesGetPropertiesAdapter(editor, input),
@@ -639,6 +647,10 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
       rename: (input, options) => bookmarksRenameWrapper(editor, input, options),
       remove: (input, options) => bookmarksRemoveWrapper(editor, input, options),
     },
+    customXml: {
+      parts: createCustomXmlPartsAdapter(editor),
+    },
+    metadata: createAnchoredMetadataAdapter(editor),
     footnotes: {
       list: (query) => footnotesListWrapper(editor, query),
       get: (input) => footnotesGetWrapper(editor, input),

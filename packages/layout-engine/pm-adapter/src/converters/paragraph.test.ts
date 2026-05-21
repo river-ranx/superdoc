@@ -852,6 +852,59 @@ describe('paragraph converters', () => {
       expect(result[0].text).toBe('world');
     });
 
+    // SD-3098: a w:rtl run adjacent to a plain run must NOT merge, otherwise the
+    // merged result keeps only the first run's bidi field and the DomPainter
+    // dir="rtl" + RLM injection paint-time fix is lost.
+    it('should not merge ltr run with following rtl run', () => {
+      const run1: TextRun = {
+        text: '-03-23',
+        fontFamily: 'Arial',
+        fontSize: 16,
+        pmStart: 0,
+        pmEnd: 6,
+      };
+      const run2: TextRun = {
+        text: '2026',
+        fontFamily: 'Arial',
+        fontSize: 16,
+        bidi: { rtl: true },
+        pmStart: 6,
+        pmEnd: 10,
+      };
+
+      vi.mocked(trackedChangesCompatible).mockReturnValue(true);
+
+      const result = mergeAdjacentRuns([run1, run2]);
+      expect(result).toHaveLength(2);
+      expect((result[0] as TextRun).bidi).toBeUndefined();
+      expect((result[1] as TextRun).bidi).toEqual({ rtl: true });
+    });
+
+    it('should not merge rtl run with following ltr run', () => {
+      const run1: TextRun = {
+        text: '2026',
+        fontFamily: 'Arial',
+        fontSize: 16,
+        bidi: { rtl: true },
+        pmStart: 0,
+        pmEnd: 4,
+      };
+      const run2: TextRun = {
+        text: '-03-23',
+        fontFamily: 'Arial',
+        fontSize: 16,
+        pmStart: 4,
+        pmEnd: 10,
+      };
+
+      vi.mocked(trackedChangesCompatible).mockReturnValue(true);
+
+      const result = mergeAdjacentRuns([run1, run2]);
+      expect(result).toHaveLength(2);
+      expect((result[0] as TextRun).bidi).toEqual({ rtl: true });
+      expect((result[1] as TextRun).bidi).toBeUndefined();
+    });
+
     it('should handle long sequences of runs efficiently', () => {
       const runs: TextRun[] = [];
       for (let i = 0; i < 100; i++) {
@@ -3003,6 +3056,61 @@ describe('paragraph converters', () => {
 
         expect(context.blocks).toHaveLength(1);
         expect(getMarkerText(context.blocks[0])).toBe('二.');
+      });
+
+      it('updates converterContext.sectionDirection when crossing to next section', () => {
+        const trackedChanges: TrackedChangesConfig = {
+          mode: 'review',
+          enabled: true,
+        };
+        const context = createParagraphHandlerContext(trackedChanges);
+        context.converterContext.sectionDirection = 'rtl';
+        context.sectionState = {
+          ranges: [
+            {
+              sectionIndex: 0,
+              startParagraphIndex: 0,
+              endParagraphIndex: 0,
+              sectPr: null,
+              margins: null,
+              pageSize: null,
+              orientation: null,
+              columns: null,
+              type: 'nextPage',
+              titlePg: false,
+            },
+            {
+              sectionIndex: 1,
+              startParagraphIndex: 0,
+              endParagraphIndex: 1,
+              sectPr: {
+                type: 'element',
+                name: 'w:sectPr',
+                elements: [{ type: 'element', name: 'w:bidi', attributes: { 'w:val': '0' } }],
+              },
+              margins: null,
+              pageSize: null,
+              orientation: null,
+              columns: null,
+              type: 'nextPage',
+              titlePg: false,
+            },
+          ] as any,
+          currentSectionIndex: 0,
+          currentParagraphIndex: 0,
+        };
+
+        handleParagraphNode(
+          {
+            type: 'paragraph',
+            attrs: { paragraphProperties: {} },
+            content: [{ type: 'text', text: 'section switch paragraph' }],
+          } as PMNode,
+          context,
+        );
+
+        expect(context.sectionState.currentSectionIndex).toBe(1);
+        expect(context.converterContext.sectionDirection).toBe('ltr');
       });
     });
 

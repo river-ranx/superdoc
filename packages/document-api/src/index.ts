@@ -148,6 +148,8 @@ import type {
   ListsAttachInput,
   ListsDetachInput,
   ListsDetachResult,
+  ListsDeleteInput,
+  ListsDeleteResult,
   ListsJoinInput,
   ListsJoinResult,
   ListsCanJoinInput,
@@ -197,6 +199,7 @@ import {
   executeListsCreate,
   executeListsAttach,
   executeListsDetach,
+  executeListsDelete,
   executeListsJoin,
   executeListsCanJoin,
   executeListsSeparate,
@@ -273,6 +276,7 @@ import type {
   TablesUnmergeCellsInput,
   TablesSplitCellInput,
   TablesSetCellPropertiesInput,
+  TablesSetCellTextInput,
   TablesSortInput,
   TablesSetAltTextInput,
   TablesSetStyleInput,
@@ -290,6 +294,7 @@ import type {
   TablesApplyStyleInput,
   TablesSetBordersInput,
   TablesSetTableOptionsInput,
+  TablesApplyPresetInput,
   TablesGetInput,
   TablesGetOutput,
   TablesGetCellsInput,
@@ -675,6 +680,48 @@ import type {
   BookmarkMutationResult,
 } from './bookmarks/bookmarks.types.js';
 
+import type { CustomXmlApi, CustomXmlAdapter } from './customXml/customXml.js';
+import {
+  executeCustomXmlPartsList,
+  executeCustomXmlPartsGet,
+  executeCustomXmlPartsCreate,
+  executeCustomXmlPartsPatch,
+  executeCustomXmlPartsRemove,
+} from './customXml/customXml.js';
+import type {
+  CustomXmlPartsListInput,
+  CustomXmlPartsListResult,
+  CustomXmlPartsGetInput,
+  CustomXmlPartInfo,
+  CustomXmlPartsCreateInput,
+  CustomXmlPartsCreateResult,
+  CustomXmlPartsPatchInput,
+  CustomXmlPartsRemoveInput,
+  CustomXmlPartsMutationResult,
+} from './customXml/customXml.types.js';
+import {
+  executeAnchoredMetadataAttach,
+  executeAnchoredMetadataList,
+  executeAnchoredMetadataGet,
+  executeAnchoredMetadataUpdate,
+  executeAnchoredMetadataRemove,
+  executeAnchoredMetadataResolve,
+} from './metadata/anchored-metadata.js';
+import type { AnchoredMetadataApi, AnchoredMetadataAdapter } from './metadata/anchored-metadata.js';
+import type {
+  AnchoredMetadataAttachInput,
+  AnchoredMetadataAttachResult,
+  AnchoredMetadataListInput,
+  AnchoredMetadataListResult,
+  AnchoredMetadataGetInput,
+  AnchoredMetadataInfo,
+  AnchoredMetadataUpdateInput,
+  AnchoredMetadataRemoveInput,
+  AnchoredMetadataResolveInput,
+  AnchoredMetadataMutationResult,
+  AnchoredMetadataResolveInfo,
+} from './metadata/anchored-metadata.types.js';
+
 import type { ProtectionApi, ProtectionAdapter } from './protection/protection.js';
 import {
   executeProtectionGet,
@@ -1029,6 +1076,13 @@ export type {
 } from './images/images.types.js';
 export type { TocApi, TocAdapter } from './toc/toc.js';
 export type { BookmarksApi, BookmarksAdapter } from './bookmarks/bookmarks.js';
+export type {
+  CustomXmlApi,
+  CustomXmlAdapter,
+  CustomXmlPartsApi,
+  CustomXmlPartsAdapter,
+} from './customXml/customXml.js';
+export type { AnchoredMetadataApi, AnchoredMetadataAdapter } from './metadata/anchored-metadata.js';
 
 export type { ProtectionApi, ProtectionAdapter } from './protection/protection.js';
 export * from './protection/protection.types.js';
@@ -1196,6 +1250,8 @@ export type {
   HyperlinksRemoveInput,
 } from './hyperlinks/hyperlinks.types.js';
 export type * from './bookmarks/bookmarks.types.js';
+export type * from './customXml/customXml.types.js';
+export type * from './metadata/anchored-metadata.types.js';
 
 export type * from './footnotes/footnotes.types.js';
 export type * from './cross-refs/cross-refs.types.js';
@@ -1276,6 +1332,8 @@ export type {
   ListsCreateResult,
   ListsDetachInput,
   ListsDetachResult,
+  ListsDeleteInput,
+  ListsDeleteResult,
   ListsFailureCode,
   ListsGetInput,
   ListsInsertResult,
@@ -1437,6 +1495,7 @@ export interface TablesApi {
   unmergeCells(input: TablesUnmergeCellsInput, options?: MutationOptions): TableMutationResult;
   splitCell(input: TablesSplitCellInput, options?: MutationOptions): TableMutationResult;
   setCellProperties(input: TablesSetCellPropertiesInput, options?: MutationOptions): TableMutationResult;
+  setCellText(input: TablesSetCellTextInput, options?: MutationOptions): TableMutationResult;
   sort(input: TablesSortInput, options?: MutationOptions): TableMutationResult;
   setAltText(input: TablesSetAltTextInput, options?: MutationOptions): TableMutationResult;
   setStyle(input: TablesSetStyleInput, options?: MutationOptions): TableMutationResult;
@@ -1454,6 +1513,7 @@ export interface TablesApi {
   applyStyle(input: TablesApplyStyleInput, options?: MutationOptions): TableMutationResult;
   setBorders(input: TablesSetBordersInput, options?: MutationOptions): TableMutationResult;
   setTableOptions(input: TablesSetTableOptionsInput, options?: MutationOptions): TableMutationResult;
+  applyPreset(input: TablesApplyPresetInput, options?: MutationOptions): TableMutationResult;
   get(input: TablesGetInput): TablesGetOutput;
   getCells(input: TablesGetCellsInput): TablesGetCellsOutput;
   getProperties(input: TablesGetPropertiesInput): TablesGetPropertiesOutput;
@@ -1696,6 +1756,18 @@ export interface DocumentApi {
    */
   permissionRanges: PermissionRangesApi;
   /**
+   * Custom XML Data Storage Part operations (ECMA-376 §15.2.5, §15.2.6).
+   * Read and write raw custom XML parts in the OOXML package.
+   */
+  customXml: CustomXmlApi;
+  /**
+   * Anchored metadata — attach a JSON payload to a span of text and read
+   * it back across DOCX round-trips. Backed by hidden inline content
+   * controls and namespaced Custom XML Data Storage Parts; consumers see
+   * one operation set.
+   */
+  metadata: AnchoredMetadataApi;
+  /**
    * Runtime capability introspection.
    *
    * Callable directly (`capabilities()`) or via `.get()`.
@@ -1767,6 +1839,13 @@ export interface DocumentApiAdapters {
   history: HistoryAdapter;
   protection: ProtectionAdapter;
   permissionRanges: PermissionRangesAdapter;
+  /** Custom XML Data Storage Part operations. Optional; not all engines support custom XML. */
+  customXml?: CustomXmlAdapter;
+  /**
+   * Anchored-metadata operations (metadata.*). Optional; not all engines
+   * support attaching JSON metadata to anchored spans.
+   */
+  metadata?: AnchoredMetadataAdapter;
 }
 
 /**
@@ -2200,6 +2279,9 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       detach(input: ListsDetachInput, options?: MutationOptions): ListsDetachResult {
         return executeListsDetach(adapters.lists, input, options);
       },
+      delete(input: ListsDeleteInput, options?: MutationOptions): ListsDeleteResult {
+        return executeListsDelete(adapters.lists, input, options);
+      },
       indent(input: ListTargetInput, options?: MutationOptions): ListsMutateItemResult {
         return executeListsIndent(adapters.lists, input, options);
       },
@@ -2411,7 +2493,13 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         );
       },
       insertRow(input, options?) {
-        return executeRowLocatorOp('tables.insertRow', adapters.tables.insertRow.bind(adapters.tables), input, options);
+        return executeRowLocatorOp(
+          'tables.insertRow',
+          adapters.tables.insertRow.bind(adapters.tables),
+          input,
+          options,
+          { allowAppendShorthand: true },
+        );
       },
       deleteRow(input, options?) {
         return executeRowLocatorOp('tables.deleteRow', adapters.tables.deleteRow.bind(adapters.tables), input, options);
@@ -2516,6 +2604,14 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         return executeTableLocatorOp(
           'tables.setCellProperties',
           adapters.tables.setCellProperties.bind(adapters.tables),
+          input,
+          options,
+        );
+      },
+      setCellText(input, options?) {
+        return executeCellOrTableScopedCellLocatorOp(
+          'tables.setCellText',
+          adapters.tables.setCellText.bind(adapters.tables),
           input,
           options,
         );
@@ -2642,6 +2738,14 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         return executeTablesSetTableOptions(
           'tables.setTableOptions',
           adapters.tables.setTableOptions.bind(adapters.tables),
+          input,
+          options,
+        );
+      },
+      applyPreset(input, options?) {
+        return executeTableLocatorOp(
+          'tables.applyPreset',
+          adapters.tables.applyPreset.bind(adapters.tables),
           input,
           options,
         );
@@ -3230,6 +3334,45 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         options?: MutationOptions,
       ): PermissionRangeMutationResult {
         return executePermissionRangesUpdatePrincipal(adapters.permissionRanges, input, options);
+      },
+    },
+    customXml: {
+      parts: {
+        list(input?: CustomXmlPartsListInput): CustomXmlPartsListResult {
+          return executeCustomXmlPartsList(requireAdapter(adapters.customXml, 'customXml').parts, input);
+        },
+        get(input: CustomXmlPartsGetInput): CustomXmlPartInfo | null {
+          return executeCustomXmlPartsGet(requireAdapter(adapters.customXml, 'customXml').parts, input);
+        },
+        create(input: CustomXmlPartsCreateInput, options?: MutationOptions): CustomXmlPartsCreateResult {
+          return executeCustomXmlPartsCreate(requireAdapter(adapters.customXml, 'customXml').parts, input, options);
+        },
+        patch(input: CustomXmlPartsPatchInput, options?: MutationOptions): CustomXmlPartsMutationResult {
+          return executeCustomXmlPartsPatch(requireAdapter(adapters.customXml, 'customXml').parts, input, options);
+        },
+        remove(input: CustomXmlPartsRemoveInput, options?: MutationOptions): CustomXmlPartsMutationResult {
+          return executeCustomXmlPartsRemove(requireAdapter(adapters.customXml, 'customXml').parts, input, options);
+        },
+      },
+    },
+    metadata: {
+      attach(input: AnchoredMetadataAttachInput, options?: MutationOptions): AnchoredMetadataAttachResult {
+        return executeAnchoredMetadataAttach(requireAdapter(adapters.metadata, 'metadata'), input, options);
+      },
+      list(input?: AnchoredMetadataListInput): AnchoredMetadataListResult {
+        return executeAnchoredMetadataList(requireAdapter(adapters.metadata, 'metadata'), input);
+      },
+      get(input: AnchoredMetadataGetInput): AnchoredMetadataInfo | null {
+        return executeAnchoredMetadataGet(requireAdapter(adapters.metadata, 'metadata'), input);
+      },
+      update(input: AnchoredMetadataUpdateInput, options?: MutationOptions): AnchoredMetadataMutationResult {
+        return executeAnchoredMetadataUpdate(requireAdapter(adapters.metadata, 'metadata'), input, options);
+      },
+      remove(input: AnchoredMetadataRemoveInput, options?: MutationOptions): AnchoredMetadataMutationResult {
+        return executeAnchoredMetadataRemove(requireAdapter(adapters.metadata, 'metadata'), input, options);
+      },
+      resolve(input: AnchoredMetadataResolveInput): AnchoredMetadataResolveInfo | null {
+        return executeAnchoredMetadataResolve(requireAdapter(adapters.metadata, 'metadata'), input);
       },
     },
     invoke(request: DynamicInvokeRequest): unknown {

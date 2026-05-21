@@ -325,6 +325,7 @@ overrides:
   '@superdoc-dev/superdoc-yjs-collaboration': workspace:*
   '@superdoc-dev/sdk': workspace:*
   openapi-types: 12.1.3
+  '@types/minimatch': 5.1.2
 
 patchedDependencies:
   openapi-types@12.1.3:
@@ -337,10 +338,6 @@ patchedDependencies:
 importers:
 
   .:
-    dependencies:
-      superdoc:
-        specifier: workspace:*
-        version: link:packages/superdoc
     devDependencies:
       '@clack/prompts':
         specifier: ^1.0.1
@@ -637,31 +634,6 @@ importers:
         specifier: ^1.50.0
         version: 1.58.2
 
-  demos/chrome-extension/chrome-extension:
-    dependencies:
-      fast-xml-parser:
-        specifier: ^5.2.5
-        version: 5.5.9
-      jszip:
-        specifier: ^3.10.1
-        version: 3.10.1
-      prosemirror-model:
-        specifier: ^1.25.1
-        version: 1.25.4
-      prosemirror-state:
-        specifier: ^1.4.3
-        version: 1.4.4
-      prosemirror-transform:
-        specifier: ^1.10.4
-        version: 1.11.0
-    devDependencies:
-      webpack:
-        specifier: ^5.99.9
-        version: 5.105.4(esbuild@0.27.7)(webpack-cli@6.0.1)
-      webpack-cli:
-        specifier: ^6.0.1
-        version: 6.0.1(webpack@5.105.4)
-
   demos/collaborative-agent/client:
     dependencies:
       '@radix-ui/react-collapsible':
@@ -784,49 +756,15 @@ importers:
         specifier: ~5.5.0
         version: 5.5.4
 
-  demos/custom-ui:
+  demos/contract-templates:
     dependencies:
-      '@superdoc-dev/react':
-        specifier: workspace:*
-        version: link:../../packages/react
-      react:
-        specifier: 'catalog:'
-        version: 19.2.4
-      react-dom:
-        specifier: 'catalog:'
-        version: 19.2.4(react@19.2.4)
       superdoc:
         specifier: workspace:*
         version: link:../../packages/superdoc
     devDependencies:
-      '@types/react':
-        specifier: 'catalog:'
-        version: 19.2.14
-      '@types/react-dom':
-        specifier: 'catalog:'
-        version: 19.2.3(@types/react@19.2.14)
-      '@vitejs/plugin-react':
-        specifier: 'catalog:'
-        version: 5.2.0(rolldown-vite@7.3.1(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3))
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
-      vite:
-        specifier: npm:rolldown-vite@7.3.1
-        version: rolldown-vite@7.3.1(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
-
-  demos/docx-from-html:
-    dependencies:
-      superdoc:
-        specifier: workspace:*
-        version: link:../../packages/superdoc
-      vue:
-        specifier: 3.5.32
-        version: 3.5.32(typescript@5.9.3)
-    devDependencies:
-      '@vitejs/plugin-vue':
-        specifier: ^5.2.2
-        version: 5.2.4(rolldown-vite@7.3.1(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3))(vue@3.5.32(typescript@5.9.3))
       vite:
         specifier: npm:rolldown-vite@7.3.1
         version: rolldown-vite@7.3.1(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
@@ -883,6 +821,221 @@ importers:
         specifier: ^7.7.1
         version: 7.7.9(rolldown-vite@7.3.1(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3))(rollup@4.60.2)(vue@3.5.32(typescript@5.9.3))
 
+  demos/editor/custom-ui:
+    dependencies:
+      '@superdoc-dev/react':
+        specifier: workspace:*
+        version: link:../../../packages/react
+      react:
+        specifier: 'catalog:'
+        version: 19.2.4
+      react-dom:
+        specifier: 'catalog:'
+        version: 19.2.4(react@19.2.4)
+      superdoc:
+        specifier: workspace:*
+        version: link:../../../packages/superdoc
+    devDependencies:
+      '@types/react':
+        specifier: 'catalog:'
+        version: 19.2.14
+      '@types/react-dom':
+        specifier: 'catalog:'
+        version: 19.2.3(@types/react@19.2.14)
+      '@vitejs/plugin-react':
+        specifier: 'catalog:'
+        version: 5.2.0(rolldown-vite@7.3.1(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3))
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+      vite:
+        specifier: npm:rolldown-vite@7.3.1
+        version: rolldown-vite@7.3.1(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
+
+  demos/editor/integrations/chrome-extension/chrome-extension:
+    dependencies:
+      fast-xml-parser:
+        specifier: ^5.2.5
+        version: 5.5.9
+      jszip:
+        specifier: ^3.10.1
+        version: 3.10.1
+      prosemirror-model:
+        specifier: ^1.25.1
+        version: 1.25.4
+      prosemirror-state:
+        specifier: ^1.4.3
+        version: 1.4.4
+      prosemirror-transform:
+        specifier: ^1.10.4
+        version: 1.11.0
+    devDependencies:
+      webpack:
+        specifier: ^5.99.9
+        version: 5.105.4(esbuild@0.27.7)(webpack-cli@6.0.1)
+      webpack-cli:
+        specifier: ^6.0.1
+        version: 6.0.1(webpack@5.105.4)
+
+  demos/editor/integrations/word-addin:
+    dependencies:
+      '@google-cloud/storage':
+        specifier: ^7.13.0
+        version: 7.19.0
+      auth0-js:
+        specifier: ^9.28.0
+        version: 9.32.0
+      core-js:
+        specifier: ^3.36.0
+        version: 3.49.0
+      cors:
+        specifier: ^2.8.5
+        version: 2.8.6
+      dotenv:
+        specifier: ^16.4.5
+        version: 16.6.1
+      express:
+        specifier: ^5.1.0
+        version: 5.2.1
+      express-oauth2-jwt-bearer:
+        specifier: ^1.6.0
+        version: 1.7.4
+      jsdom:
+        specifier: 27.3.0
+        version: 27.3.0(canvas@3.2.3)
+      regenerator-runtime:
+        specifier: ^0.14.1
+        version: 0.14.1
+      ws:
+        specifier: ^8.18.0
+        version: 8.20.0
+    devDependencies:
+      '@babel/core':
+        specifier: ^7.24.0
+        version: 7.29.0
+      '@babel/preset-env':
+        specifier: ^7.25.4
+        version: 7.29.2(@babel/core@7.29.0)
+      '@types/office-js':
+        specifier: ^1.0.377
+        version: 1.0.585
+      '@types/office-runtime':
+        specifier: ^1.0.35
+        version: 1.0.36
+      acorn:
+        specifier: ^8.11.3
+        version: 8.16.0
+      babel-loader:
+        specifier: ^9.1.3
+        version: 9.2.1(@babel/core@7.29.0)(webpack@5.105.4)
+      copy-webpack-plugin:
+        specifier: ^12.0.2
+        version: 12.0.2(webpack@5.105.4)
+      eslint-plugin-office-addins:
+        specifier: ^3.0.2
+        version: 3.0.3(@eslint/eslintrc@3.3.5)(@types/eslint@9.6.1)
+      file-loader:
+        specifier: ^6.2.0
+        version: 6.2.0(webpack@5.105.4)
+      html-loader:
+        specifier: ^5.0.0
+        version: 5.1.0(webpack@5.105.4)
+      html-webpack-plugin:
+        specifier: ^5.6.3
+        version: 5.6.6(webpack@5.105.4)
+      office-addin-cli:
+        specifier: ^1.6.5
+        version: 1.6.5
+      office-addin-debugging:
+        specifier: ^5.1.6
+        version: 5.1.6(@microsoft/teamsapp-cli@3.0.2)
+      office-addin-dev-certs:
+        specifier: ^1.13.5
+        version: 1.13.5
+      office-addin-lint:
+        specifier: ^2.3.5
+        version: 2.3.5(@eslint/eslintrc@3.3.5)(@types/eslint@9.6.1)(typescript@5.9.3)
+      office-addin-manifest:
+        specifier: ^1.13.6
+        version: 1.13.6
+      office-addin-prettier-config:
+        specifier: ^1.2.1
+        version: 1.2.1
+      os-browserify:
+        specifier: ^0.3.0
+        version: 0.3.0
+      process:
+        specifier: ^0.11.10
+        version: 0.11.10
+      source-map-loader:
+        specifier: ^5.0.0
+        version: 5.0.0(webpack@5.105.4)
+      webpack:
+        specifier: ^5.95.0
+        version: 5.105.4(esbuild@0.27.7)(webpack-cli@5.1.4)
+      webpack-cli:
+        specifier: ^5.1.4
+        version: 5.1.4(webpack-dev-server@5.1.0)(webpack@5.105.4)
+      webpack-dev-server:
+        specifier: 5.1.0
+        version: 5.1.0(tslib@2.8.1)(webpack-cli@5.1.4)(webpack@5.105.4)
+
+  demos/editor/integrations/word-addin/server:
+    dependencies:
+      '@google-cloud/storage':
+        specifier: ^7.16.0
+        version: 7.19.0
+      busboy:
+        specifier: 0.3.0
+        version: 0.3.0
+      cors:
+        specifier: ^2.8.5
+        version: 2.8.6
+      dotenv:
+        specifier: ^16.4.5
+        version: 16.6.1
+      express:
+        specifier: ^4.21.2
+        version: 4.22.1
+      express-oauth2-jwt-bearer:
+        specifier: ^1.6.0
+        version: 1.7.4
+      jsdom:
+        specifier: 27.3.0
+        version: 27.3.0(canvas@3.2.3)
+      multer:
+        specifier: ^2.0.0
+        version: 2.1.1
+      prosemirror-state:
+        specifier: ^1.4.3
+        version: 1.4.4
+      superdoc:
+        specifier: workspace:*
+        version: link:../../../../../packages/superdoc
+      ws:
+        specifier: ^8.18.0
+        version: 8.20.0
+    devDependencies:
+      nodemon:
+        specifier: ^3.1.9
+        version: 3.1.14
+
+  demos/editor/superdoc/docx-from-html:
+    dependencies:
+      superdoc:
+        specifier: workspace:*
+        version: link:../../../../packages/superdoc
+      vue:
+        specifier: 3.5.32
+        version: 3.5.32(typescript@5.9.3)
+    devDependencies:
+      '@vitejs/plugin-vue':
+        specifier: ^5.2.2
+        version: 5.2.4(rolldown-vite@7.3.1(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3))(vue@3.5.32(typescript@5.9.3))
+      vite:
+        specifier: npm:rolldown-vite@7.3.1
+        version: rolldown-vite@7.3.1(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
+
   demos/fields:
     dependencies:
       superdoc:
@@ -903,7 +1056,7 @@ importers:
     dependencies:
       '@hocuspocus/provider':
         specifier: latest
-        version: 3.4.4(y-protocols@1.0.7(yjs@13.6.30))(yjs@13.6.30)
+        version: 4.0.0(y-protocols@1.0.7(yjs@13.6.30))(yjs@13.6.30)
       '@hookform/resolvers':
         specifier: ^3.9.1
         version: 3.10.0(react-hook-form@7.72.0(react@18.2.0))
@@ -1241,149 +1394,6 @@ importers:
         specifier: npm:rolldown-vite@7.3.1
         version: rolldown-vite@7.3.1(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
 
-  demos/word-addin:
-    dependencies:
-      '@google-cloud/storage':
-        specifier: ^7.13.0
-        version: 7.19.0
-      auth0-js:
-        specifier: ^9.28.0
-        version: 9.32.0
-      core-js:
-        specifier: ^3.36.0
-        version: 3.49.0
-      cors:
-        specifier: ^2.8.5
-        version: 2.8.6
-      dotenv:
-        specifier: ^16.4.5
-        version: 16.6.1
-      express:
-        specifier: ^5.1.0
-        version: 5.2.1
-      express-oauth2-jwt-bearer:
-        specifier: ^1.6.0
-        version: 1.7.4
-      jsdom:
-        specifier: 27.3.0
-        version: 27.3.0(canvas@3.2.3)
-      regenerator-runtime:
-        specifier: ^0.14.1
-        version: 0.14.1
-      ws:
-        specifier: ^8.18.0
-        version: 8.20.0
-    devDependencies:
-      '@babel/core':
-        specifier: ^7.24.0
-        version: 7.29.0
-      '@babel/preset-env':
-        specifier: ^7.25.4
-        version: 7.29.2(@babel/core@7.29.0)
-      '@types/office-js':
-        specifier: ^1.0.377
-        version: 1.0.585
-      '@types/office-runtime':
-        specifier: ^1.0.35
-        version: 1.0.36
-      acorn:
-        specifier: ^8.11.3
-        version: 8.16.0
-      babel-loader:
-        specifier: ^9.1.3
-        version: 9.2.1(@babel/core@7.29.0)(webpack@5.105.4)
-      copy-webpack-plugin:
-        specifier: ^12.0.2
-        version: 12.0.2(webpack@5.105.4)
-      eslint-plugin-office-addins:
-        specifier: ^3.0.2
-        version: 3.0.3(@eslint/eslintrc@3.3.5)(@types/eslint@9.6.1)
-      file-loader:
-        specifier: ^6.2.0
-        version: 6.2.0(webpack@5.105.4)
-      html-loader:
-        specifier: ^5.0.0
-        version: 5.1.0(webpack@5.105.4)
-      html-webpack-plugin:
-        specifier: ^5.6.3
-        version: 5.6.6(webpack@5.105.4)
-      office-addin-cli:
-        specifier: ^1.6.5
-        version: 1.6.5
-      office-addin-debugging:
-        specifier: ^5.1.6
-        version: 5.1.6(@microsoft/teamsapp-cli@3.0.2)
-      office-addin-dev-certs:
-        specifier: ^1.13.5
-        version: 1.13.5
-      office-addin-lint:
-        specifier: ^2.3.5
-        version: 2.3.5(@eslint/eslintrc@3.3.5)(@types/eslint@9.6.1)(typescript@5.9.3)
-      office-addin-manifest:
-        specifier: ^1.13.6
-        version: 1.13.6
-      office-addin-prettier-config:
-        specifier: ^1.2.1
-        version: 1.2.1
-      os-browserify:
-        specifier: ^0.3.0
-        version: 0.3.0
-      process:
-        specifier: ^0.11.10
-        version: 0.11.10
-      source-map-loader:
-        specifier: ^5.0.0
-        version: 5.0.0(webpack@5.105.4)
-      webpack:
-        specifier: ^5.95.0
-        version: 5.105.4(esbuild@0.27.7)(webpack-cli@5.1.4)
-      webpack-cli:
-        specifier: ^5.1.4
-        version: 5.1.4(webpack-dev-server@5.1.0)(webpack@5.105.4)
-      webpack-dev-server:
-        specifier: 5.1.0
-        version: 5.1.0(tslib@2.8.1)(webpack-cli@5.1.4)(webpack@5.105.4)
-
-  demos/word-addin/server:
-    dependencies:
-      '@google-cloud/storage':
-        specifier: ^7.16.0
-        version: 7.19.0
-      busboy:
-        specifier: 0.3.0
-        version: 0.3.0
-      cors:
-        specifier: ^2.8.5
-        version: 2.8.6
-      dotenv:
-        specifier: ^16.4.5
-        version: 16.6.1
-      express:
-        specifier: ^4.21.2
-        version: 4.22.1
-      express-oauth2-jwt-bearer:
-        specifier: ^1.6.0
-        version: 1.7.4
-      jsdom:
-        specifier: 27.3.0
-        version: 27.3.0(canvas@3.2.3)
-      multer:
-        specifier: ^2.0.0
-        version: 2.1.1
-      prosemirror-state:
-        specifier: ^1.4.3
-        version: 1.4.4
-      superdoc:
-        specifier: workspace:*
-        version: link:../../../packages/superdoc
-      ws:
-        specifier: ^8.18.0
-        version: 8.20.0
-    devDependencies:
-      nodemon:
-        specifier: ^3.1.9
-        version: 3.1.14
-
   evals:
     devDependencies:
       '@anthropic-ai/claude-agent-sdk':
@@ -1697,6 +1707,32 @@ importers:
         specifier: npm:rolldown-vite@7.3.1
         version: rolldown-vite@7.3.1(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
 
+  examples/document-api/content-controls/tagged-inline-text:
+    dependencies:
+      superdoc:
+        specifier: workspace:*
+        version: link:../../../../packages/superdoc
+    devDependencies:
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+      vite:
+        specifier: npm:rolldown-vite@7.3.1
+        version: rolldown-vite@7.3.1(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
+
+  examples/document-api/metadata-anchors:
+    dependencies:
+      superdoc:
+        specifier: workspace:*
+        version: link:../../../packages/superdoc
+    devDependencies:
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+      vite:
+        specifier: npm:rolldown-vite@7.3.1
+        version: rolldown-vite@7.3.1(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
+
   examples/document-engine/ai-redlining:
     dependencies:
       superdoc:
@@ -1820,7 +1856,7 @@ importers:
     dependencies:
       '@y/hub':
         specifier: ^0.2.8
-        version: 0.2.18
+        version: 0.2.15
       '@y/y':
         specifier: ^14.0.0-rc.1
         version: 14.0.0-rc.7
@@ -1950,6 +1986,53 @@ importers:
       tsx:
         specifier: ^4.20.6
         version: 4.21.0
+      vite:
+        specifier: npm:rolldown-vite@7.3.1
+        version: rolldown-vite@7.3.1(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
+
+  examples/editor/collaboration/providers/yhub:
+    dependencies:
+      react:
+        specifier: ^19.2.1
+        version: 19.2.5
+      react-dom:
+        specifier: ^19.2.1
+        version: 19.2.5(react@19.2.5)
+      superdoc:
+        specifier: workspace:*
+        version: link:../../../../../packages/superdoc
+      y-websocket:
+        specifier: 2.1.0
+        version: 2.1.0(yjs@13.6.19)
+      yjs:
+        specifier: 13.6.19
+        version: 13.6.19
+    devDependencies:
+      '@types/react':
+        specifier: ^19.2.7
+        version: 19.2.14
+      '@types/react-dom':
+        specifier: ^19.2.3
+        version: 19.2.3(@types/react@19.2.14)
+      '@vitejs/plugin-react':
+        specifier: ^5.1.2
+        version: 5.2.0(rolldown-vite@7.3.1(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3))
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      vite:
+        specifier: npm:rolldown-vite@7.3.1
+        version: rolldown-vite@7.3.1(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
+
+  examples/editor/custom-ui/configurable-toolbar:
+    dependencies:
+      superdoc:
+        specifier: workspace:*
+        version: link:../../../../packages/superdoc
+    devDependencies:
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
       vite:
         specifier: npm:rolldown-vite@7.3.1
         version: rolldown-vite@7.3.1(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
@@ -2260,7 +2343,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 3.2.4(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/debug@4.1.13)(@types/node@22.19.2)(esbuild@0.27.7)(happy-dom@20.4.0)(jiti@2.6.1)(jsdom@27.3.0(canvas@3.2.3))(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
+        version: 3.2.4(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/debug@4.1.13)(@types/node@22.19.2)(esbuild@0.27.4)(happy-dom@20.4.0)(jiti@2.6.1)(jsdom@27.3.0(canvas@3.2.3))(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
       vue:
         specifier: 3.5.32
         version: 3.5.32(typescript@5.9.3)
@@ -2285,7 +2368,7 @@ importers:
         version: 8.57.2(eslint@9.39.4(jiti@2.6.1))(typescript@5.9.3)
       '@vitest/coverage-v8':
         specifier: 'catalog:'
-        version: 3.2.4(vitest@3.2.4(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/debug@4.1.13)(@types/node@22.19.2)(esbuild@0.27.4)(happy-dom@20.4.0)(jiti@2.6.1)(jsdom@27.3.0(canvas@3.2.3))(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3))
+        version: 3.2.4(vitest@3.2.4(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/debug@4.1.13)(@types/node@22.19.2)(esbuild@0.27.7)(happy-dom@20.4.0)(jiti@2.6.1)(jsdom@27.3.0(canvas@3.2.3))(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3))
       concurrently:
         specifier: 'catalog:'
         version: 9.2.1
@@ -2309,7 +2392,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 'catalog:'
-        version: 3.2.4(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/debug@4.1.13)(@types/node@22.19.2)(esbuild@0.27.4)(happy-dom@20.4.0)(jiti@2.6.1)(jsdom@27.3.0(canvas@3.2.3))(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
+        version: 3.2.4(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/debug@4.1.13)(@types/node@22.19.2)(esbuild@0.27.7)(happy-dom@20.4.0)(jiti@2.6.1)(jsdom@27.3.0(canvas@3.2.3))(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
 
   packages/document-api: {}
 
@@ -2324,6 +2407,10 @@ importers:
         version: 3.2.4(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/debug@4.1.13)(@types/node@25.6.0)(esbuild@0.27.7)(happy-dom@20.4.0)(jiti@2.6.1)(jsdom@27.3.0(canvas@3.2.3))(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
 
   packages/esign:
+    dependencies:
+      superdoc:
+        specifier: workspace:*
+        version: link:../superdoc
     devDependencies:
       '@testing-library/jest-dom':
         specifier: 'catalog:'
@@ -2358,9 +2445,6 @@ importers:
       react-dom:
         specifier: 'catalog:'
         version: 19.2.4(react@19.2.4)
-      superdoc:
-        specifier: workspace:*
-        version: link:../superdoc
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
@@ -3087,6 +3171,10 @@ importers:
         version: 14.2.6
 
   packages/template-builder:
+    dependencies:
+      superdoc:
+        specifier: workspace:*
+        version: link:../superdoc
     devDependencies:
       '@testing-library/jest-dom':
         specifier: 'catalog:'
@@ -3121,9 +3209,6 @@ importers:
       react-dom:
         specifier: 'catalog:'
         version: 19.2.4(react@19.2.4)
-      superdoc:
-        specifier: workspace:*
-        version: link:../superdoc
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
@@ -3218,6 +3303,16 @@ importers:
         version: rolldown-vite@7.3.1(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
 
   tests/doc-api-stories:
+    dependencies:
+      '@superdoc-dev/sdk':
+        specifier: workspace:*
+        version: link:../../packages/sdk/langs/node
+    devDependencies:
+      vitest:
+        specifier: 'catalog:'
+        version: 3.2.4(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/debug@4.1.13)(@types/node@25.6.0)(esbuild@0.27.7)(happy-dom@20.4.0)(jiti@2.6.1)(jsdom@27.3.0(canvas@3.2.3))(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
+
+  tests/document-api-smoke:
     dependencies:
       '@superdoc-dev/sdk':
         specifier: workspace:*
@@ -5521,8 +5616,8 @@ packages:
   '@hocuspocus/common@2.15.3':
     resolution: {integrity: sha512-Rzh1HF0a2o/tf90A3w2XNdXd9Ym3aQzMDfD3lAUONCX9B9QOdqdyiORrj6M25QEaJrEIbXFy8LtAFcL0wRdWzA==}
 
-  '@hocuspocus/common@3.4.4':
-    resolution: {integrity: sha512-RykIJ0tsHHMP4Xk+4UCbc7SO5LgGxGUSTdbh6anJEsaALAyqinf1Nn5HYuMjLPolAmsar1v++m9zufR09NLpXA==}
+  '@hocuspocus/common@4.0.0':
+    resolution: {integrity: sha512-7BE8TsKBkdiOZO6tfm3ny6bIHPbxkIZb3hsYdVn/X5xbXI8n8w9pnE6pXgEMKQhJm6zsWsa9IDRJIp/c9u+DmA==}
 
   '@hocuspocus/provider@2.15.3':
     resolution: {integrity: sha512-oadN05m+KL4ylNKVo5YspNG4MXkT2Y+FUFzrgigpQeTjQibkPUwCNmUnkUxMgrGRgxb+O0lJCfirFIJMxedctA==}
@@ -5530,8 +5625,8 @@ packages:
       y-protocols: ^1.0.6
       yjs: ^13.6.8
 
-  '@hocuspocus/provider@3.4.4':
-    resolution: {integrity: sha512-KbsMAfdYcIJD8eMU/5QnpXcSOvIWAcCNI33FSRSaKCIpYBFtAwkYIwWnZJmPZ8a1BMAtqQc+uvy9+UQf7GHnGQ==}
+  '@hocuspocus/provider@4.0.0':
+    resolution: {integrity: sha512-08gpeNZ6x2pmRD6m4XwRD52yQKnTl32a0HS9VSXZ5A1dIBVqxMz/x8Z06XbkKM2X8sp6vWEUCZCtzAGFSsofgg==}
     peerDependencies:
       y-protocols: ^1.0.6
       yjs: ^13.6.8
@@ -6407,6 +6502,7 @@ packages:
   '@microsoft/teamsapp-cli@3.0.2':
     resolution: {integrity: sha512-AowuJwrrUxeF9Bq/frxuy9YZjK/ECk3pi0UBXl3CQLZ4XNWfgWatiFi/UWpyHDLccFs+0Za3nNYATFvgsxEFwQ==}
     engines: {node: '>=12'}
+    deprecated: This package is deprecated and supported Node.js version is 18-22. Please use @microsoft/m365agentstoolkit-cli instead.
     hasBin: true
 
   '@microsoft/teamsfx-api@0.23.1':
@@ -10552,9 +10648,8 @@ packages:
   '@types/mime@1.3.5':
     resolution: {integrity: sha512-/pyBZWSLD2n0dcHE3hq8s8ZvcETHtEuF+3E7XVt0Ig2nvsVQXdghHVcEkIWjy9A0wKfTn97a/PSDYohKIlnP/w==}
 
-  '@types/minimatch@6.0.0':
-    resolution: {integrity: sha512-zmPitbQ8+6zNutpwgcQuLcsEpn/Cj54Kbn7L5pX0Os5kdWplB7xPgEh/g+SWOB/qmows2gpuCaPyduq8ZZRnxA==}
-    deprecated: This is a stub types definition. minimatch provides its own type definitions, so you do not need this installed.
+  '@types/minimatch@5.1.2':
+    resolution: {integrity: sha512-K0VQKziLUWkVKiRVrx4a40iPaxTUefQmjtkQofBkYRcoaaL/8rhwDWww9qWbrgicNOgnpIsMxyNIUM4+n6dUIA==}
 
   '@types/ms@2.1.0':
     resolution: {integrity: sha512-GsCCIZDE/p3i96vtEqx+7dBUGXrc7zeSK3wwPHIaRThS+9OhWIXRqzs4d6k1SVU8g91DrNRWxWUGhp5KXQb2VA==}
@@ -10851,6 +10946,7 @@ packages:
 
   '@ungap/structured-clone@1.3.0':
     resolution: {integrity: sha512-WmoN8qaIAo7WTYWbAZuG8PYEhn5fkz7dZrqTBZ7dtt//lL2Gwms1IcnQ5yHqjDfX8Ft5j4YzDM23f87zBfDe9g==}
+    deprecated: Potential CWE-502 - Update to 1.3.1 or higher
 
   '@unhead/vue@2.1.12':
     resolution: {integrity: sha512-zEWqg0nZM8acpuTZE40wkeUl8AhIe0tU0OkilVi1D4fmVjACrwoh5HP6aNqJ8kUnKsoy6D+R3Vi/O+fmdNGO7g==}
@@ -11450,8 +11546,8 @@ packages:
   '@xtuc/long@4.2.2':
     resolution: {integrity: sha512-NuHqBY1PB/D8xU6s/thBgOAiAP7HOYDQ32+BFZILJ8ivkUkAHQnWfn6WhL79Owj1qmUnoN/YPhktdIoucipkAQ==}
 
-  '@y/hub@0.2.18':
-    resolution: {integrity: sha512-eVVPsSpZHzh7UcT8Abzac2BakJiOIbXaXbkc0OG66MfrAUVVPsisy/ACKui1uMh7HSGbuV9Lt9newMa+sJL3lA==}
+  '@y/hub@0.2.15':
+    resolution: {integrity: sha512-T7EpmyMIP2houhHBqx2AcZhz7jXsT55EHD7K/zhtupNtfSja3FEmycQ6Pyfoo826W7DVCQZg7ETm3BRdI1qzzQ==}
     engines: {node: '>=22.0.0', npm: '>=8.0.0'}
     hasBin: true
 
@@ -11461,8 +11557,8 @@ packages:
     peerDependencies:
       '@y/y': '*'
 
-  '@y/y@14.0.0-rc.13':
-    resolution: {integrity: sha512-9wlH/0aooyHGtzeMdWydzzNV59bXW0YaFn31UM1t62nBHM4nXeE9zmH6pruV3qSVn2mS1Z7lGsqArHTr8kP+BQ==}
+  '@y/y@14.0.0-rc.10':
+    resolution: {integrity: sha512-4WtOOBDy74iJX5whMoFcCP5sxAYwoLOt74lVt/sFVXGROAPKiaOHN6kemkg3Ye81anXoFPtdqZ0oZT5J1nWEZw==}
     engines: {node: '>=22.0.0', npm: '>=8.0.0'}
 
   '@y/y@14.0.0-rc.7':
@@ -16445,8 +16541,8 @@ packages:
     engines: {node: '>=16'}
     hasBin: true
 
-  lib0@1.0.0-rc.12:
-    resolution: {integrity: sha512-zCJU7AuEdpWEFCKXjbX5iWmHgUSc9xlIOehMfW/RrPxf27yZ7VxflAVMhBAkmwhci78MANpJkcHGcXW1pB23iQ==}
+  lib0@1.0.0-rc.10:
+    resolution: {integrity: sha512-kvtB8XIFzhTK4uKswr2dZjn2HvH8hIgv7LR8FHM6nD4SSAHXAApBe6g7pv3AW86FCItQtjD8Jjs3tSNWjPB8ew==}
     engines: {node: '>=16'}
     hasBin: true
 
@@ -22008,10 +22104,12 @@ packages:
 
   uuid@8.3.2:
     resolution: {integrity: sha512-+NYs2QeMWy+GWFOEm9xnn6HCDp0l7QBD7ml8zLUmJ+93Q5NF0NocErnwkTkXVFNiX3/fpC6afS8Dhb/gz7R7eg==}
+    deprecated: uuid@10 and below is no longer supported.  For ESM codebases, update to uuid@latest.  For CommonJS codebases, use uuid@11 (but be aware this version will likely be deprecated in 2028).
     hasBin: true
 
   uuid@9.0.1:
     resolution: {integrity: sha512-b+1eJOlsR9K8HJpow9Ok3fiWOWSIcIzXodvv0rQjVoOVNpWMpxf1wZNpt4y9h10odCNrqnYp1OBzRktckBe3sA==}
+    deprecated: uuid@10 and below is no longer supported.  For ESM codebases, update to uuid@latest.  For CommonJS codebases, use uuid@11 (but be aware this version will likely be deprecated in 2028).
     hasBin: true
 
   uvu@0.5.6:
@@ -26011,7 +26109,7 @@ snapshots:
     dependencies:
       lib0: 0.2.117
 
-  '@hocuspocus/common@3.4.4':
+  '@hocuspocus/common@4.0.0':
     dependencies:
       lib0: 0.2.117
 
@@ -26039,9 +26137,9 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  '@hocuspocus/provider@3.4.4(y-protocols@1.0.7(yjs@13.6.30))(yjs@13.6.30)':
+  '@hocuspocus/provider@4.0.0(y-protocols@1.0.7(yjs@13.6.30))(yjs@13.6.30)':
     dependencies:
-      '@hocuspocus/common': 3.4.4
+      '@hocuspocus/common': 4.0.0
       '@lifeomic/attempt': 3.1.0
       lib0: 0.2.117
       ws: 8.20.0
@@ -32394,7 +32492,7 @@ snapshots:
 
   '@types/glob@7.2.0':
     dependencies:
-      '@types/minimatch': 6.0.0
+      '@types/minimatch': 5.1.2
       '@types/node': 22.19.15
 
   '@types/hast@2.3.10':
@@ -32437,9 +32535,7 @@ snapshots:
 
   '@types/mime@1.3.5': {}
 
-  '@types/minimatch@6.0.0':
-    dependencies:
-      minimatch: 10.2.4
+  '@types/minimatch@5.1.2': {}
 
   '@types/ms@2.1.0': {}
 
@@ -33202,25 +33298,6 @@ snapshots:
       vite: rolldown-vite@7.3.1(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
       vue: 3.5.32(typescript@5.9.3)
 
-  '@vitest/coverage-v8@3.2.4(vitest@3.2.4(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/debug@4.1.13)(@types/node@22.19.2)(esbuild@0.27.4)(happy-dom@20.4.0)(jiti@2.6.1)(jsdom@27.3.0(canvas@3.2.3))(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3))':
-    dependencies:
-      '@ampproject/remapping': 2.3.0
-      '@bcoe/v8-coverage': 1.0.2
-      ast-v8-to-istanbul: 0.3.12
-      debug: 4.4.3(supports-color@5.5.0)
-      istanbul-lib-coverage: 3.2.2
-      istanbul-lib-report: 3.0.1
-      istanbul-lib-source-maps: 5.0.6
-      istanbul-reports: 3.2.0
-      magic-string: 0.30.21
-      magicast: 0.3.5
-      std-env: 3.10.0
-      test-exclude: 7.0.2
-      tinyrainbow: 2.0.0
-      vitest: 3.2.4(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/debug@4.1.13)(@types/node@22.19.2)(esbuild@0.27.4)(happy-dom@20.4.0)(jiti@2.6.1)(jsdom@27.3.0(canvas@3.2.3))(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
-    transitivePeerDependencies:
-      - supports-color
-
   '@vitest/coverage-v8@3.2.4(vitest@3.2.4(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/debug@4.1.13)(@types/node@22.19.2)(esbuild@0.27.7)(happy-dom@20.4.0)(jiti@2.6.1)(jsdom@27.3.0(canvas@3.2.3))(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3))':
     dependencies:
       '@ampproject/remapping': 2.3.0
@@ -33724,11 +33801,11 @@ snapshots:
 
   '@xtuc/long@4.2.2': {}
 
-  '@y/hub@0.2.18':
+  '@y/hub@0.2.15':
     dependencies:
-      '@y/protocols': 1.0.6-rc.1(@y/y@14.0.0-rc.13)
-      '@y/y': 14.0.0-rc.13
-      lib0: 1.0.0-rc.12
+      '@y/protocols': 1.0.6-rc.1(@y/y@14.0.0-rc.10)
+      '@y/y': 14.0.0-rc.10
+      lib0: 1.0.0-rc.10
       minio: 8.0.7
       pino: 10.3.1
       postgres: 3.4.8
@@ -33737,18 +33814,18 @@ snapshots:
     transitivePeerDependencies:
       - '@node-rs/xxhash'
 
-  '@y/protocols@1.0.6-rc.1(@y/y@14.0.0-rc.13)':
+  '@y/protocols@1.0.6-rc.1(@y/y@14.0.0-rc.10)':
     dependencies:
-      '@y/y': 14.0.0-rc.13
-      lib0: 1.0.0-rc.12
+      '@y/y': 14.0.0-rc.10
+      lib0: 1.0.0-rc.10
 
-  '@y/y@14.0.0-rc.13':
+  '@y/y@14.0.0-rc.10':
     dependencies:
-      lib0: 1.0.0-rc.12
+      lib0: 1.0.0-rc.10
 
   '@y/y@14.0.0-rc.7':
     dependencies:
-      lib0: 1.0.0-rc.12
+      lib0: 1.0.0-rc.10
 
   '@yarnpkg/lockfile@1.1.0': {}
 
@@ -34014,7 +34091,7 @@ snapshots:
       graceful-fs: 4.2.11
       is-stream: 2.0.1
       lazystream: 1.0.1
-      lodash: 4.17.23
+      lodash: 4.18.1
       normalize-path: 3.0.0
       readable-stream: 4.7.0
 
@@ -38513,7 +38590,7 @@ snapshots:
     dependencies:
       '@types/html-minifier-terser': 6.1.0
       html-minifier-terser: 6.1.0
-      lodash: 4.17.23
+      lodash: 4.18.1
       pretty-error: 4.0.0
       tapable: 2.3.2
     optionalDependencies:
@@ -38524,7 +38601,7 @@ snapshots:
     dependencies:
       '@types/html-minifier-terser': 6.1.0
       html-minifier-terser: 6.1.0
-      lodash: 4.17.23
+      lodash: 4.18.1
       pretty-error: 4.0.0
       tapable: 2.3.2
     optionalDependencies:
@@ -39779,7 +39856,7 @@ snapshots:
     dependencies:
       isomorphic.js: 0.2.5
 
-  lib0@1.0.0-rc.12: {}
+  lib0@1.0.0-rc.10: {}
 
   license-webpack-plugin@4.0.2(webpack@5.105.2(esbuild@0.27.3)):
     dependencies:
@@ -43515,7 +43592,7 @@ snapshots:
 
   pretty-error@4.0.0:
     dependencies:
-      lodash: 4.17.23
+      lodash: 4.18.1
       renderkid: 3.0.0
 
   pretty-format@27.5.1:
@@ -46241,7 +46318,7 @@ snapshots:
       lines-and-columns: 1.2.4
       mz: 2.7.0
       pirates: 4.0.7
-      tinyglobby: 0.2.15
+      tinyglobby: 0.2.16
       ts-interface-checker: 0.1.13
 
   super-regex@1.1.0:

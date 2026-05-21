@@ -973,6 +973,171 @@ describe('table converter', () => {
       expect(result.rows[0].cells[0].attrs?.borders).toBeUndefined();
     });
 
+    it('maps legacy cell border start/end as LTR-default regardless of table direction (painter mirrors for RTL)', () => {
+      const node: PMNode = {
+        type: 'table',
+        attrs: {
+          tableProperties: {
+            rightToLeft: true,
+          },
+        },
+        content: [
+          {
+            type: 'tableRow',
+            content: [
+              {
+                type: 'tableCell',
+                attrs: {
+                  borders: {
+                    start: { val: 'single', size: 2, color: 'FF0000' },
+                    end: { val: 'single', size: 3, color: '0000FF' },
+                  },
+                },
+                content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Cell' }] }],
+              },
+            ],
+          },
+        ],
+      };
+
+      const result = tableNodeToBlock(
+        node,
+        mockBlockIdGenerator,
+        mockPositionMap,
+        'Arial',
+        16,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        mockParagraphConverter,
+      ) as TableBlock;
+
+      // Per §17.4.12/33, start/end visual side flips with table direction,
+      // but renderTableRow.swapCellBordersLR is the single source of that
+      // mirror. pm-adapter pre-swapping here would double-mirror.
+      expect(result.rows[0].cells[0].attrs?.borders?.left).toMatchObject({
+        style: 'single',
+        width: 2,
+        color: '#FF0000',
+      });
+      expect(result.rows[0].cells[0].attrs?.borders?.right).toMatchObject({
+        style: 'single',
+        width: 3,
+        color: '#0000FF',
+      });
+    });
+
+    it('normalizes legacy cell border style aliases (dotdash, doublewave, etc.) to canonical BorderStyle', () => {
+      // Pre-migration persisted docs sometimes store border `val` as lowercase
+      // or alias forms (`dot`, `dotdash`, `dotdotdash`, `doublewave`). The
+      // canonical BorderStyle enum is camelCase. Pin that the legacy fallback
+      // path normalizes - otherwise the painter receives a non-canonical
+      // string and the border style doesn't render correctly.
+      const cases: Array<{ input: string; expected: string }> = [
+        { input: 'dot', expected: 'dotted' },
+        { input: 'dotdash', expected: 'dotDash' },
+        { input: 'dotdotdash', expected: 'dotDotDash' },
+        { input: 'doublewave', expected: 'doubleWave' },
+        { input: 'NIL', expected: 'none' },
+        { input: ' Single ', expected: 'single' },
+      ];
+
+      for (const { input, expected } of cases) {
+        const node: PMNode = {
+          type: 'table',
+          attrs: {},
+          content: [
+            {
+              type: 'tableRow',
+              content: [
+                {
+                  type: 'tableCell',
+                  attrs: {
+                    borders: {
+                      top: { val: input, size: 2, color: '000000' },
+                    },
+                  },
+                  content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Cell' }] }],
+                },
+              ],
+            },
+          ],
+        };
+
+        const result = tableNodeToBlock(
+          node,
+          mockBlockIdGenerator,
+          mockPositionMap,
+          'Arial',
+          16,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          mockParagraphConverter,
+        ) as TableBlock;
+
+        const topBorder = result.rows[0].cells[0].attrs?.borders?.top;
+        expect(topBorder?.style).toBe(expected);
+      }
+    });
+
+    it('maps resolved tableCellProperties borders start/end as LTR-default regardless of table direction (painter mirrors for RTL)', () => {
+      const node: PMNode = {
+        type: 'table',
+        attrs: {
+          tableProperties: {
+            rightToLeft: true,
+          },
+        },
+        content: [
+          {
+            type: 'tableRow',
+            content: [
+              {
+                type: 'tableCell',
+                attrs: {
+                  tableCellProperties: {
+                    borders: {
+                      start: { val: 'single', size: 8, color: 'FF0000' },
+                      end: { val: 'single', size: 8, color: '0000FF' },
+                    },
+                  },
+                },
+                content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Cell' }] }],
+              },
+            ],
+          },
+        ],
+      };
+
+      const result = tableNodeToBlock(
+        node,
+        mockBlockIdGenerator,
+        mockPositionMap,
+        'Arial',
+        16,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        mockParagraphConverter,
+      ) as TableBlock;
+
+      // pm-adapter keeps start/end as LTR-default. Painter swaps for RTL.
+      expect(result.rows[0].cells[0].attrs?.borders?.left).toMatchObject({
+        style: 'single',
+        width: expect.any(Number),
+        color: '#FF0000',
+      });
+      expect(result.rows[0].cells[0].attrs?.borders?.right).toMatchObject({
+        style: 'single',
+        width: expect.any(Number),
+        color: '#0000FF',
+      });
+    });
+
     it('extracts cell padding when present', () => {
       const node: PMNode = {
         type: 'table',
@@ -2153,5 +2318,376 @@ describe('parseTableCell - theme shading resolution', () => {
   it('returns no background when themeFill key is not in palette', () => {
     const result = makeTableWithShading({ themeFill: 'missing' }, themePalette, 'ThemeTable');
     expect(result.rows[0].cells[0].attrs?.background).toBeUndefined();
+  });
+});
+
+// SD-2516: Word's "SDT in a table cell" parses into PM as
+// `tableCell > documentPartObject > paragraph`. Before the fix, the table
+// cell's child loop did not branch on documentPartObject — only paragraph,
+// structuredContentBlock, and table — so the wrapped paragraph was silently
+// dropped, producing a visually empty cell.
+describe('tableCellNodeToBlock — SD-2516: documentPartObject children', () => {
+  const mockBlockIdGenerator: BlockIdGenerator = vi.fn((kind) => `test-${kind}`);
+  const mockPositionMap: PositionMap = new Map();
+  const mockParagraphConverter = vi.fn((params) => [
+    {
+      kind: 'paragraph',
+      id: 'p1',
+      runs: [{ text: params.para.content?.[0]?.text || '', fontFamily: 'Arial', fontSize: 12 }],
+    } as ParagraphBlock,
+  ]);
+
+  it('flattens a documentPartObject inside a table cell into the cell.blocks array', () => {
+    const node: PMNode = {
+      type: 'table',
+      content: [
+        {
+          type: 'tableRow',
+          content: [
+            {
+              type: 'tableCell',
+              content: [
+                {
+                  type: 'documentPartObject',
+                  attrs: {},
+                  content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Hello' }] }],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = tableNodeToBlock(
+      node,
+      mockBlockIdGenerator,
+      mockPositionMap,
+      'Arial',
+      16,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      mockParagraphConverter,
+    ) as TableBlock;
+
+    expect(result).toBeDefined();
+    const cell = result.rows[0].cells[0];
+    const cellBlocks = cell.blocks ?? (cell.paragraph ? [cell.paragraph] : []);
+    expect(cellBlocks).toHaveLength(1);
+    expect(cellBlocks[0].kind).toBe('paragraph');
+    expect((cellBlocks[0] as ParagraphBlock).runs[0].text).toBe('Hello');
+  });
+
+  it('flattens a nested documentPartObject inside a table cell into the cell.blocks array', () => {
+    const node: PMNode = {
+      type: 'table',
+      content: [
+        {
+          type: 'tableRow',
+          content: [
+            {
+              type: 'tableCell',
+              content: [
+                {
+                  type: 'documentPartObject',
+                  attrs: {},
+                  content: [
+                    {
+                      type: 'documentPartObject',
+                      attrs: {},
+                      content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Nested' }] }],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = tableNodeToBlock(
+      node,
+      mockBlockIdGenerator,
+      mockPositionMap,
+      'Arial',
+      16,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      mockParagraphConverter,
+    ) as TableBlock;
+
+    expect(result).toBeDefined();
+    const cell = result.rows[0].cells[0];
+    const cellBlocks = cell.blocks ?? (cell.paragraph ? [cell.paragraph] : []);
+    expect(cellBlocks).toHaveLength(1);
+    expect(cellBlocks[0].kind).toBe('paragraph');
+    expect((cellBlocks[0] as ParagraphBlock).runs[0].text).toBe('Nested');
+  });
+
+  it('flattens a documentPartObject wrapping a structuredContentBlock inside a table cell', () => {
+    const node: PMNode = {
+      type: 'table',
+      content: [
+        {
+          type: 'tableRow',
+          content: [
+            {
+              type: 'tableCell',
+              content: [
+                {
+                  type: 'documentPartObject',
+                  attrs: {},
+                  content: [
+                    {
+                      type: 'structuredContentBlock',
+                      attrs: {},
+                      content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Inner SCB' }] }],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = tableNodeToBlock(
+      node,
+      mockBlockIdGenerator,
+      mockPositionMap,
+      'Arial',
+      16,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      mockParagraphConverter,
+    ) as TableBlock;
+
+    expect(result).toBeDefined();
+    const cell = result.rows[0].cells[0];
+    const cellBlocks = cell.blocks ?? (cell.paragraph ? [cell.paragraph] : []);
+    expect(cellBlocks).toHaveLength(1);
+    expect(cellBlocks[0].kind).toBe('paragraph');
+    expect((cellBlocks[0] as ParagraphBlock).runs[0].text).toBe('Inner SCB');
+  });
+
+  it('flattens a structuredContentBlock wrapping a documentPartObject inside a table cell', () => {
+    const node: PMNode = {
+      type: 'table',
+      content: [
+        {
+          type: 'tableRow',
+          content: [
+            {
+              type: 'tableCell',
+              content: [
+                {
+                  type: 'structuredContentBlock',
+                  attrs: {},
+                  content: [
+                    {
+                      type: 'documentPartObject',
+                      attrs: {},
+                      content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Inner DPO' }] }],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = tableNodeToBlock(
+      node,
+      mockBlockIdGenerator,
+      mockPositionMap,
+      'Arial',
+      16,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      mockParagraphConverter,
+    ) as TableBlock;
+
+    expect(result).toBeDefined();
+    const cell = result.rows[0].cells[0];
+    const cellBlocks = cell.blocks ?? (cell.paragraph ? [cell.paragraph] : []);
+    expect(cellBlocks).toHaveLength(1);
+    expect(cellBlocks[0].kind).toBe('paragraph');
+    expect((cellBlocks[0] as ParagraphBlock).runs[0].text).toBe('Inner DPO');
+  });
+
+  describe('tableDirectionContext (SD-3138 Phase 1B + SD-3171 inline-only visual direction)', () => {
+    const mockBlockIdGenerator: BlockIdGenerator = vi.fn((kind) => `test-${kind}`);
+    const mockPositionMap: PositionMap = new Map();
+    const mockParagraphConverter = vi.fn(() => [
+      { kind: 'paragraph', id: 'p1', runs: [{ text: 'cell', fontFamily: 'Arial', fontSize: 12 }] } as ParagraphBlock,
+    ]);
+
+    const buildTableNode = (tableProperties?: Record<string, unknown>, tableStyleId?: string): PMNode => ({
+      type: 'table',
+      attrs: { ...(tableStyleId ? { tableStyleId } : {}), ...(tableProperties ? { tableProperties } : {}) },
+      content: [
+        {
+          type: 'tableRow',
+          content: [{ type: 'tableCell', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'cell' }] }] }],
+        },
+      ],
+    });
+
+    const contextWithStyle = (styleId: string, styleTableProps: Record<string, unknown>): ConverterContext =>
+      ({
+        translatedNumbering: {},
+        translatedLinkedStyles: {
+          docDefaults: {},
+          latentStyles: {},
+          styles: {
+            [styleId]: {
+              type: 'table',
+              tableProperties: styleTableProps,
+            },
+          },
+        },
+      }) as ConverterContext;
+
+    it('inline rightToLeft=true produces visualDirection=rtl', () => {
+      const result = tableNodeToBlock(
+        buildTableNode({ rightToLeft: true }),
+        mockBlockIdGenerator,
+        mockPositionMap,
+        'Arial',
+        16,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        mockParagraphConverter,
+      ) as TableBlock;
+      expect(result?.attrs?.tableDirectionContext?.visualDirection).toBe('rtl');
+    });
+
+    // SD-3171: Word-parity contract. `w:bidiVisual` on a style does NOT visually
+    // flip cells - Word reports the table as wdTableDirectionLtr and renders
+    // cells in logical order despite the style cascade. SuperDoc must match.
+    // Style-cascade rightToLeft alone leaves visualDirection undefined.
+    it('style cascade rightToLeft=true alone leaves visualDirection undefined (SD-3171 Word-parity)', () => {
+      const result = tableNodeToBlock(
+        buildTableNode(undefined, 'RtlStyle'),
+        mockBlockIdGenerator,
+        mockPositionMap,
+        'Arial',
+        16,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        mockParagraphConverter,
+        contextWithStyle('RtlStyle', { rightToLeft: true }),
+      ) as TableBlock;
+      expect(result?.attrs?.tableDirectionContext).toBeDefined();
+      expect(result?.attrs?.tableDirectionContext?.visualDirection).toBeUndefined();
+    });
+
+    // SD-3171: even when style says RTL, inline-false still produces ltr - the
+    // inline layer is the only source we consult for visualDirection, and
+    // explicit `false` is honored.
+    it('inline rightToLeft=false produces visualDirection=ltr (style cascade ignored)', () => {
+      const result = tableNodeToBlock(
+        buildTableNode({ rightToLeft: false }, 'RtlStyle'),
+        mockBlockIdGenerator,
+        mockPositionMap,
+        'Arial',
+        16,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        mockParagraphConverter,
+        contextWithStyle('RtlStyle', { rightToLeft: true }),
+      ) as TableBlock;
+      expect(result?.attrs?.tableDirectionContext?.visualDirection).toBe('ltr');
+    });
+
+    it('inline bidiVisual=false produces visualDirection=ltr (alias normalized, style cascade ignored)', () => {
+      // Importer normalizes w:bidiVisual to `rightToLeft` so this shape is rare
+      // in practice. SD-3171: style cascade is ignored regardless; the assertion
+      // is that inline `false` on the bidiVisual alias is still honored.
+      const result = tableNodeToBlock(
+        buildTableNode({ bidiVisual: false }, 'RtlStyle'),
+        mockBlockIdGenerator,
+        mockPositionMap,
+        'Arial',
+        16,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        mockParagraphConverter,
+        contextWithStyle('RtlStyle', { rightToLeft: true }),
+      ) as TableBlock;
+      expect(result?.attrs?.tableDirectionContext?.visualDirection).toBe('ltr');
+    });
+
+    it('no signal anywhere leaves visualDirection undefined', () => {
+      const result = tableNodeToBlock(
+        buildTableNode(),
+        mockBlockIdGenerator,
+        mockPositionMap,
+        'Arial',
+        16,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        mockParagraphConverter,
+      ) as TableBlock;
+      expect(result?.attrs?.tableDirectionContext).toBeDefined();
+      expect(result?.attrs?.tableDirectionContext?.visualDirection).toBeUndefined();
+    });
+
+    it('tableDirectionContext.parentSection propagates from converterContext.sectionDirectionContext', () => {
+      // The full TableDirectionContext shape is { visualDirection, parentSection }.
+      // Existing tests pin visualDirection; this one pins the section pass-through
+      // so a future regression that drops the sectionContext arg is caught here
+      // instead of by a runtime consumer reading parentSection.
+      const customSectionContext = {
+        pageDirection: 'rtl' as const,
+        writingMode: 'horizontal-tb' as const,
+        rtlGutter: true,
+      };
+      const contextWithSection: ConverterContext = {
+        translatedNumbering: {},
+        translatedLinkedStyles: {
+          docDefaults: {},
+          latentStyles: {},
+          styles: {},
+        },
+        sectionDirectionContext: customSectionContext,
+      };
+      const result = tableNodeToBlock(
+        buildTableNode({ rightToLeft: true }),
+        mockBlockIdGenerator,
+        mockPositionMap,
+        'Arial',
+        16,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        mockParagraphConverter,
+        contextWithSection,
+      ) as TableBlock;
+      expect(result?.attrs?.tableDirectionContext?.parentSection).toBe(customSectionContext);
+    });
   });
 });

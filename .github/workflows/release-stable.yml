@@ -1,10 +1,13 @@
-# Stable tooling mini-bundle: CLI -> SDK -> MCP, in order, on the same runner.
-# These three share artifacts (SDK packages CLI native binaries; MCP imports
-# SDK + engine code), so they release together with one queue slot and one
-# permission context (including PyPI OIDC).
+# Stable release orchestrator. Drives `release-local-stable.mjs`, which
+# releases each package in the right chain on one runner, with one queue
+# slot and one permission context (including PyPI OIDC).
 #
-# Out of scope: superdoc, react, esign, template-builder, vscode-ext. Each of
-# those has its own per-package stable workflow.
+# Tools chain (CLI -> SDK -> MCP) ships together because SDK packages
+# CLI native binaries and MCP imports SDK + engine code. Core chain
+# (currently superdoc) ships independently of the tools chain.
+#
+# Out of scope: esign, template-builder. Each has its own stable workflow
+# until brought into the orchestrator.
 name: 📦 Release stable tooling (CLI/SDK/MCP)
 
 on:
@@ -26,9 +29,12 @@ concurrency:
   # `git push origin stable`, leaving npm/PyPI tarballs published without
   # a corresponding tag/commit pushed.
   # [skip ci] writeback runs use a per-run group so they cannot evict a real
-  # pending stable push while the bundle is active.
+  # pending stable push while the bundle is active. queue: max keeps GitHub
+  # from dropping older pending stable releases when a stable push touches
+  # multiple wrapper packages; default queue: single only allows one pending.
   group: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[skip ci]') && format('release-stable-skip-{0}', github.run_id) || 'release-stable' }}
   cancel-in-progress: false
+  queue: max
 
 jobs:
   release:
@@ -103,7 +109,33 @@ jobs:
       - name: Build packages
         run: pnpm run build
 
-      - name: Release stable tooling (CLI -> SDK -> MCP)
+      # Public-type contract gates: same gates as PR CI and
+      # release-superdoc.yml. The stable orchestrator publishes the npm
+      # `latest` tag, so a regression that bypassed PR CI would otherwise
+      # ship to every consumer pinned to `^1` or `latest`. Run identical
+      # checks here so the stable lane cannot silently relax the gate.
+      - name: Consumer typecheck (matrix)
+        run: |
+          cd tests/consumer-typecheck
+          node typecheck-matrix.mjs
+
+      - name: Deep public-type audit (supported-root strict, SD-3213e)
+        # Single invocation: broad inventory + supported-root strict gate.
+        # Same gate as PR CI. Catches releases that bypass PR CI.
+        run: node tests/consumer-typecheck/deep-type-audit.mjs --strict-supported-root
+
+      - name: Package shape gates
+        run: node tests/consumer-typecheck/package-shape-gate.mjs
+
+      - name: Public surface no-growth snapshots (SD-3176, SD-3212)
+        # Unified entry point for all three snapshot families
+        # (super-editor-package, legacy, root). Same gate as PR CI.
+        run: node tests/consumer-typecheck/snapshot.mjs --all --check
+
+      - name: Root classification closure gate (SD-3212 PR A1b)
+        run: node tests/consumer-typecheck/check-root-classification-closure.mjs
+
+      - name: Release stable packages (orchestrator)
         id: stable_release
         env:
           GITHUB_TOKEN: ${{ steps.generate_token.outputs.token }}
@@ -111,43 +143,51 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           LINEAR_TOKEN: ${{ secrets.LINEAR_TOKEN }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # vsce needs VSCE_PAT to authenticate to the VS Code Marketplace
+          # during the vscode-ext step of the core chain.
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
           GITHUB_REF_NAME: stable
         run: node scripts/release-local-stable.mjs
 
       # SDK release coordinates come from the orchestrator's step outputs, not
       # `git tag --points-at HEAD`. After CLI -> SDK -> MCP, HEAD lands on
       # MCP's version commit and the SDK tag is no longer at HEAD.
-      - name: Publish recovered SDK companion Python packages to PyPI
-        if: steps.stable_release.outputs.sdk_python_snapshot_companion_dir != ''
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          packages-dir: ${{ steps.stable_release.outputs.sdk_python_snapshot_companion_dir }}
-          skip-existing: true
-
-      - name: Publish recovered SDK main Python package to PyPI
-        if: steps.stable_release.outputs.sdk_python_snapshot_main_dir != ''
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          packages-dir: ${{ steps.stable_release.outputs.sdk_python_snapshot_main_dir }}
-          skip-existing: true
+      #
+      # PyPI publish steps disabled: trusted-publisher config and per-project
+      # storage cap need to be sorted on the PyPI side before re-enabling.
+      # Restore by uncommenting once access is back.
+      # - name: Publish recovered SDK companion Python packages to PyPI
+      #   if: steps.stable_release.outputs.sdk_python_snapshot_companion_dir != ''
+      #   uses: pypa/gh-action-pypi-publish@release/v1
+      #   with:
+      #     packages-dir: ${{ steps.stable_release.outputs.sdk_python_snapshot_companion_dir }}
+      #     skip-existing: true
+      #
+      # - name: Publish recovered SDK main Python package to PyPI
+      #   if: steps.stable_release.outputs.sdk_python_snapshot_main_dir != ''
+      #   uses: pypa/gh-action-pypi-publish@release/v1
+      #   with:
+      #     packages-dir: ${{ steps.stable_release.outputs.sdk_python_snapshot_main_dir }}
+      #     skip-existing: true
 
       - name: Build and verify Python SDK
         if: steps.stable_release.outputs.sdk_release_present == 'true'
         run: node packages/sdk/scripts/build-python-sdk.mjs
 
-      - name: Publish companion Python packages to PyPI
-        if: steps.stable_release.outputs.sdk_release_present == 'true'
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          packages-dir: packages/sdk/langs/python/companion-dist/
-          skip-existing: true
-
-      - name: Publish main Python SDK to PyPI
-        if: steps.stable_release.outputs.sdk_release_present == 'true'
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          packages-dir: packages/sdk/langs/python/dist/
-          skip-existing: true
-      # Docs promotion lives in promote-stable-docs.yml, which triggers on the
-      # SuperDoc workflow specifically. Tooling-bundle releases (CLI/SDK/MCP)
-      # do not advance docs-stable.
+      # - name: Publish companion Python packages to PyPI
+      #   if: steps.stable_release.outputs.sdk_release_present == 'true'
+      #   uses: pypa/gh-action-pypi-publish@release/v1
+      #   with:
+      #     packages-dir: packages/sdk/langs/python/companion-dist/
+      #     skip-existing: true
+      #
+      # - name: Publish main Python SDK to PyPI
+      #   if: steps.stable_release.outputs.sdk_release_present == 'true'
+      #   uses: pypa/gh-action-pypi-publish@release/v1
+      #   with:
+      #     packages-dir: packages/sdk/langs/python/dist/
+      #     skip-existing: true
+      # Docs promotion lives in promote-stable-docs.yml. It triggers off this
+      # workflow's completion and gates on whether a real superdoc v* tag was
+      # created during the run, so tools-only releases leave docs-stable
+      # unchanged automatically.

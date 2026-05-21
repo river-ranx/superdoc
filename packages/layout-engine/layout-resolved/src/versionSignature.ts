@@ -1,21 +1,25 @@
-import type {
-  DrawingBlock,
-  FieldAnnotationRun,
-  FlowBlock,
-  Fragment,
-  ImageBlock,
-  ImageDrawing,
-  ImageRun,
-  ParagraphAttrs,
-  ParagraphBlock,
-  SdtMetadata,
-  ShapeGroupDrawing,
-  SourceAnchor,
-  TableAttrs,
-  TableBlock,
-  TableCellAttrs,
-  TextRun,
-  VectorShapeDrawing,
+import {
+  buildLayoutSourceIdentityForFragment,
+  getParagraphInlineDirection,
+  type DrawingBlock,
+  type FieldAnnotationRun,
+  type FlowBlock,
+  type Fragment,
+  type ImageBlock,
+  type ImageDrawing,
+  type ImageRun,
+  type LayoutSourceIdentity,
+  type LayoutStoryLocator,
+  type ParagraphAttrs,
+  type ParagraphBlock,
+  type SdtMetadata,
+  type ShapeGroupDrawing,
+  type SourceAnchor,
+  type TableAttrs,
+  type TableBlock,
+  type TableCellAttrs,
+  type TextRun,
+  type VectorShapeDrawing,
 } from '@superdoc/contracts';
 import { hashParagraphBorders } from './paragraphBorderHash.js';
 import {
@@ -176,6 +180,19 @@ const stableSerializeEvidenceValue = (value: unknown): string => {
 export const sourceAnchorSignature = (sourceAnchor: SourceAnchor | undefined): string =>
   sourceAnchor ? stableSerializeEvidenceValue(sourceAnchor) : '';
 
+/**
+ * Resolve the editor-neutral identity for a fragment (prep-001).
+ *
+ * Prefers `fragment.layoutSourceIdentity` when present; otherwise constructs
+ * one from the producer's existing fields (`blockId`, `kind`, fragment-local
+ * line/row indices, optional `sourceAnchor`). Pure helper — does not mutate
+ * the fragment, and remains safe to call for v1 layouts that never populate
+ * `layoutSourceIdentity` upstream.
+ */
+export const resolveFragmentLayoutIdentity = (fragment: Fragment, story?: LayoutStoryLocator): LayoutSourceIdentity => {
+  return buildLayoutSourceIdentityForFragment(fragment, story);
+};
+
 // ---------------------------------------------------------------------------
 // deriveBlockVersion
 // ---------------------------------------------------------------------------
@@ -271,6 +288,8 @@ export const deriveBlockVersion = (block: FlowBlock): string => {
           textRun.token ?? '',
           textRun.trackedChange ? 1 : 0,
           textRun.comments?.length ?? 0,
+          // SD-3098: DomPainter reads run.bidi to apply dir + RLM injection; signature must include it.
+          textRun.bidi ? JSON.stringify(textRun.bidi) : '',
         ].join(',');
       })
       .join('|');
@@ -291,8 +310,7 @@ export const deriveBlockVersion = (block: FlowBlock): string => {
           attrs.borders ? hashParagraphBorders(attrs.borders) : '',
           attrs.shading?.fill ?? '',
           attrs.shading?.color ?? '',
-          attrs.direction ?? '',
-          attrs.rtl ? '1' : '',
+          getParagraphInlineDirection(attrs) ?? '',
           attrs.tabs?.length ? JSON.stringify(attrs.tabs) : '',
         ].join(':')
       : '';
@@ -436,8 +454,7 @@ export const deriveBlockVersion = (block: FlowBlock): string => {
               hash = hashNumber(hash, attrs.indent?.hanging ?? 0);
               hash = hashString(hash, attrs.shading?.fill ?? '');
               hash = hashString(hash, attrs.shading?.color ?? '');
-              hash = hashString(hash, attrs.direction ?? '');
-              hash = hashString(hash, attrs.rtl ? '1' : '');
+              hash = hashString(hash, getParagraphInlineDirection(attrs) ?? '');
               if (attrs.borders) {
                 hash = hashString(hash, hashParagraphBorders(attrs.borders));
               }
@@ -461,6 +478,9 @@ export const deriveBlockVersion = (block: FlowBlock): string => {
               hash = hashString(hash, getRunBooleanProp(run, 'strike') ? '1' : '');
               hash = hashString(hash, getRunStringProp(run, 'vertAlign'));
               hash = hashNumber(hash, getRunNumberProp(run, 'baselineShift'));
+              // SD-3098: include run.bidi so rtl-only changes invalidate the cached block hash.
+              const bidi = (run as { bidi?: unknown }).bidi;
+              hash = hashString(hash, bidi ? JSON.stringify(bidi) : '');
             }
           }
         }

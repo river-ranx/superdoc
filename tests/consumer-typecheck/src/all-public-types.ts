@@ -6,13 +6,22 @@
  * `const _real_X: AssertNotAny<X> = true` lines fail to compile if X
  * has collapsed. A missing export shows up as TS2305 on the import.
  *
- * THIS FILE IS GENERATED from the JSDoc @typedef block in
- * packages/superdoc/src/index.js. Edit the typedef block (or run
- *   node tests/consumer-typecheck/check-public-types.mjs --write
- * from the repo root, or `npm run check:types:write` from inside
- * tests/consumer-typecheck) and commit both. SD-2860's check script enforces
- * that the two stay in sync; a missing assertion fails CI with a message
- * pointing at this script.
+ * SD-3213a (post root facade flip): this file is no longer auto-generated
+ * from `packages/superdoc/src/index.js`'s typedef block — that file is no
+ * longer the canonical source of truth for the root contract after the
+ * SD-3212 PR C root types flip. The canonical root surface is now
+ * `packages/superdoc/src/public/index.ts`, locked by
+ * `tests/consumer-typecheck/snapshots/superdoc-root-exports.json` and
+ * classified at `tests/consumer-typecheck/snapshots/superdoc-root-classification.json`.
+ *
+ * When a new TYPE-ONLY root export lands (inDts true, inEsm/inCjs false
+ * in the classification), add a corresponding
+ * `import { X } from 'superdoc';` + `const _real_X: AssertNotAny<X> = true;`
+ * line below. The `check-all-public-types-fixture.mjs` gate derives the
+ * expected assertion set from the classification artifact and fails CI
+ * if any type-only export is missing here, so you cannot silently land a
+ * new root type without any-collapse coverage. The SD-2842 matrix
+ * scenarios then exercise this file to catch the actual any-collapses.
  */
 import type {
   BinaryData,
@@ -91,6 +100,7 @@ import type {
   LinkPopoverContext,
   LinkPopoverResolution,
   LinkPopoverResolver,
+  AwarenessState,
   ListDefinitionsPayload,
   Measure,
   Modules,
@@ -258,6 +268,7 @@ const _real_LayoutUpdatePayload: AssertNotAny<LayoutUpdatePayload> = true;
 const _real_LinkPopoverContext: AssertNotAny<LinkPopoverContext> = true;
 const _real_LinkPopoverResolution: AssertNotAny<LinkPopoverResolution> = true;
 const _real_LinkPopoverResolver: AssertNotAny<LinkPopoverResolver> = true;
+const _real_AwarenessState: AssertNotAny<AwarenessState> = true;
 const _real_ListDefinitionsPayload: AssertNotAny<ListDefinitionsPayload> = true;
 const _real_Measure: AssertNotAny<Measure> = true;
 const _real_Modules: AssertNotAny<Modules> = true;

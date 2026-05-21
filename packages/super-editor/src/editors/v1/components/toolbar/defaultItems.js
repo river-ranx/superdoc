@@ -404,6 +404,19 @@ export const makeDefaultItems = ({
     },
   });
 
+  const tableOfContents = useToolbarItem({
+    type: 'button',
+    name: 'tableOfContents',
+    command: 'insertTableOfContents',
+    icon: toolbarIcons.tableOfContents,
+    active: false,
+    tooltip: toolbarTexts.tableOfContents,
+    disabled: false,
+    attributes: {
+      ariaLabel: 'Table of contents',
+    },
+  });
+
   // table
   const tableItem = useToolbarItem({
     type: 'dropdown',
@@ -1063,9 +1076,17 @@ export const makeDefaultItems = ({
   const stickyItemsWidth = 120;
   const toolbarPadding = 32;
 
-  const itemsToHideXL = ['linkedStyles', 'clearFormatting', 'copyFormat', 'ruler', 'formattingMarks'];
+  const itemsToHideXL = [
+    'linkedStyles',
+    'clearFormatting',
+    'copyFormat',
+    'ruler',
+    'formattingMarks',
+    'tableOfContents',
+  ];
   const itemsToHideSM = ['zoom', 'fontFamily', 'fontSize', 'redo'];
   const shouldUseLgCompactStyles = availableWidth <= RESPONSIVE_BREAKPOINTS.lg;
+  const shouldIncludeFormattingMarks = superToolbar.config?.showFormattingMarksButton === true;
 
   if (shouldUseLgCompactStyles) {
     documentMode.attributes.value = {
@@ -1101,6 +1122,7 @@ export const makeDefaultItems = ({
     separator,
     link,
     image,
+    tableOfContents,
     tableItem,
     tableActionsItem,
     separator,
@@ -1114,7 +1136,7 @@ export const makeDefaultItems = ({
     linkedStyles,
     separator,
     ruler,
-    formattingMarks,
+    ...(shouldIncludeFormattingMarks ? [formattingMarks] : []),
     copyFormat,
     clearFormatting,
     aiButton,
@@ -1136,7 +1158,7 @@ export const makeDefaultItems = ({
     const getLinkedStylesIndex = toolbarItems.findIndex((item) => item.name.value === 'linkedStyles');
     toolbarItems.splice(getLinkedStylesIndex - 1, 2);
 
-    const filterItems = ['ruler', 'formattingMarks', 'zoom', 'undo', 'redo'];
+    const filterItems = ['ruler', 'zoom', 'undo', 'redo'];
     toolbarItems = toolbarItems.filter((item) => !filterItems.includes(item.name.value));
   }
 

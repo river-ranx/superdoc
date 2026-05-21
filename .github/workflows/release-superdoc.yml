@@ -1,6 +1,8 @@
-# Auto-releases on push to main (@next) and stable (@latest).
-# docs-stable is advanced by promote-stable-docs.yml when this workflow
-# completes a real release on stable (not a no-op or PR preview).
+# Auto-releases on push to main (@next).
+# Stable releases are orchestrated centrally by release-stable.yml so that
+# every stable release shares one concurrency slot and one git push lane.
+# docs-stable is advanced by promote-stable-docs.yml when release-stable.yml
+# produces a real superdoc v* tag (no-op runs do not advance docs-stable).
 # Manual PR preview: dispatch with pr_number to publish @pr-<number>
 name: 📦 Release superdoc
 
@@ -8,7 +10,6 @@ on:
   push:
     branches:
       - main
-      - stable
     paths:
       - 'packages/superdoc/**'
       - 'packages/layout-engine/**'
@@ -33,12 +34,18 @@ permissions:
 concurrency:
   # Stable releases share the `release-stable` group so @semantic-release/git
   # pushes to `stable` serialize across workflows; per-workflow groups would
-  # let releases race on `git push origin stable`.
+  # let releases race on `git push origin stable`. queue: max keeps GitHub
+  # from dropping older pending stable releases when a stable push touches
+  # multiple wrapper packages; default queue: single only allows one pending.
+  # queue: max requires cancel-in-progress: false (cannot be combined with true).
   group: ${{ github.ref_name == 'stable' && 'release-stable' || format('{0}-{1}', github.workflow, github.ref) }}
-  cancel-in-progress: ${{ github.ref_name != 'stable' }}
+  cancel-in-progress: false
+  queue: max
 
 jobs:
   release:
+    # Stable publishes must go through release-stable.yml; PR previews are still allowed.
+    if: ${{ github.event_name != 'workflow_dispatch' || github.ref_name != 'stable' || inputs.pr_number }}
     runs-on: ubuntu-24.04
     steps:
       - name: Generate token
@@ -65,8 +72,12 @@ jobs:
           ref: ${{ steps.pr.outputs.sha || '' }}
           token: ${{ steps.generate_token.outputs.token }}
 
-      - name: Refresh stable branch head
-        if: github.ref_name == 'stable' && !inputs.pr_number
+      - name: Refresh branch head
+        # Queued release runs may start against a stale checkout (queue: max
+        # plus cancel-in-progress: false). Refresh to the current branch head
+        # so @semantic-release/git pushes fast-forward; semantic-release no-ops
+        # if no new commits were added since the previous queued run released.
+        if: ${{ !inputs.pr_number }}
         run: |
           git fetch origin "${{ github.ref_name }}" --tags
           git checkout -B "${{ github.ref_name }}" "origin/${{ github.ref_name }}"
@@ -116,6 +127,35 @@ jobs:
 
       - name: Build packages
         run: pnpm run build
+
+      # Public-type contract gates: same gates as PR CI (ci-superdoc.yml).
+      # Runs before publishing so a release cannot ship a regression that
+      # bypassed PR CI (manual republish, hotfix branch, recovery flow).
+      - name: Consumer typecheck (matrix)
+        run: |
+          cd tests/consumer-typecheck
+          node typecheck-matrix.mjs
+
+      - name: Deep public-type audit (supported-root strict, SD-3213e)
+        # Same gate as PR CI. One invocation prints the broad inventory
+        # AND runs the supported-root strict gate against the committed
+        # allowlist. Catches releases that bypass PR CI.
+        run: node tests/consumer-typecheck/deep-type-audit.mjs --strict-supported-root
+
+      - name: Package shape gates
+        # External package-shape linters (publint + attw) running against
+        # the packed tarball. Same step as PR CI.
+        run: node tests/consumer-typecheck/package-shape-gate.mjs
+
+      - name: Public surface no-growth snapshots (SD-3176, SD-3212)
+        # Same gate as PR CI. Catches releases that bypass PR CI.
+        # Runs the unified entry point for all three snapshot families
+        # (super-editor-package, legacy, root).
+        run: node tests/consumer-typecheck/snapshot.mjs --all --check
+
+      - name: Root classification closure gate (SD-3212 PR A1b)
+        # Same gate as PR CI. Catches releases that bypass PR CI.
+        run: node tests/consumer-typecheck/check-root-classification-closure.mjs
 
       # PR preview: publish with pr-<number> dist-tag
       - name: Publish PR preview
