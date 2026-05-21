@@ -610,6 +610,33 @@ const scenarios = [
     files: ['src/whiteboard-events.ts'],
     mustPass: true,
   },
+  // SD-3213 SuperDoc event map: typed payloads for the documented
+  // public superdoc.on(...) events. Closed map (typos like
+  // superdoc.on('reayd', ...) are TS errors). Reuses existing public
+  // types (User, Editor, AwarenessState, Comment, DocumentMode,
+  // FontsResolvedPayload, ListDefinitionsPayload, WhiteboardData).
+  // Exception payload is a union of the three current runtime shapes;
+  // normalization is a follow-up.
+  {
+    name: 'bundler / superdoc events (SD-3213)',
+    module: 'ESNext',
+    moduleResolution: 'bundler',
+    skipLibCheck: true,
+    strict: true,
+    noPropertyAccessFromIndexSignature: true,
+    files: ['src/superdoc-events.ts'],
+    mustPass: true,
+  },
+  {
+    name: 'node16 / superdoc events (SD-3213)',
+    module: 'Node16',
+    moduleResolution: 'node16',
+    skipLibCheck: true,
+    strict: true,
+    noPropertyAccessFromIndexSignature: true,
+    files: ['src/superdoc-events.ts'],
+    mustPass: true,
+  },
   // SD-2867 phase B: SuperDoc.canPerformPermission forwards `comment` and
   // `trackedChange` to isAllowed() unchanged, so the public contract must
   // accept the wide payloads the editor's permission helper produces

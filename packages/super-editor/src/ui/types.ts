@@ -38,10 +38,14 @@ export interface Subscribable<T> {
  * Structural typing for the SuperDoc instance — keeps the UI controller
  * loose from the SuperDoc Vue package's specific class type. The
  * controller only needs an event bus and an `activeEditor` reference.
+ *
+ * `SuperDocHostEvent` is defined in `headless-toolbar/types.ts` (the
+ * canonical owner of the host-shape contract); UI already imports
+ * other types from there, so reusing it avoids a circular dependency.
  */
 export interface SuperDocLike {
-  on?(event: string, handler: (...args: unknown[]) => void): unknown;
-  off?(event: string, handler: (...args: unknown[]) => void): unknown;
+  on?(event: import('../headless-toolbar/types.js').SuperDocHostEvent, handler: (...args: unknown[]) => void): unknown;
+  off?(event: import('../headless-toolbar/types.js').SuperDocHostEvent, handler: (...args: unknown[]) => void): unknown;
   activeEditor?: SuperDocEditorLike | null;
   config?: { documentMode?: 'editing' | 'suggesting' | 'viewing' };
   /**
