@@ -5,6 +5,7 @@ import { Attribute } from '@core/Attribute.js';
 import { getMarkRange } from '@core/helpers/getMarkRange.js';
 import { findOrCreateRelationship } from '@core/parts/adapters/relationships-mutation.js';
 import { sanitizeHref, encodeTooltip, UrlValidationConstants } from '@superdoc/url-validation';
+import { TRANSIENT_HYPERLINK_STYLE_IDS } from '@extensions/run/calculateInlineRunPropertiesPlugin.js';
 
 /**
  * Target frame options
@@ -231,18 +232,27 @@ export const Link = Mark.create({
 
           if (underlineMarkType) {
             const rangesMissingUnderline = [];
+            const negationMarksToRemove = [];
             tr.doc.nodesBetween(from, to, (node, pos) => {
               if (!node.isText || node.nodeSize <= 0) return;
-              const hasUnderline = node.marks.some((mark) => mark.type === underlineMarkType);
-              if (hasUnderline) return;
+              // underlineType: 'none' is a negation marker (renders as <span>, not <u>),
+              // not a visible underline — treat it as missing so the link gets one.
+              const existing = node.marks.find((mark) => mark.type === underlineMarkType);
+              const hasVisibleUnderline = existing && existing.attrs?.underlineType !== 'none';
+              if (hasVisibleUnderline) return;
 
-              // Only apply while overlapping with current selection/link range
               const rangeFrom = Math.max(pos, from);
               const rangeTo = Math.min(pos + node.nodeSize, to);
               if (rangeFrom >= rangeTo) return;
+              if (existing && existing.attrs?.underlineType === 'none') {
+                negationMarksToRemove.push({ from: rangeFrom, to: rangeTo, mark: existing });
+              }
               rangesMissingUnderline.push({ from: rangeFrom, to: rangeTo });
             });
 
+            negationMarksToRemove.forEach((range) => {
+              tr = tr.removeMark(range.from, range.to, range.mark);
+            });
             rangesMissingUnderline.forEach((range) => {
               tr = tr.addMark(range.from, range.to, underlineMarkType.create({ autoAdded: true }));
             });
@@ -303,41 +313,8 @@ export const Link = Mark.create({
                   break;
                 }
               }
-
-              // Fallback link as node mark on run nodes.
-              if (from === to) {
-                // TODO
-              }
             }
           }
-
-          const HYPERLINK_DERIVED_KEYS = new Set(['styleId', 'color', 'underline']);
-          const hyperlinkRunPositions = new Set();
-          const importedRunLinkPositions = new Set();
-
-          state.doc.nodesBetween(from, to, (node, pos) => {
-            if (node.type.name !== 'run') return;
-
-            let hasLinkMark = false;
-            node.forEach((child) => {
-              if (!child.isText || !Array.isArray(child.marks)) return;
-              if (child.marks.some((mark) => mark.type === linkMarkType)) {
-                hasLinkMark = true;
-              }
-            });
-
-            // Imported DOCX hyperlinks can also store the link mark on the run node itself.
-            if (!hasLinkMark && node.marks.some((mark) => mark.type === linkMarkType)) {
-              hasLinkMark = true;
-            }
-
-            if (hasLinkMark) {
-              hyperlinkRunPositions.add(pos);
-              if (node.marks.some((mark) => mark.type === linkMarkType)) {
-                importedRunLinkPositions.add(pos);
-              }
-            }
-          });
 
           const commandChain = chain();
           if (selection.empty && linkMarkType && from !== to) {
@@ -354,26 +331,9 @@ export const Link = Mark.create({
               if (underlineMarkType) {
                 tr.doc.nodesBetween(from, to, (node, pos) => {
                   if (!node.isText) return;
-                  const $pos = tr.doc.resolve(pos);
-                  let runPos = null;
-                  for (let depth = $pos.depth; depth > 0; depth -= 1) {
-                    if ($pos.node(depth).type.name !== 'run') continue;
-                    runPos = $pos.before(depth);
-                    break;
-                  }
                   node.marks.forEach((mark) => {
                     if (mark.type !== underlineMarkType) return;
-                    if (mark.attrs?.autoAdded === true) {
-                      tr.removeMark(pos, pos + node.nodeSize, mark);
-                      return;
-                    }
-
-                    if (runPos == null || !importedRunLinkPositions.has(runPos)) return;
-
-                    const underlineType = mark.attrs?.underlineType;
-                    const isBareUnderline = underlineType == null || underlineType === 'single';
-                    if (!isBareUnderline) return;
-
+                    if (mark.attrs?.autoAdded !== true) return;
                     tr.removeMark(pos, pos + node.nodeSize, mark);
                   });
                 });
@@ -383,12 +343,10 @@ export const Link = Mark.create({
               if (textStyleMarkType) {
                 tr.doc.nodesBetween(from, to, (node, pos) => {
                   if (!node.isText) return;
-
                   node.marks.forEach((mark) => {
                     if (mark.type !== textStyleMarkType) return;
-                    if (mark.attrs?.color == null && mark.attrs?.styleId == null) return;
-
-                    const clearedAttrs = { ...mark.attrs, styleId: null, color: null, underline: null };
+                    if (!TRANSIENT_HYPERLINK_STYLE_IDS.has(mark.attrs?.styleId)) return;
+                    const clearedAttrs = { ...mark.attrs, styleId: null };
                     tr.removeMark(pos, pos + node.nodeSize, mark);
                     tr.addMark(pos, pos + node.nodeSize, textStyleMarkType.create(clearedAttrs));
                   });
@@ -398,7 +356,7 @@ export const Link = Mark.create({
               const runNodesToUpdate = [];
               tr.doc.nodesBetween(from, to, (node, pos) => {
                 if (node.type.name !== 'run') return;
-                if (!hyperlinkRunPositions.has(pos)) return;
+                if (!TRANSIENT_HYPERLINK_STYLE_IDS.has(node.attrs?.runProperties?.styleId)) return;
                 runNodesToUpdate.push({ node, pos });
               });
 
@@ -406,26 +364,14 @@ export const Link = Mark.create({
                 .sort((a, b) => b.pos - a.pos)
                 .forEach(({ node, pos }) => {
                   const mappedPos = tr.mapping.map(pos);
-                  const mappedNode = tr.doc.nodeAt(mappedPos) || node;
-                  const filterHyperlinkKeys = (keys) =>
-                    Array.isArray(keys) ? keys.filter((key) => !HYPERLINK_DERIVED_KEYS.has(key)) : keys;
-
                   tr.setNodeMarkup(
                     mappedPos,
-                    mappedNode.type,
+                    node.type,
                     {
-                      ...mappedNode.attrs,
-                      runProperties: {
-                        ...mappedNode.attrs.runProperties,
-                        styleId: null,
-                        color: null,
-                        underline: null,
-                      },
-                      runPropertiesInlineKeys: filterHyperlinkKeys(mappedNode.attrs.runPropertiesInlineKeys),
-                      runPropertiesStyleKeys: filterHyperlinkKeys(mappedNode.attrs.runPropertiesStyleKeys),
-                      runPropertiesOverrideKeys: filterHyperlinkKeys(mappedNode.attrs.runPropertiesOverrideKeys),
+                      ...node.attrs,
+                      runProperties: { ...node.attrs.runProperties, styleId: null },
                     },
-                    mappedNode.marks,
+                    node.marks,
                   );
                 });
 
