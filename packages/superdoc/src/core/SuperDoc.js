@@ -330,7 +330,22 @@ export class SuperDoc extends EventEmitter {
    */
   commentsList;
 
-  /** @type {import('vue').App} */
+  /**
+   * Internal Vue app handle created in `#initVueApp()` and used for
+   * mount/unmount, `provide()`, and `config.globalProperties` setup.
+   * Not consumer API: no docs or examples reference `superdoc.app`,
+   * and the only cross-file reader (`SuperComments.createVueApp()`
+   * at `super-comments-list.js:35`) is a `.js` file under
+   * `checkJs: false`, so the `@private` boundary does not break
+   * internal source compilation.
+   *
+   * Same SD-3213f-style TS surface hide as
+   * `superdocStore` / `commentsStore` / `highContrastModeStore` /
+   * `commentsList`; not runtime privacy.
+   *
+   * @type {import('vue').App}
+   * @private
+   */
   app;
 
   /** @type {import('pinia').Pinia} */
