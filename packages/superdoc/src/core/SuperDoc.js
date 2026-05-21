@@ -310,6 +310,26 @@ export class SuperDoc extends EventEmitter {
    */
   highContrastModeStore;
 
+  /**
+   * Internal mount handle for the `SuperComments` Vue component, created
+   * lazily by `addCommentsList()` and torn down by `removeCommentsList()`.
+   * Not consumer API: `SuperComments` is not publicly exported, no docs
+   * or examples reference `superdoc.commentsList`, and the inner fields
+   * (`element`, `superdoc` backref, `container` Vue ComponentPublicInstance)
+   * are internal mount state.
+   *
+   * Typed as `SuperComments | null | undefined` so the runtime states
+   * stay type-clean: `undefined` before `addCommentsList()` runs (e.g.
+   * when the viewer role skips initialization; see SuperDoc.test.js
+   * for the assertion), `SuperComments` after `addCommentsList()`, and
+   * `null` after `removeCommentsList()` tears down. No initializer, to
+   * match the convention used by the adjacent `@private` store fields.
+   *
+   * @type {SuperComments | null | undefined}
+   * @private
+   */
+  commentsList;
+
   /** @type {import('vue').App} */
   app;
 

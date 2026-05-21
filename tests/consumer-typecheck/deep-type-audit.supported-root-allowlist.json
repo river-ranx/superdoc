@@ -1,7 +1,7 @@
 {
   "version": 1,
   "scope": "supported-root",
-  "generatedAt": "2026-05-21T17:32:34.299Z",
+  "generatedAt": "2026-05-21T17:46:27.835Z",
   "entries": [
     {
       "key": "index|node_modules/superdoc/dist/super-editor/src/editors/v1/core/Editor.d.ts|Editor.<value>.new(options)<0>.extensions[].editor.converter[string]|converter: SuperConverter;",
@@ -174,46 +174,6 @@
       "rationale": "auto-seeded from inventory (supported-root scope)"
     },
     {
-      "key": "property|node_modules/superdoc/dist/superdoc/src/components/CommentsLayer/commentsList/super-comments-list.d.ts|SuperDoc.<value>.new(config).modules.comments.permissionResolver(params).superdoc.commentsList.element|element: any;",
-      "kind": "property",
-      "symbolPath": "SuperDoc.<value>.new(config).modules.comments.permissionResolver(params).superdoc.commentsList.element",
-      "file": "node_modules/superdoc/dist/superdoc/src/components/CommentsLayer/commentsList/super-comments-list.d.ts",
-      "line": 9,
-      "snippet": "element: any;",
-      "owner": "tier-5-other",
-      "rationale": "auto-seeded from inventory (supported-root scope)"
-    },
-    {
-      "key": "property|node_modules/superdoc/dist/superdoc/src/components/CommentsLayer/commentsList/super-comments-list.d.ts|SuperDoc.<value>.new(config).modules.comments.permissionResolver(params).superdoc.commentsList.superdoc|superdoc: any;",
-      "kind": "property",
-      "symbolPath": "SuperDoc.<value>.new(config).modules.comments.permissionResolver(params).superdoc.commentsList.superdoc",
-      "file": "node_modules/superdoc/dist/superdoc/src/components/CommentsLayer/commentsList/super-comments-list.d.ts",
-      "line": 16,
-      "snippet": "superdoc: any;",
-      "owner": "tier-5-other",
-      "rationale": "auto-seeded from inventory (supported-root scope)"
-    },
-    {
-      "key": "property|node_modules/superdoc/dist/superdoc/src/components/CommentsLayer/commentsList/super-comments-list.d.ts|SuperDoc.commentsList.element|element: any;",
-      "kind": "property",
-      "symbolPath": "SuperDoc.commentsList.element",
-      "file": "node_modules/superdoc/dist/superdoc/src/components/CommentsLayer/commentsList/super-comments-list.d.ts",
-      "line": 9,
-      "snippet": "element: any;",
-      "owner": "tier-5-other",
-      "rationale": "auto-seeded from inventory (supported-root scope)"
-    },
-    {
-      "key": "property|node_modules/superdoc/dist/superdoc/src/components/CommentsLayer/commentsList/super-comments-list.d.ts|SuperDoc.commentsList.superdoc|superdoc: any;",
-      "kind": "property",
-      "symbolPath": "SuperDoc.commentsList.superdoc",
-      "file": "node_modules/superdoc/dist/superdoc/src/components/CommentsLayer/commentsList/super-comments-list.d.ts",
-      "line": 16,
-      "snippet": "superdoc: any;",
-      "owner": "tier-5-other",
-      "rationale": "auto-seeded from inventory (supported-root scope)"
-    },
-    {
       "key": "return|node_modules/superdoc/dist/super-editor/src/editors/v1/core/helpers/getActiveFormatting.d.ts|getActiveFormatting.<value>=>return|export function getActiveFormatting(editor: any): any;",
       "kind": "return",
       "symbolPath": "getActiveFormatting.<value>=>return",
@@ -334,31 +294,11 @@
       "rationale": "auto-seeded from inventory (supported-root scope)"
     },
     {
-      "key": "type|node_modules/superdoc/dist/superdoc/src/components/CommentsLayer/commentsList/super-comments-list.d.ts|SuperDoc.<value>.new(config).modules.comments.permissionResolver(params).superdoc.commentsList.container<14>|container: import('vue').ComponentPublicInstance<{}, {}, {}, {}, {}, {}, {}, {}, false, import('vue').ComponentOptionsBase<any, any, any, any, any, any, any, any, any, {}, {}, string, {}, {}, {}, stri",
-      "kind": "type",
-      "symbolPath": "SuperDoc.<value>.new(config).modules.comments.permissionResolver(params).superdoc.commentsList.container<14>",
-      "file": "node_modules/superdoc/dist/superdoc/src/components/CommentsLayer/commentsList/super-comments-list.d.ts",
-      "line": 18,
-      "snippet": "container: import('vue').ComponentPublicInstance<{}, {}, {}, {}, {}, {}, {}, {}, false, import('vue').ComponentOptionsBase<any, any, any, any, any, any, any, any, any, {}, {}, string, {}, {}, {}, stri",
-      "owner": "tier-5-other",
-      "rationale": "auto-seeded from inventory (supported-root scope)"
-    },
-    {
-      "key": "type|node_modules/superdoc/dist/superdoc/src/components/CommentsLayer/commentsList/super-comments-list.d.ts|SuperDoc.commentsList.container<14>|container: import('vue').ComponentPublicInstance<{}, {}, {}, {}, {}, {}, {}, {}, false, import('vue').ComponentOptionsBase<any, any, any, any, any, any, any, any, any, {}, {}, string, {}, {}, {}, stri",
-      "kind": "type",
-      "symbolPath": "SuperDoc.commentsList.container<14>",
-      "file": "node_modules/superdoc/dist/superdoc/src/components/CommentsLayer/commentsList/super-comments-list.d.ts",
-      "line": 18,
-      "snippet": "container: import('vue').ComponentPublicInstance<{}, {}, {}, {}, {}, {}, {}, {}, false, import('vue').ComponentOptionsBase<any, any, any, any, any, any, any, any, any, {}, {}, string, {}, {}, {}, stri",
-      "owner": "tier-5-other",
-      "rationale": "auto-seeded from inventory (supported-root scope)"
-    },
-    {
       "key": "type|node_modules/superdoc/dist/superdoc/src/core/SuperDoc.d.ts|SuperDoc.<value>.new(config).modules.comments.permissionResolver(params).superdoc.app<0>|app: import('vue').App;",
       "kind": "type",
       "symbolPath": "SuperDoc.<value>.new(config).modules.comments.permissionResolver(params).superdoc.app<0>",
       "file": "node_modules/superdoc/dist/superdoc/src/core/SuperDoc.d.ts",
-      "line": 81,
+      "line": 97,
       "snippet": "app: import('vue').App;",
       "owner": "tier-5-other",
       "rationale": "auto-seeded from inventory (supported-root scope)"
@@ -368,7 +308,7 @@
       "kind": "type",
       "symbolPath": "SuperDoc.app<0>",
       "file": "node_modules/superdoc/dist/superdoc/src/core/SuperDoc.d.ts",
-      "line": 81,
+      "line": 97,
       "snippet": "app: import('vue').App;",
       "owner": "tier-5-other",
       "rationale": "auto-seeded from inventory (supported-root scope)"

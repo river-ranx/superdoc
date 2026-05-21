@@ -53,6 +53,10 @@ void superdoc.commentsStore;
 // of the public TypeScript surface.
 void superdoc.highContrastModeStore;
 
+// @ts-expect-error commentsList is the internal SuperComments mount
+// handle (SD-3213); not part of the public TypeScript surface.
+void superdoc.commentsList;
+
 // --- Positive assertions ---------------------------------------------------
 // Documented factories accepting a SuperDoc instance must continue to
 // compile after the hide. These compile because SuperDoc now exposes the
