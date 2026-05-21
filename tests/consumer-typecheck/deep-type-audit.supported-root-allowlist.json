@@ -1,7 +1,7 @@
 {
   "version": 1,
   "scope": "supported-root",
-  "generatedAt": "2026-05-21T09:36:10.903Z",
+  "generatedAt": "2026-05-21T13:56:30.546Z",
   "entries": [
     {
       "key": "index|node_modules/superdoc/dist/super-editor/src/editors/v1/core/Editor.d.ts|Editor.<value>.new(options)<0>.extensions[].editor.converter[string]|converter: SuperConverter;",
@@ -154,126 +154,6 @@
       "rationale": "auto-seeded from inventory (supported-root scope)"
     },
     {
-      "key": "param|node_modules/superdoc/dist/super-editor/src/editors/v1/core/types/EditorConfig.d.ts|Editor.<value>.new(options)<0>.extensions[].editor.presentationEditor.attachCollaboration(__0).collaborationProvider.off(event)|event: any",
-      "kind": "param",
-      "symbolPath": "Editor.<value>.new(options)<0>.extensions[].editor.presentationEditor.attachCollaboration(__0).collaborationProvider.off(event)",
-      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/types/EditorConfig.d.ts",
-      "line": 205,
-      "snippet": "event: any",
-      "owner": "tier-5-other",
-      "rationale": "auto-seeded from inventory (supported-root scope)"
-    },
-    {
-      "key": "param|node_modules/superdoc/dist/super-editor/src/editors/v1/core/types/EditorConfig.d.ts|Editor.<value>.new(options)<0>.extensions[].editor.presentationEditor.attachCollaboration(__0).collaborationProvider.on(event)|event: any",
-      "kind": "param",
-      "symbolPath": "Editor.<value>.new(options)<0>.extensions[].editor.presentationEditor.attachCollaboration(__0).collaborationProvider.on(event)",
-      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/types/EditorConfig.d.ts",
-      "line": 204,
-      "snippet": "event: any",
-      "owner": "tier-5-other",
-      "rationale": "auto-seeded from inventory (supported-root scope)"
-    },
-    {
-      "key": "param|node_modules/superdoc/dist/super-editor/src/editors/v1/core/types/EditorConfig.d.ts|Extensions.<value>.Node.new(config).editor.presentationEditor.attachCollaboration(__0).collaborationProvider.off(event)|event: any",
-      "kind": "param",
-      "symbolPath": "Extensions.<value>.Node.new(config).editor.presentationEditor.attachCollaboration(__0).collaborationProvider.off(event)",
-      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/types/EditorConfig.d.ts",
-      "line": 205,
-      "snippet": "event: any",
-      "owner": "tier-5-other",
-      "rationale": "auto-seeded from inventory (supported-root scope)"
-    },
-    {
-      "key": "param|node_modules/superdoc/dist/super-editor/src/editors/v1/core/types/EditorConfig.d.ts|Extensions.<value>.Node.new(config).editor.presentationEditor.attachCollaboration(__0).collaborationProvider.on(event)|event: any",
-      "kind": "param",
-      "symbolPath": "Extensions.<value>.Node.new(config).editor.presentationEditor.attachCollaboration(__0).collaborationProvider.on(event)",
-      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/types/EditorConfig.d.ts",
-      "line": 204,
-      "snippet": "event: any",
-      "owner": "tier-5-other",
-      "rationale": "auto-seeded from inventory (supported-root scope)"
-    },
-    {
-      "key": "param|node_modules/superdoc/dist/super-editor/src/editors/v1/core/types/EditorConfig.d.ts|SuperDoc.<value>.new(config).documents[].provider.off(event)|event: any",
-      "kind": "param",
-      "symbolPath": "SuperDoc.<value>.new(config).documents[].provider.off(event)",
-      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/types/EditorConfig.d.ts",
-      "line": 205,
-      "snippet": "event: any",
-      "owner": "tier-5-other",
-      "rationale": "auto-seeded from inventory (supported-root scope)"
-    },
-    {
-      "key": "param|node_modules/superdoc/dist/super-editor/src/editors/v1/core/types/EditorConfig.d.ts|SuperDoc.<value>.new(config).documents[].provider.on(event)|event: any",
-      "kind": "param",
-      "symbolPath": "SuperDoc.<value>.new(config).documents[].provider.on(event)",
-      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/types/EditorConfig.d.ts",
-      "line": 204,
-      "snippet": "event: any",
-      "owner": "tier-5-other",
-      "rationale": "auto-seeded from inventory (supported-root scope)"
-    },
-    {
-      "key": "param|node_modules/superdoc/dist/super-editor/src/editors/v1/core/types/EditorConfig.d.ts|SuperDoc.provider.off(event)|event: any",
-      "kind": "param",
-      "symbolPath": "SuperDoc.provider.off(event)",
-      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/types/EditorConfig.d.ts",
-      "line": 205,
-      "snippet": "event: any",
-      "owner": "tier-5-other",
-      "rationale": "auto-seeded from inventory (supported-root scope)"
-    },
-    {
-      "key": "param|node_modules/superdoc/dist/super-editor/src/editors/v1/core/types/EditorConfig.d.ts|SuperDoc.provider.on(event)|event: any",
-      "kind": "param",
-      "symbolPath": "SuperDoc.provider.on(event)",
-      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/types/EditorConfig.d.ts",
-      "line": 204,
-      "snippet": "event: any",
-      "owner": "tier-5-other",
-      "rationale": "auto-seeded from inventory (supported-root scope)"
-    },
-    {
-      "key": "param|node_modules/superdoc/dist/super-editor/src/editors/v1/core/types/EditorConfig.d.ts|defineNode.<value>(config).editor.presentationEditor.attachCollaboration(__0).collaborationProvider.off(event)|event: any",
-      "kind": "param",
-      "symbolPath": "defineNode.<value>(config).editor.presentationEditor.attachCollaboration(__0).collaborationProvider.off(event)",
-      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/types/EditorConfig.d.ts",
-      "line": 205,
-      "snippet": "event: any",
-      "owner": "tier-5-other",
-      "rationale": "auto-seeded from inventory (supported-root scope)"
-    },
-    {
-      "key": "param|node_modules/superdoc/dist/super-editor/src/editors/v1/core/types/EditorConfig.d.ts|defineNode.<value>(config).editor.presentationEditor.attachCollaboration(__0).collaborationProvider.on(event)|event: any",
-      "kind": "param",
-      "symbolPath": "defineNode.<value>(config).editor.presentationEditor.attachCollaboration(__0).collaborationProvider.on(event)",
-      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/types/EditorConfig.d.ts",
-      "line": 204,
-      "snippet": "event: any",
-      "owner": "tier-5-other",
-      "rationale": "auto-seeded from inventory (supported-root scope)"
-    },
-    {
-      "key": "param|node_modules/superdoc/dist/super-editor/src/editors/v1/core/types/EditorConfig.d.ts|getSchemaIntrospection.<value>(options).editor.presentationEditor.attachCollaboration(__0).collaborationProvider.off(event)|event: any",
-      "kind": "param",
-      "symbolPath": "getSchemaIntrospection.<value>(options).editor.presentationEditor.attachCollaboration(__0).collaborationProvider.off(event)",
-      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/types/EditorConfig.d.ts",
-      "line": 205,
-      "snippet": "event: any",
-      "owner": "tier-5-other",
-      "rationale": "auto-seeded from inventory (supported-root scope)"
-    },
-    {
-      "key": "param|node_modules/superdoc/dist/super-editor/src/editors/v1/core/types/EditorConfig.d.ts|getSchemaIntrospection.<value>(options).editor.presentationEditor.attachCollaboration(__0).collaborationProvider.on(event)|event: any",
-      "kind": "param",
-      "symbolPath": "getSchemaIntrospection.<value>(options).editor.presentationEditor.attachCollaboration(__0).collaborationProvider.on(event)",
-      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/types/EditorConfig.d.ts",
-      "line": 204,
-      "snippet": "event: any",
-      "owner": "tier-5-other",
-      "rationale": "auto-seeded from inventory (supported-root scope)"
-    },
-    {
       "key": "property|node_modules/superdoc/dist/superdoc/src/components/CommentsLayer/commentsList/super-comments-list.d.ts|SuperDoc.<value>.new(config).modules.comments.permissionResolver(params).superdoc.commentsList.element|element: any;",
       "kind": "property",
       "symbolPath": "SuperDoc.<value>.new(config).modules.comments.permissionResolver(params).superdoc.commentsList.element",
@@ -328,7 +208,7 @@
       "kind": "return",
       "symbolPath": "SuperDoc.toolbar.controller.getSnapshot=>return.context.target.commands<1>=>return",
       "file": "node_modules/superdoc/dist/super-editor/src/headless-toolbar/types.d.ts",
-      "line": 132,
+      "line": 146,
       "snippet": "(...args: any[]) => any",
       "owner": "tier-5-other",
       "rationale": "auto-seeded from inventory (supported-root scope)"
@@ -674,206 +554,6 @@
       "rationale": "auto-seeded from inventory (supported-root scope)"
     },
     {
-      "key": "type|node_modules/superdoc/dist/super-editor/src/editors/v1/core/types/EditorConfig.d.ts|Extensions.<value>.Node.new(config).editor.presentationEditor.attachCollaboration(__0).collaborationProvider.off(handler)(args)<0>|...args: any[]",
-      "kind": "type",
-      "symbolPath": "Extensions.<value>.Node.new(config).editor.presentationEditor.attachCollaboration(__0).collaborationProvider.off(handler)(args)<0>",
-      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/types/EditorConfig.d.ts",
-      "line": 205,
-      "snippet": "...args: any[]",
-      "owner": "tier-5-other",
-      "rationale": "auto-seeded from inventory (supported-root scope)"
-    },
-    {
-      "key": "type|node_modules/superdoc/dist/super-editor/src/editors/v1/core/types/EditorConfig.d.ts|Extensions.<value>.Node.new(config).editor.presentationEditor.attachCollaboration(__0).collaborationProvider.off(handler)(args)[]|...args: any[]",
-      "kind": "type",
-      "symbolPath": "Extensions.<value>.Node.new(config).editor.presentationEditor.attachCollaboration(__0).collaborationProvider.off(handler)(args)[]",
-      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/types/EditorConfig.d.ts",
-      "line": 205,
-      "snippet": "...args: any[]",
-      "owner": "tier-5-other",
-      "rationale": "auto-seeded from inventory (supported-root scope)"
-    },
-    {
-      "key": "type|node_modules/superdoc/dist/super-editor/src/editors/v1/core/types/EditorConfig.d.ts|Extensions.<value>.Node.new(config).editor.presentationEditor.attachCollaboration(__0).collaborationProvider.on(handler)(args)<0>|...args: any[]",
-      "kind": "type",
-      "symbolPath": "Extensions.<value>.Node.new(config).editor.presentationEditor.attachCollaboration(__0).collaborationProvider.on(handler)(args)<0>",
-      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/types/EditorConfig.d.ts",
-      "line": 204,
-      "snippet": "...args: any[]",
-      "owner": "tier-5-other",
-      "rationale": "auto-seeded from inventory (supported-root scope)"
-    },
-    {
-      "key": "type|node_modules/superdoc/dist/super-editor/src/editors/v1/core/types/EditorConfig.d.ts|Extensions.<value>.Node.new(config).editor.presentationEditor.attachCollaboration(__0).collaborationProvider.on(handler)(args)[]|...args: any[]",
-      "kind": "type",
-      "symbolPath": "Extensions.<value>.Node.new(config).editor.presentationEditor.attachCollaboration(__0).collaborationProvider.on(handler)(args)[]",
-      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/types/EditorConfig.d.ts",
-      "line": 204,
-      "snippet": "...args: any[]",
-      "owner": "tier-5-other",
-      "rationale": "auto-seeded from inventory (supported-root scope)"
-    },
-    {
-      "key": "type|node_modules/superdoc/dist/super-editor/src/editors/v1/core/types/EditorConfig.d.ts|SuperDoc.<value>.new(config).documents[].provider.off(handler)(args)<0>|...args: any[]",
-      "kind": "type",
-      "symbolPath": "SuperDoc.<value>.new(config).documents[].provider.off(handler)(args)<0>",
-      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/types/EditorConfig.d.ts",
-      "line": 205,
-      "snippet": "...args: any[]",
-      "owner": "tier-5-other",
-      "rationale": "auto-seeded from inventory (supported-root scope)"
-    },
-    {
-      "key": "type|node_modules/superdoc/dist/super-editor/src/editors/v1/core/types/EditorConfig.d.ts|SuperDoc.<value>.new(config).documents[].provider.off(handler)(args)[]|...args: any[]",
-      "kind": "type",
-      "symbolPath": "SuperDoc.<value>.new(config).documents[].provider.off(handler)(args)[]",
-      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/types/EditorConfig.d.ts",
-      "line": 205,
-      "snippet": "...args: any[]",
-      "owner": "tier-5-other",
-      "rationale": "auto-seeded from inventory (supported-root scope)"
-    },
-    {
-      "key": "type|node_modules/superdoc/dist/super-editor/src/editors/v1/core/types/EditorConfig.d.ts|SuperDoc.<value>.new(config).documents[].provider.on(handler)(args)<0>|...args: any[]",
-      "kind": "type",
-      "symbolPath": "SuperDoc.<value>.new(config).documents[].provider.on(handler)(args)<0>",
-      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/types/EditorConfig.d.ts",
-      "line": 204,
-      "snippet": "...args: any[]",
-      "owner": "tier-5-other",
-      "rationale": "auto-seeded from inventory (supported-root scope)"
-    },
-    {
-      "key": "type|node_modules/superdoc/dist/super-editor/src/editors/v1/core/types/EditorConfig.d.ts|SuperDoc.<value>.new(config).documents[].provider.on(handler)(args)[]|...args: any[]",
-      "kind": "type",
-      "symbolPath": "SuperDoc.<value>.new(config).documents[].provider.on(handler)(args)[]",
-      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/types/EditorConfig.d.ts",
-      "line": 204,
-      "snippet": "...args: any[]",
-      "owner": "tier-5-other",
-      "rationale": "auto-seeded from inventory (supported-root scope)"
-    },
-    {
-      "key": "type|node_modules/superdoc/dist/super-editor/src/editors/v1/core/types/EditorConfig.d.ts|SuperDoc.provider.off(handler)(args)<0>|...args: any[]",
-      "kind": "type",
-      "symbolPath": "SuperDoc.provider.off(handler)(args)<0>",
-      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/types/EditorConfig.d.ts",
-      "line": 205,
-      "snippet": "...args: any[]",
-      "owner": "tier-5-other",
-      "rationale": "auto-seeded from inventory (supported-root scope)"
-    },
-    {
-      "key": "type|node_modules/superdoc/dist/super-editor/src/editors/v1/core/types/EditorConfig.d.ts|SuperDoc.provider.off(handler)(args)[]|...args: any[]",
-      "kind": "type",
-      "symbolPath": "SuperDoc.provider.off(handler)(args)[]",
-      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/types/EditorConfig.d.ts",
-      "line": 205,
-      "snippet": "...args: any[]",
-      "owner": "tier-5-other",
-      "rationale": "auto-seeded from inventory (supported-root scope)"
-    },
-    {
-      "key": "type|node_modules/superdoc/dist/super-editor/src/editors/v1/core/types/EditorConfig.d.ts|SuperDoc.provider.on(handler)(args)<0>|...args: any[]",
-      "kind": "type",
-      "symbolPath": "SuperDoc.provider.on(handler)(args)<0>",
-      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/types/EditorConfig.d.ts",
-      "line": 204,
-      "snippet": "...args: any[]",
-      "owner": "tier-5-other",
-      "rationale": "auto-seeded from inventory (supported-root scope)"
-    },
-    {
-      "key": "type|node_modules/superdoc/dist/super-editor/src/editors/v1/core/types/EditorConfig.d.ts|SuperDoc.provider.on(handler)(args)[]|...args: any[]",
-      "kind": "type",
-      "symbolPath": "SuperDoc.provider.on(handler)(args)[]",
-      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/types/EditorConfig.d.ts",
-      "line": 204,
-      "snippet": "...args: any[]",
-      "owner": "tier-5-other",
-      "rationale": "auto-seeded from inventory (supported-root scope)"
-    },
-    {
-      "key": "type|node_modules/superdoc/dist/super-editor/src/editors/v1/core/types/EditorConfig.d.ts|defineNode.<value>(config).editor.presentationEditor.attachCollaboration(__0).collaborationProvider.off(handler)(args)<0>|...args: any[]",
-      "kind": "type",
-      "symbolPath": "defineNode.<value>(config).editor.presentationEditor.attachCollaboration(__0).collaborationProvider.off(handler)(args)<0>",
-      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/types/EditorConfig.d.ts",
-      "line": 205,
-      "snippet": "...args: any[]",
-      "owner": "tier-5-other",
-      "rationale": "auto-seeded from inventory (supported-root scope)"
-    },
-    {
-      "key": "type|node_modules/superdoc/dist/super-editor/src/editors/v1/core/types/EditorConfig.d.ts|defineNode.<value>(config).editor.presentationEditor.attachCollaboration(__0).collaborationProvider.off(handler)(args)[]|...args: any[]",
-      "kind": "type",
-      "symbolPath": "defineNode.<value>(config).editor.presentationEditor.attachCollaboration(__0).collaborationProvider.off(handler)(args)[]",
-      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/types/EditorConfig.d.ts",
-      "line": 205,
-      "snippet": "...args: any[]",
-      "owner": "tier-5-other",
-      "rationale": "auto-seeded from inventory (supported-root scope)"
-    },
-    {
-      "key": "type|node_modules/superdoc/dist/super-editor/src/editors/v1/core/types/EditorConfig.d.ts|defineNode.<value>(config).editor.presentationEditor.attachCollaboration(__0).collaborationProvider.on(handler)(args)<0>|...args: any[]",
-      "kind": "type",
-      "symbolPath": "defineNode.<value>(config).editor.presentationEditor.attachCollaboration(__0).collaborationProvider.on(handler)(args)<0>",
-      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/types/EditorConfig.d.ts",
-      "line": 204,
-      "snippet": "...args: any[]",
-      "owner": "tier-5-other",
-      "rationale": "auto-seeded from inventory (supported-root scope)"
-    },
-    {
-      "key": "type|node_modules/superdoc/dist/super-editor/src/editors/v1/core/types/EditorConfig.d.ts|defineNode.<value>(config).editor.presentationEditor.attachCollaboration(__0).collaborationProvider.on(handler)(args)[]|...args: any[]",
-      "kind": "type",
-      "symbolPath": "defineNode.<value>(config).editor.presentationEditor.attachCollaboration(__0).collaborationProvider.on(handler)(args)[]",
-      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/types/EditorConfig.d.ts",
-      "line": 204,
-      "snippet": "...args: any[]",
-      "owner": "tier-5-other",
-      "rationale": "auto-seeded from inventory (supported-root scope)"
-    },
-    {
-      "key": "type|node_modules/superdoc/dist/super-editor/src/editors/v1/core/types/EditorConfig.d.ts|getSchemaIntrospection.<value>(options).editor.presentationEditor.attachCollaboration(__0).collaborationProvider.off(handler)(args)<0>|...args: any[]",
-      "kind": "type",
-      "symbolPath": "getSchemaIntrospection.<value>(options).editor.presentationEditor.attachCollaboration(__0).collaborationProvider.off(handler)(args)<0>",
-      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/types/EditorConfig.d.ts",
-      "line": 205,
-      "snippet": "...args: any[]",
-      "owner": "tier-5-other",
-      "rationale": "auto-seeded from inventory (supported-root scope)"
-    },
-    {
-      "key": "type|node_modules/superdoc/dist/super-editor/src/editors/v1/core/types/EditorConfig.d.ts|getSchemaIntrospection.<value>(options).editor.presentationEditor.attachCollaboration(__0).collaborationProvider.off(handler)(args)[]|...args: any[]",
-      "kind": "type",
-      "symbolPath": "getSchemaIntrospection.<value>(options).editor.presentationEditor.attachCollaboration(__0).collaborationProvider.off(handler)(args)[]",
-      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/types/EditorConfig.d.ts",
-      "line": 205,
-      "snippet": "...args: any[]",
-      "owner": "tier-5-other",
-      "rationale": "auto-seeded from inventory (supported-root scope)"
-    },
-    {
-      "key": "type|node_modules/superdoc/dist/super-editor/src/editors/v1/core/types/EditorConfig.d.ts|getSchemaIntrospection.<value>(options).editor.presentationEditor.attachCollaboration(__0).collaborationProvider.on(handler)(args)<0>|...args: any[]",
-      "kind": "type",
-      "symbolPath": "getSchemaIntrospection.<value>(options).editor.presentationEditor.attachCollaboration(__0).collaborationProvider.on(handler)(args)<0>",
-      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/types/EditorConfig.d.ts",
-      "line": 204,
-      "snippet": "...args: any[]",
-      "owner": "tier-5-other",
-      "rationale": "auto-seeded from inventory (supported-root scope)"
-    },
-    {
-      "key": "type|node_modules/superdoc/dist/super-editor/src/editors/v1/core/types/EditorConfig.d.ts|getSchemaIntrospection.<value>(options).editor.presentationEditor.attachCollaboration(__0).collaborationProvider.on(handler)(args)[]|...args: any[]",
-      "kind": "type",
-      "symbolPath": "getSchemaIntrospection.<value>(options).editor.presentationEditor.attachCollaboration(__0).collaborationProvider.on(handler)(args)[]",
-      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/types/EditorConfig.d.ts",
-      "line": 204,
-      "snippet": "...args: any[]",
-      "owner": "tier-5-other",
-      "rationale": "auto-seeded from inventory (supported-root scope)"
-    },
-    {
       "key": "type|node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/index.d.ts|getRichTextExtensions.<value>(args)<0>|...args: any[]",
       "kind": "type",
       "symbolPath": "getRichTextExtensions.<value>(args)<0>",
@@ -958,7 +638,7 @@
       "kind": "type",
       "symbolPath": "SuperDoc.toolbar.controller.getSnapshot=>return.context.target.commands<1>(args)<0>",
       "file": "node_modules/superdoc/dist/super-editor/src/headless-toolbar/types.d.ts",
-      "line": 132,
+      "line": 146,
       "snippet": "...args: any[]",
       "owner": "tier-5-other",
       "rationale": "auto-seeded from inventory (supported-root scope)"
@@ -968,7 +648,7 @@
       "kind": "type",
       "symbolPath": "SuperDoc.toolbar.controller.getSnapshot=>return.context.target.commands<1>(args)[]",
       "file": "node_modules/superdoc/dist/super-editor/src/headless-toolbar/types.d.ts",
-      "line": 132,
+      "line": 146,
       "snippet": "...args: any[]",
       "owner": "tier-5-other",
       "rationale": "auto-seeded from inventory (supported-root scope)"
