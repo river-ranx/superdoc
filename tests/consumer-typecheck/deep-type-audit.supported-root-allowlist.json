@@ -1,7 +1,7 @@
 {
   "version": 1,
   "scope": "supported-root",
-  "generatedAt": "2026-05-21T18:04:04.699Z",
+  "generatedAt": "2026-05-21T18:52:37.197Z",
   "entries": [
     {
       "key": "index|node_modules/superdoc/dist/super-editor/src/editors/v1/core/Editor.d.ts|Editor.<value>.new(options)<0>.extensions[].editor.converter[string]|converter: SuperConverter;",
@@ -184,26 +184,6 @@
       "rationale": "auto-seeded from inventory (supported-root scope)"
     },
     {
-      "key": "type|node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts|SuperDoc.<value>.new(config).modules.comments.permissionResolver(params).superdoc.toolbar.toolbar<14>|toolbar: import('vue').ComponentPublicInstance<{}, {}, {}, {}, {}, {}, {}, {}, false, import('vue').ComponentOptionsBase<any, any, any, any, any, any, any, any, any, {}, {}, string, {}, {}, {}, string",
-      "kind": "type",
-      "symbolPath": "SuperDoc.<value>.new(config).modules.comments.permissionResolver(params).superdoc.toolbar.toolbar<14>",
-      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts",
-      "line": 189,
-      "snippet": "toolbar: import('vue').ComponentPublicInstance<{}, {}, {}, {}, {}, {}, {}, {}, false, import('vue').ComponentOptionsBase<any, any, any, any, any, any, any, any, any, {}, {}, string, {}, {}, {}, string",
-      "owner": "tier-2-toolbar",
-      "rationale": "auto-seeded from inventory (supported-root scope)"
-    },
-    {
-      "key": "type|node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts|SuperDoc.toolbar.toolbar<14>|toolbar: import('vue').ComponentPublicInstance<{}, {}, {}, {}, {}, {}, {}, {}, false, import('vue').ComponentOptionsBase<any, any, any, any, any, any, any, any, any, {}, {}, string, {}, {}, {}, string",
-      "kind": "type",
-      "symbolPath": "SuperDoc.toolbar.toolbar<14>",
-      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts",
-      "line": 189,
-      "snippet": "toolbar: import('vue').ComponentPublicInstance<{}, {}, {}, {}, {}, {}, {}, {}, false, import('vue').ComponentOptionsBase<any, any, any, any, any, any, any, any, any, {}, {}, string, {}, {}, {}, string",
-      "owner": "tier-2-toolbar",
-      "rationale": "auto-seeded from inventory (supported-root scope)"
-    },
-    {
       "key": "type|node_modules/superdoc/dist/super-editor/src/editors/v1/core/Node.d.ts|Editor.<value>.new(options)<0>.extensions[].config.renderDOM<1>|renderDOM?: MaybeGetter<DOMOutputSpec>;",
       "kind": "type",
       "symbolPath": "Editor.<value>.new(options)<0>.extensions[].config.renderDOM<1>",
@@ -260,26 +240,6 @@
       "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/Node.d.ts",
       "line": 49,
       "snippet": "renderDOM?: MaybeGetter<DOMOutputSpec>;",
-      "owner": "tier-5-other",
-      "rationale": "auto-seeded from inventory (supported-root scope)"
-    },
-    {
-      "key": "type|node_modules/superdoc/dist/superdoc/src/core/SuperDoc.d.ts|SuperDoc.<value>.new(config).modules.comments.permissionResolver(params).superdoc.app<0>|app: import('vue').App;",
-      "kind": "type",
-      "symbolPath": "SuperDoc.<value>.new(config).modules.comments.permissionResolver(params).superdoc.app<0>",
-      "file": "node_modules/superdoc/dist/superdoc/src/core/SuperDoc.d.ts",
-      "line": 99,
-      "snippet": "app: import('vue').App;",
-      "owner": "tier-5-other",
-      "rationale": "auto-seeded from inventory (supported-root scope)"
-    },
-    {
-      "key": "type|node_modules/superdoc/dist/superdoc/src/core/SuperDoc.d.ts|SuperDoc.app<0>|app: import('vue').App;",
-      "kind": "type",
-      "symbolPath": "SuperDoc.app<0>",
-      "file": "node_modules/superdoc/dist/superdoc/src/core/SuperDoc.d.ts",
-      "line": 99,
-      "snippet": "app: import('vue').App;",
       "owner": "tier-5-other",
       "rationale": "auto-seeded from inventory (supported-root scope)"
     }
