@@ -541,6 +541,27 @@ const scenarios = [
     files: ['src/superdoc-stores-private.ts'],
     mustPass: true,
   },
+  // SD-3213 EventEmitter drain: pin both sides of the intended contract.
+  // Known typed events keep precise payloads (commentsLoaded.comments
+  // is Comment[]); untyped events fall through to unknown[] not any[].
+  {
+    name: 'bundler / event-emitter contract (SD-3213)',
+    module: 'ESNext',
+    moduleResolution: 'bundler',
+    skipLibCheck: true,
+    strict: true,
+    files: ['src/event-emitter-contract.ts'],
+    mustPass: true,
+  },
+  {
+    name: 'node16 / event-emitter contract (SD-3213)',
+    module: 'Node16',
+    moduleResolution: 'node16',
+    skipLibCheck: true,
+    strict: true,
+    files: ['src/event-emitter-contract.ts'],
+    mustPass: true,
+  },
   // SD-2867 phase B: SuperDoc.canPerformPermission forwards `comment` and
   // `trackedChange` to isAllowed() unchanged, so the public contract must
   // accept the wide payloads the editor's permission helper produces
