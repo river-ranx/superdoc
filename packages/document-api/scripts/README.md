@@ -19,9 +19,9 @@ Three buckets:
 
 | Bucket | Scripts | Notes |
 | --- | --- | --- |
-| **Per-PR (wired into `docapi:check`)** | `check-contract-parity`, `check-contract-outputs`, `check-examples` | Run on every doc-api PR via `ci-document-api.yml`. |
+| **Per-PR (wired into `docapi:check`)** | `check-contract-parity`, `check-contract-outputs`, `check-examples`, `check-overview-alignment` | Run on every doc-api PR via `ci-document-api.yml`. |
 | **Focused / manual** | `check-stable-schemas`, `check-agent-artifacts`, `check-generated-reference-docs` | Targeted local-debug variants of `check-contract-outputs` (the per-PR superset). Useful when iterating on one artifact area without re-running the full superset. Not wired into CI by design. |
-| **Per-PR intent, blocked by drift** | `check-doc-coverage`, `check-overview-alignment` | Designed as docs-quality gates but currently fail on `main` due to pre-existing content drift. Tracked separately; wire after the drift is fixed. |
+| **Per-PR intent, blocked by design question** | `check-doc-coverage` | Currently reports 348 missing operation README sections. The binary check may be enforcing the wrong rule (per-operation README sections vs generated reference docs). Tracked in SD-3261; needs a docs-model decision before wiring. |
 
 ## Manual vs generated boundaries
 

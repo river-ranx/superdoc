@@ -80,7 +80,7 @@
     "generate:all": "node scripts/generate-all.mjs",
     "docapi:all": "pnpm run generate:all && pnpm exec tsc -b packages/document-api && pnpm --prefix apps/cli run build && pnpm --prefix packages/sdk run build:node",
     "docapi:sync": "pnpm exec tsx packages/document-api/scripts/generate-contract-outputs.ts",
-    "docapi:check": "pnpm exec tsx packages/document-api/scripts/check-contract-parity.ts && pnpm exec tsx packages/document-api/scripts/check-contract-outputs.ts && pnpm exec tsx packages/document-api/scripts/check-examples.ts",
+    "docapi:check": "pnpm exec tsx packages/document-api/scripts/check-contract-parity.ts && pnpm exec tsx packages/document-api/scripts/check-contract-outputs.ts && pnpm exec tsx packages/document-api/scripts/check-examples.ts && pnpm exec tsx packages/document-api/scripts/check-overview-alignment.ts",
     "docapi:sync:check": "pnpm run docapi:sync && pnpm run docapi:check",
     "test:cli": "pnpm --prefix apps/cli run test",
     "cli:prepare": "pnpm run test:cli && pnpm --prefix apps/cli run build:prepublish",
