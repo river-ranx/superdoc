@@ -8,12 +8,15 @@ import type {
   ToolbarSnapshot,
 } from '../headless-toolbar/types.js';
 import type {
+  AnchoredMetadataResolveInfo,
   CommentsListResult,
   ContentControlInfo,
   ContentControlsListResult,
   Receipt,
   ScrollIntoViewInput,
   ScrollIntoViewOutput,
+  SelectionTarget,
+  TextTarget,
   TrackChangesListResult,
 } from '@superdoc/document-api';
 import { collectEntityHitsFromChain } from './entity-at.js';
@@ -38,6 +41,7 @@ import type {
   DocumentSlice,
   DynamicCommandHandle,
   EqualityFn,
+  MetadataHandle,
   TrackChangesHandle,
   TrackChangesItem,
   TrackChangesSlice,
@@ -214,6 +218,36 @@ function deepFreeze<T>(value: T): T {
 }
 
 /**
+ * SD-3213g: single documented bridge between `SuperDocLike` and
+ * `resolveToolbarSources`'s `ToolbarHostShape`. The cast lives here so
+ * callers don't repeat `superdoc as never` at every site.
+ *
+ * Why the cast is intentional, not type-system noise:
+ *
+ * - `SuperDocLike` is intentionally stub-friendly. Its `activeEditor`
+ *   is `SuperDocEditorLike | null` (a UI-level structural type) so
+ *   consumer tests can pass narrow handcrafted hosts without pulling
+ *   in the full `Editor` graph.
+ * - At runtime, a real `SuperDoc` instance's `activeEditor` is always
+ *   a real `Editor` that satisfies `ToolbarHostShape` structurally.
+ *   The two types describe the same runtime value at different
+ *   abstraction levels.
+ * - Custom commands (and other UI paths) require **late-bound** routing
+ *   resolved at execute time, not at controller construction; the
+ *   cached `toolbarSnapshot.context` only reflects state at the last
+ *   subscription event. So fresh `resolveToolbarSources` calls are
+ *   load-bearing for the `'execute receives the routed editor
+ *   late-bound'` contract pinned in `custom-commands.test.ts`.
+ *
+ * Use this helper anywhere the UI needs a fresh resolver walk. Do not
+ * call `resolveToolbarSources(superdoc as never)` elsewhere in this
+ * file.
+ */
+function resolveFreshToolbarSources(superdoc: SuperDocUIOptions['superdoc']) {
+  return resolveToolbarSources(superdoc as never);
+}
+
+/**
  * Resolve the **routed** editor — the body, header, footer, or note
  * editor that PresentationEditor currently routes input/selection to.
  * Falls back to `superdoc.activeEditor` when no presentation layer is
@@ -226,7 +260,7 @@ function deepFreeze<T>(value: T): T {
  */
 function resolveRoutedEditor(superdoc: SuperDocUIOptions['superdoc']): SuperDocEditorLike | null {
   try {
-    const sources = resolveToolbarSources(superdoc as never);
+    const sources = resolveFreshToolbarSources(superdoc);
     return (sources.activeEditor as unknown as SuperDocEditorLike | null) ?? null;
   } catch {
     return (superdoc.activeEditor ?? null) as SuperDocEditorLike | null;
@@ -260,7 +294,7 @@ function resolvePresentationEditor(superdoc: SuperDocUIOptions['superdoc']): {
   off?: (event: string, handler: (...args: unknown[]) => void) => unknown;
 } | null {
   try {
-    const sources = resolveToolbarSources(superdoc as never);
+    const sources = resolveFreshToolbarSources(superdoc);
     return (sources.presentationEditor as never) ?? null;
   } catch {
     return null;
@@ -335,7 +369,7 @@ function readActiveStoryLocator(
 ): import('@superdoc/document-api').StoryLocator | null {
   let presentation: { getActiveStoryLocator?: () => unknown } | null = null;
   try {
-    const sources = resolveToolbarSources(superdoc as never);
+    const sources = resolveFreshToolbarSources(superdoc);
     presentation = (sources.presentationEditor as never) ?? null;
   } catch {
     return null;
@@ -394,6 +428,11 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
   // same selector substrate as the rest of the controller. Per-command
   // state derivers in the registry are wrapped to default to disabled
   // on throw, so a partial editor never wedges snapshot construction.
+  // SD-3213g: documented bridge cast. Same rationale as the comment on
+  // `resolveFreshToolbarSources` above: SuperDocLike is intentionally
+  // stub-friendly, runtime SuperDoc.activeEditor is a real Editor that
+  // satisfies the host contract structurally. Concentrated here so the
+  // call site stays an obvious boundary, not scattered casts elsewhere.
   const toolbarController: HeadlessToolbarController = createHeadlessToolbar({
     superdoc: superdoc as unknown as HeadlessToolbarSuperdocHost,
     // Pass the full registry so snapshot.commands is populated for
@@ -504,9 +543,7 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
       return;
     }
     try {
-      const result = list.call(editor.doc!.contentControls, undefined) as
-        | ContentControlsListResult
-        | undefined;
+      const result = list.call(editor.doc!.contentControls, undefined) as ContentControlsListResult | undefined;
       contentControlsListCache = result ?? EMPTY_CONTENT_CONTROLS_LIST;
     } catch {
       // See refreshCommentsListCache: prefer empty over leaking the
@@ -575,8 +612,7 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     const selectedNode = selection.node;
     if (
       selectedNode &&
-      (selectedNode.type?.name === 'structuredContent' ||
-        selectedNode.type?.name === 'structuredContentBlock')
+      (selectedNode.type?.name === 'structuredContent' || selectedNode.type?.name === 'structuredContentBlock')
     ) {
       const id = selectedNode.attrs?.id;
       if (typeof id === 'string' && id.length > 0 && validIds.has(id)) {
@@ -589,10 +625,7 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     const anchor = selection.$anchor;
     if (anchor && typeof anchor.depth === 'number' && typeof anchor.node === 'function') {
       for (let d = anchor.depth; d >= 0; d -= 1) {
-        const node = anchor.node(d) as
-          | { type?: { name?: string }; attrs?: { id?: unknown } }
-          | null
-          | undefined;
+        const node = anchor.node(d) as { type?: { name?: string }; attrs?: { id?: unknown } } | null | undefined;
         const typeName = node?.type?.name;
         if (typeName !== 'structuredContent' && typeName !== 'structuredContentBlock') continue;
         const id = node?.attrs?.id;
@@ -2217,6 +2250,107 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     },
   };
 
+  // Resolve a metadata id (= the SDT's w:tag) to the SDT's content-
+  // control id, reading from the same cached slice contentControls.get
+  // uses. The match is on `properties.tag`, which is the value passed
+  // to `editor.doc.metadata.attach` (or the auto-generated id when the
+  // caller omits one). Globally unique within a document — attach
+  // rejects duplicate ids — so the first match is the only match.
+  const findContentControlIdByMetadataId = (metadataId: string): string | null => {
+    for (const item of contentControlsListCache.items) {
+      if (item.properties?.tag === metadataId) return item.id;
+    }
+    return null;
+  };
+
+  // Convert a same-block or cross-block SelectionTarget into the
+  // TextTarget shape `ui.viewport.scrollIntoView` accepts. Returns
+  // null when the selection contains a `nodeEdge` endpoint, which has
+  // no clean TextTarget representation — callers map that to a
+  // failure rather than guessing a fallback position.
+  const selectionTargetToTextTarget = (target: SelectionTarget): TextTarget | null => {
+    const { start, end } = target;
+    if (start.kind !== 'text' || end.kind !== 'text') return null;
+    if (start.blockId === end.blockId) {
+      return {
+        kind: 'text',
+        segments: [{ blockId: start.blockId, range: { start: start.offset, end: end.offset } }],
+        ...(target.story ? { story: target.story } : {}),
+      };
+    }
+    // Cross-block: anchored-metadata v1 attaches over same-block text
+    // ranges only, so this branch is defensive. Represent as two
+    // collapsed segments at the start and end points;
+    // `scrollRangeIntoView` walks the segments in document order and
+    // scrolls to the first one, so the effect is "scroll to the start
+    // endpoint" — accepted as the defensive fallback rather than
+    // approximating a bounding box across blocks. If a future metadata
+    // path produces a real cross-block anchor we should revisit this
+    // (likely by returning null and surfacing the failure to the caller).
+    return {
+      kind: 'text',
+      segments: [
+        { blockId: start.blockId, range: { start: start.offset, end: start.offset } },
+        { blockId: end.blockId, range: { start: end.offset, end: end.offset } },
+      ],
+      ...(target.story ? { story: target.story } : {}),
+    };
+  };
+
+  // Confirm `id` actually maps to a stored metadata payload before
+  // we trust the cc.items tag→nodeId map. An imported DOCX can carry
+  // foreign inline content controls whose `w:tag` happens to match a
+  // metadata id; without this gate, a tag-only lookup would return
+  // the foreign control's geometry. The source path
+  // (`editor.doc.metadata.resolve`) was tightened to require both
+  // halves of the anchor (SDT + payload) to agree; this defensive
+  // gate keeps `ui.metadata.*` symmetrical for direct callers that
+  // skip `resolve`.
+  const hasMetadataPayload = (id: string): boolean => {
+    const editor = superdoc.activeEditor as SuperDocEditorLike | undefined;
+    const getFn = editor?.doc?.metadata?.get;
+    if (typeof getFn !== 'function') return false;
+    // `!= null` (not `!== null`) so a stub or adapter returning
+    // `undefined` for an unknown id is treated as absent — production
+    // `metadata.get` returns `null`, but the structural type permits
+    // either and we want both paths to gate the same way.
+    return getFn.call(editor!.doc!.metadata!, { id }) != null;
+  };
+
+  const metadata: MetadataHandle = {
+    getRect({ id }: { id: string }) {
+      if (!id) return { success: false, reason: 'invalid-target' };
+      if (!hasMetadataPayload(id)) return { success: false, reason: 'unresolved' };
+      const ccId = findContentControlIdByMetadataId(id);
+      if (ccId === null) return { success: false, reason: 'unresolved' };
+      return contentControls.getRect({ id: ccId });
+    },
+    async scrollIntoView({
+      id,
+      block,
+      behavior,
+    }: {
+      id: string;
+      block?: ScrollIntoViewInput['block'];
+      behavior?: ScrollIntoViewInput['behavior'];
+    }): Promise<ScrollIntoViewOutput> {
+      if (!id) return { success: false };
+      if (!hasMetadataPayload(id)) return { success: false };
+      const editor = superdoc.activeEditor as SuperDocEditorLike | undefined;
+      const resolveFn = editor?.doc?.metadata?.resolve;
+      if (typeof resolveFn !== 'function') return { success: false };
+      const info = resolveFn.call(editor!.doc!.metadata!, { id }) as AnchoredMetadataResolveInfo | null;
+      if (!info) return { success: false };
+      const textTarget = selectionTargetToTextTarget(info.target);
+      if (!textTarget) return { success: false };
+      return viewport.scrollIntoView({
+        target: textTarget,
+        ...(block !== undefined ? { block } : {}),
+        ...(behavior !== undefined ? { behavior } : {}),
+      });
+    },
+  };
+
   const destroy = () => {
     if (destroyed) return;
     destroyed = true;
@@ -2253,6 +2387,7 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     comments,
     trackChanges,
     contentControls,
+    metadata,
     selection,
     viewport,
     document,
