@@ -72,6 +72,7 @@ Do not hand-edit `COMMAND_CATALOG`, `OPERATION_MEMBER_PATH_MAP`, `OPERATION_REFE
 - `pnpm test` - unit tests
 - `pnpm dev` - dev server from `examples/`
 - `pnpm run generate:all` - regenerate schemas, SDK clients, tool catalogs, reference docs
+- `pnpm check:public-contract` - validate the published public type contract: wraps build + strict supported-root audit + consumer typecheck matrix. ~3 min. Scoped to the public type surface, not a replacement for `pnpm test` or `pnpm build`. SD-3256.
 
 ## Testing
 
