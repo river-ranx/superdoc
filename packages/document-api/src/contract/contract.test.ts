@@ -8,6 +8,26 @@ import { PUBLIC_MUTATION_STEP_OP_IDS, STEP_OP_CATALOG } from './step-op-catalog.
 import { OPERATION_IDS, PRE_APPLY_THROW_CODES, isValidOperationIdFormat } from './types.js';
 import { Z_ORDER_RELATIVE_HEIGHT_MAX, Z_ORDER_RELATIVE_HEIGHT_MIN } from '../images/z-order.js';
 
+const TRACK_CHANGES_DECIDE_RECEIPT_FAILURE_CODES = [
+  'NO_OP',
+  'INVALID_TARGET',
+  'TARGET_NOT_FOUND',
+  'CAPABILITY_UNAVAILABLE',
+  'PERMISSION_DENIED',
+  'PRECONDITION_FAILED',
+  'COMMENT_CASCADE_PARTIAL',
+] as const;
+
+function expectArrayToIncludeValues(
+  actual: readonly string[] | undefined,
+  expected: readonly string[],
+  label: string,
+): void {
+  expect(Array.isArray(actual), `${label} should be an array`).toBe(true);
+  const missing = expected.filter((code) => !actual!.includes(code));
+  expect(missing, `${label} missing expected codes`).toEqual([]);
+}
+
 describe('document-api contract catalog', () => {
   it('keeps operation ids explicit and format-valid', () => {
     expect([...new Set(OPERATION_IDS)]).toHaveLength(OPERATION_IDS.length);
@@ -210,6 +230,58 @@ describe('document-api contract catalog', () => {
 
     expect(COMMAND_CATALOG.insert.possibleFailureCodes).toContain('UNSUPPORTED_ENVIRONMENT');
     expect(insertFailureSchema.properties?.failure?.properties?.code?.enum).toContain('UNSUPPORTED_ENVIRONMENT');
+  });
+
+  it('declares every trackChanges.decide receipt failure code in command metadata', () => {
+    expectArrayToIncludeValues(
+      COMMAND_CATALOG['trackChanges.decide'].possibleFailureCodes,
+      TRACK_CHANGES_DECIDE_RECEIPT_FAILURE_CODES,
+      'trackChanges.decide possibleFailureCodes',
+    );
+  });
+
+  it('includes every trackChanges.decide receipt failure code in the generated failure schema', () => {
+    const schemas = buildInternalContractSchemas();
+    const decideFailureSchema = schemas.operations['trackChanges.decide'].failure as {
+      properties?: {
+        failure?: {
+          properties?: {
+            code?: {
+              enum?: string[];
+            };
+          };
+        };
+      };
+    };
+
+    expectArrayToIncludeValues(
+      decideFailureSchema.properties?.failure?.properties?.code?.enum,
+      TRACK_CHANGES_DECIDE_RECEIPT_FAILURE_CODES,
+      'trackChanges.decide failure schema code enum',
+    );
+  });
+
+  it('includes every trackChanges.decide receipt failure code in the generated output schema', () => {
+    const schemas = buildInternalContractSchemas();
+    const decideOutputSchema = schemas.operations['trackChanges.decide'].output as {
+      oneOf?: Array<{
+        properties?: {
+          failure?: {
+            properties?: {
+              code?: {
+                enum?: string[];
+              };
+            };
+          };
+        };
+      }>;
+    };
+
+    expectArrayToIncludeValues(
+      decideOutputSchema.oneOf?.[1]?.properties?.failure?.properties?.code?.enum,
+      TRACK_CHANGES_DECIDE_RECEIPT_FAILURE_CODES,
+      'trackChanges.decide output schema failure code enum',
+    );
   });
 
   it('includes global.history in capabilities.get output schema', () => {

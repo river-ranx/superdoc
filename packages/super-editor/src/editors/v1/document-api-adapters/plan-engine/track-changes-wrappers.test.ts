@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Editor } from '../../core/Editor.js';
-import type { StoryLocator } from '@superdoc/document-api';
+import { COMMAND_CATALOG, type StoryLocator } from '@superdoc/document-api';
 
 const mocks = vi.hoisted(() => ({
   checkRevision: vi.fn(),
@@ -40,6 +40,10 @@ import {
 } from './track-changes-wrappers.js';
 
 const footnoteStory: StoryLocator = { kind: 'story', storyType: 'footnote', noteId: '5' };
+
+function expectTrackChangesDecideReceiptCodeDeclared(code: string): void {
+  expect(COMMAND_CATALOG['trackChanges.decide'].possibleFailureCodes).toContain(code);
+}
 
 function makeEditor(commands: Record<string, unknown> = {}): Editor {
   return {
@@ -332,5 +336,58 @@ describe('track-changes-wrappers revision guard', () => {
         },
       },
     });
+    expectTrackChangesDecideReceiptCodeDeclared('TARGET_NOT_FOUND');
+  });
+
+  it('keeps precondition range decision receipt failures declared in document-api metadata', () => {
+    const acceptTrackedChangesBetween = vi.fn(() => false);
+    const hostEditor = {
+      options: { trackedChanges: {} },
+      commands: { acceptTrackedChangesBetween },
+      storage: {
+        trackChanges: {
+          lastDecisionFailure: {
+            code: 'PRECONDITION_FAILED',
+            message: 'tracked review graph has invariant errors before decision.',
+            details: { diagnostics: [{ code: 'INV_REPLACEMENT_MISSING_SIDE' }] },
+          },
+        },
+      },
+      state: makeRangeDecisionEditor({}).state,
+    } as unknown as Editor;
+
+    const receipt = trackChangesDecideRangeWrapper(hostEditor, {
+      decision: 'accept',
+      range: { kind: 'text', segments: [{ blockId: 'p1', range: { start: 2, end: 4 } }] },
+    });
+
+    expect(receipt).toEqual({
+      success: false,
+      failure: {
+        code: 'PRECONDITION_FAILED',
+        message: 'tracked review graph has invariant errors before decision.',
+        details: { diagnostics: [{ code: 'INV_REPLACEMENT_MISSING_SIDE' }] },
+      },
+    });
+    expectTrackChangesDecideReceiptCodeDeclared('PRECONDITION_FAILED');
+  });
+
+  it('keeps unresolved range target receipt failures declared in document-api metadata', () => {
+    const hostEditor = makeRangeDecisionEditor({ acceptTrackedChangesBetween: vi.fn(() => true) });
+
+    const receipt = trackChangesDecideRangeWrapper(hostEditor, {
+      decision: 'accept',
+      range: { kind: 'text', segments: [{ blockId: 'missing', range: { start: 0, end: 1 } }] },
+    });
+
+    expect(receipt).toEqual({
+      success: false,
+      failure: {
+        code: 'INVALID_TARGET',
+        message: 'trackChanges.decide range could not be resolved to a contiguous PM coordinate.',
+        details: { range: { kind: 'text', segments: [{ blockId: 'missing', range: { start: 0, end: 1 } }] } },
+      },
+    });
+    expectTrackChangesDecideReceiptCodeDeclared('INVALID_TARGET');
   });
 });
