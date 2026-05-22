@@ -6,6 +6,7 @@ export {
   hasExplicitSdtContainerKey,
 } from '@superdoc/contracts';
 import { getSdtContainerKey, getSdtContainerMetadata } from '@superdoc/contracts';
+import { DOM_CLASS_NAMES } from '../constants.js';
 
 export type SdtContainerConfig = {
   className: string;
@@ -64,7 +65,7 @@ export function getSdtContainerConfig(sdt: SdtMetadata | null | undefined): SdtC
     return {
       className: 'superdoc-structured-content-block',
       labelText: sdt.alias ?? 'Structured content',
-      labelClassName: 'superdoc-structured-content__label superdoc-structured-content-block__label',
+      labelClassName: `${DOM_CLASS_NAMES.BLOCK_SDT_LABEL} superdoc-structured-content-block__label`,
       isStart: true,
       isEnd: true,
     };
