@@ -208,6 +208,35 @@ describe('comments-store', () => {
     expect(store.getComment(undefined)).toBeNull();
   });
 
+  it('resolves rendered tracked-change aliases by equivalent position', () => {
+    const canonicalAnchorKey = 'tc::hf:part:rId8::word:trackInsert:101';
+    const renderedAnchorKey = 'tc::hf:part:rId8::rendered-uuid';
+    const comment = {
+      commentId: 'word:trackInsert:101',
+      trackedChange: true,
+      trackedChangeAnchorKey: canonicalAnchorKey,
+    };
+    store.commentsList = [comment];
+    store.editorCommentPositions = {
+      [canonicalAnchorKey]: {
+        key: canonicalAnchorKey,
+        threadId: 'word:trackInsert:101',
+        kind: 'trackedChange',
+        storyKey: 'hf:part:rId8',
+        bounds: { top: 49, left: 199, bottom: 69, right: 267, width: 68, height: 20 },
+      },
+      [renderedAnchorKey]: {
+        key: renderedAnchorKey,
+        threadId: 'rendered-uuid',
+        kind: 'trackedChange',
+        storyKey: 'hf:part:rId8',
+        bounds: { top: 47, left: 188, bottom: 69, right: 300, width: 112, height: 22 },
+      },
+    };
+
+    expect(store.getComment('rendered-uuid')).toEqual(comment);
+  });
+
   it('prefers tracked-change anchor keys for position lookup and alias resolution', () => {
     const comment = {
       commentId: 'tc-1',

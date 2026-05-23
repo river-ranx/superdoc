@@ -101,6 +101,77 @@ export const useCommentsStore = defineStore('comments', () => {
     }
   };
 
+  const normalizeCommentId = (id) => (id === undefined || id === null ? null : String(id));
+
+  const getPositionEntryByAlias = (id) => {
+    const normalizedId = normalizeCommentId(id);
+    if (!normalizedId) return { key: null, entry: null };
+
+    const positions = editorCommentPositions.value || {};
+    if (positions[normalizedId] !== undefined) {
+      return { key: normalizedId, entry: positions[normalizedId] };
+    }
+
+    for (const [key, entry] of Object.entries(positions)) {
+      const entryKey = normalizeCommentId(entry?.key);
+      const threadId = normalizeCommentId(entry?.threadId);
+      if (entryKey === normalizedId || threadId === normalizedId) {
+        return { key, entry };
+      }
+    }
+
+    return { key: null, entry: null };
+  };
+
+  const boundsOverlap = (a, b) => {
+    if (!a || !b) return false;
+    const left = Math.max(Number(a.left), Number(b.left));
+    const right = Math.min(Number(a.right), Number(b.right));
+    const top = Math.max(Number(a.top), Number(b.top));
+    const bottom = Math.min(Number(a.bottom), Number(b.bottom));
+    return [left, right, top, bottom].every(Number.isFinite) && right > left && bottom > top;
+  };
+
+  const isEquivalentTrackedChangePosition = (candidate, existing) => {
+    if (!candidate || !existing) return false;
+    if (candidate.kind !== 'trackedChange' || existing.kind !== 'trackedChange') return false;
+    if (candidate.storyKey && existing.storyKey && candidate.storyKey !== existing.storyKey) return false;
+    const candidatePage = Number(candidate.pageIndex);
+    const existingPage = Number(existing.pageIndex);
+    if (Number.isFinite(candidatePage) && Number.isFinite(existingPage) && candidatePage !== existingPage) {
+      return false;
+    }
+
+    if (boundsOverlap(candidate.bounds, existing.bounds)) return true;
+
+    const candidateStart = Number(candidate.start);
+    const candidateEnd = Number(candidate.end);
+    const existingStart = Number(existing.start);
+    const existingEnd = Number(existing.end);
+    return (
+      [candidateStart, candidateEnd, existingStart, existingEnd].every(Number.isFinite) &&
+      candidateStart === existingStart &&
+      candidateEnd === existingEnd
+    );
+  };
+
+  const getTrackedChangeCommentByPositionAlias = (id) => {
+    const { entry: targetEntry } = getPositionEntryByAlias(id);
+    if (!targetEntry) return null;
+
+    const matches = commentsList.value.filter((comment) => {
+      if (!comment?.trackedChange) return false;
+
+      const aliases = [comment.trackedChangeAnchorKey, comment.commentId, comment.importedId];
+      return aliases.some((alias) => {
+        const { entry } = getPositionEntryByAlias(alias);
+        return isEquivalentTrackedChangePosition(targetEntry, entry);
+      });
+    });
+
+    return matches.length === 1 ? matches[0] : null;
+  };
+
   /**
    * Get a comment by either ID or imported ID
    *
@@ -109,7 +180,10 @@ export const useCommentsStore = defineStore('comments', () => {
    */
   const getComment = (id) => {
     if (id === undefined || id === null) return null;
-    return commentsList.value.find((c) => c.commentId == id || c.importedId == id);
+    const directMatch = commentsList.value.find(
+      (c) => c.commentId == id || c.importedId == id || c.trackedChangeAnchorKey == id,
+    );
+    return directMatch || getTrackedChangeCommentByPositionAlias(id);
   };
 
   const getThreadParent = (comment) => {
@@ -165,8 +239,6 @@ export const useCommentsStore = defineStore('comments', () => {
     if (importedId && positions[importedId]) return importedId;
     return trackedChangeAnchorKey ?? commentId ?? importedId ?? null;
   };
-
-  const normalizeCommentId = (id) => (id === undefined || id === null ? null : String(id));
 
   // Comments can be referenced by the imported DOCX id, the internal commentId, or a raw id
   // coming from UI/editor events. Normalize everything to strings and keep all aliases so every

@@ -115,6 +115,20 @@ describe('CommentHeader.vue', () => {
     );
   });
 
+  it('allows the anonymous default user to edit comments created in the same session', () => {
+    const wrapper = mountHeader({
+      currentUser: { id: null, email: null, name: 'Default SuperDoc user' },
+      comment: makeComment({
+        creatorId: null,
+        creatorEmail: null,
+        creatorName: 'Default SuperDoc user',
+        getCommentUser: () => ({ id: null, name: 'Default SuperDoc user', email: null }),
+      }),
+    });
+
+    expect(wrapper.find('.options-labels').text()).toContain('Edit');
+  });
+
   it('keeps the imported tag for a different actor even when emails match', () => {
     const wrapper = mountHeader({
       currentUser: { id: 'bob-id', email: 'shared@example.com', name: 'Bob' },

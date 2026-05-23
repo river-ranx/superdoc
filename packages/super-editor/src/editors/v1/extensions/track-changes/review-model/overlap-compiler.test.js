@@ -498,6 +498,33 @@ describe('overlap-compiler: text-delete', () => {
     expect(graph.changes.size).toBe(1);
     expect(Array.from(graph.changes.values())[0].id).toBe(delId);
   });
+
+  it('preserves another user deletion when plain-deleting through it', () => {
+    const delId = 'del-bob';
+    const { state } = stateFromTrackedSpans({
+      schema,
+      spans: [
+        { text: 'Hi ' },
+        { text: 'gone', marks: [deleteMark({ id: delId, authorEmail: BOB.email, date: FIXED_DATE })] },
+        { text: ' live' },
+      ],
+    });
+    const intent = makeTextDeleteIntent({ from: 4, to: 10, user: ALICE, date: FIXED_DATE, source: 'native' });
+    const result = runCompile({ state, intent });
+    expect(result.ok).toBe(true);
+
+    const graph = buildReviewGraph({ state: { doc: result.tr.doc } });
+    const deletedChanges = Array.from(graph.changes.values()).filter(
+      (change) => change.type === CanonicalChangeType.Deletion,
+    );
+    expect(deletedChanges.map((change) => change.id).sort()).toEqual([delId, result.deletionMarks[0].attrs.id].sort());
+    expect(
+      graph.changes
+        .get(delId)
+        ?.deletedSegments.map((segment) => segment.text)
+        .join(''),
+    ).toBe('gone');
+  });
 });
 
 describe('overlap-compiler: text-replace inside named no-email insertion', () => {

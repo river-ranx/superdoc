@@ -2,7 +2,7 @@
 import { formatDate } from './helpers';
 import { superdocIcons } from '@superdoc/icons.js';
 import { computed, getCurrentInstance } from 'vue';
-import { actorIdentitiesMatch } from '@superdoc/common';
+import { actorIdentitiesMatch, getActorIdentity, normalizeActorName } from '@superdoc/common';
 import { isAllowed, PERMISSIONS } from '@superdoc/core/collaboration/permissions.js';
 import { useCommentsStore } from '@superdoc/stores/comments-store';
 import Avatar from '@superdoc/components/general/Avatar.vue';
@@ -38,11 +38,24 @@ const props = defineProps({
 const { proxy } = getCurrentInstance();
 const role = proxy.$superdoc.config.role;
 const isInternal = proxy.$superdoc.config.isInternal;
-const isCommentOwnedByCurrentUser = (comment) =>
-  actorIdentitiesMatch({
-    current: proxy.$superdoc.config.user,
-    other: { id: comment?.creatorId, email: comment?.creatorEmail },
-  });
+const isCommentOwnedByCurrentUser = (comment) => {
+  const currentUser = proxy.$superdoc.config.user;
+  const otherUser = { id: comment?.creatorId, email: comment?.creatorEmail };
+  if (actorIdentitiesMatch({ current: currentUser, other: otherUser })) return true;
+
+  const currentIdentity = getActorIdentity(currentUser);
+  const otherIdentity = getActorIdentity(otherUser);
+  if (currentIdentity.hasId || currentIdentity.hasEmail || otherIdentity.hasId || otherIdentity.hasEmail) {
+    return false;
+  }
+
+  const hasImportOrigin = comment?.origin != null || Boolean(comment?.importedAuthor?.name);
+  if (hasImportOrigin) return false;
+
+  const currentName = normalizeActorName(currentUser?.name);
+  const commentName = normalizeActorName(comment?.creatorName);
+  return Boolean(currentName && commentName && currentName === commentName);
+};
 const isOwnComment = computed(() => isCommentOwnedByCurrentUser(props.comment));
 
 const { uiFontFamily } = useUiFontFamily();

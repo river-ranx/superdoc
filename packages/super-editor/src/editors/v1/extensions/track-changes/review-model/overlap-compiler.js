@@ -457,8 +457,7 @@ const applyInsert = (ctx, at, slice, insertMark, changeId, { update, create }) =
  * Behavior per segment:
  *   - own-insertion (covered/partial) → collapse: remove the inserted slice
  *   - other-insertion → child trackDelete with overlapParentId
- *   - own-deletion → no-op (preserve)
- *   - other-deletion → preserve parent; child trackDelete with overlapParentId
+ *   - existing deletion → no-op (plain delete preserves existing review ids)
  *   - live content → trackDelete mark
  *
  * @param {*} ctx
@@ -581,7 +580,6 @@ const applyTrackedDelete = (
     }
 
     if (existingDelete) {
-      const ownership = classifySegment(ctx, { attrs: existingDelete.attrs });
       const allExistingDeletes = node.marks.filter((m) => m.type.name === TrackDeleteMarkName);
       if (reassignExistingDeletions) {
         ops.push({
@@ -593,20 +591,10 @@ const applyTrackedDelete = (
         });
         return;
       }
-      if (ownership === 'same-user') {
-        // Inside own deletion → no semantic change (preserve original).
-        ops.push({ kind: 'noop', from: segFrom, to: segTo });
-        return;
-      }
-      // Inside different-user deletion → child trackDelete with overlapParentId.
-      ops.push({
-        kind: 'mark-delete',
-        from: segFrom,
-        to: segTo,
-        node,
-        parentId: existingDelete.attrs.id,
-        parentSide: SegmentSide.Deleted,
-      });
+      // Plain delete inside any existing deletion is already represented by
+      // review state. Preserve the original mark ids and do not add a nested
+      // delete unless the replacement path explicitly asked to reassign them.
+      ops.push({ kind: 'noop', from: segFrom, to: segTo });
       return;
     }
 
