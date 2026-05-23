@@ -243,11 +243,29 @@ export class SuperDoc extends EventEmitter {
 
   /** @type {SurfaceManager} */
   #surfaceManager;
-  /** @type {string} */
-  version;
+  /**
+   * Build-time SuperDoc version string. Initialized to `'0.0.0'` so the
+   * field is structurally assigned before the constructor runs, then
+   * overwritten with the injected `__APP_VERSION__` constant inside
+   * `#init` (the existing `@ts-expect-error` keeps the injected global
+   * out of the JSDoc type graph). Consumers reading `superdoc.version`
+   * immediately after `new SuperDoc(...)` see the real version because
+   * `#init` runs synchronously through the overwrite before returning.
+   * @type {string}
+   */
+  version = '0.0.0';
 
-  /** @type {User[]} */
-  users;
+  /**
+   * Local copy of the shared users list. Initialized to `[]` so direct
+   * reads (`superdoc.users`) and `addSharedUser`/`removeSharedUser`
+   * mutations don't trip on `undefined` between construction and
+   * `#init` resuming after the collaboration await. Pre-ready mutations
+   * are guarded separately in PR-B (SD-2916); for now `#init` still
+   * unconditionally re-seeds from `config.users`, so callers that need
+   * stable ordering should wait for the `ready` event.
+   * @type {User[]}
+   */
+  users = [];
 
   /** @type {import('yjs').Doc | undefined} */
   ydoc;
@@ -263,8 +281,14 @@ export class SuperDoc extends EventEmitter {
    */
   provider;
 
-  /** @type {Whiteboard | null} */
-  whiteboard;
+  /**
+   * Whiteboard instance, created by `#initWhiteboard()` after the
+   * collaboration await. Initialized to `null` so consumers reading
+   * `superdoc.whiteboard` before the `whiteboard:init` event fires get
+   * a stable null, not `undefined`.
+   * @type {Whiteboard | null}
+   */
+  whiteboard = null;
 
   /**
    * Awareness palette assigned to local users when no explicit color is set.
@@ -463,6 +487,16 @@ export class SuperDoc extends EventEmitter {
       throw new Error('SuperDoc: selector must be a valid CSS selector string or DOM element');
     }
 
+    // SurfaceManager must exist before `#init` returns control to the
+    // caller — `openSurface()` can be called immediately after
+    // construction while async init is still in flight. The manager's
+    // constructor only stores the `getModuleConfig` thunk, so reading
+    // `this.config.modules?.surfaces` lazily later works even though
+    // `this.config` hasn't been merged with defaults yet.
+    this.#surfaceManager = new SurfaceManager({
+      getModuleConfig: () => this.config.modules?.surfaces,
+    });
+
     this.#init(config, container);
   }
 
@@ -555,11 +589,9 @@ export class SuperDoc extends EventEmitter {
     // Preprocess document
     this.#initDocuments();
 
-    // Surface manager must exist before the first await — openSurface()
-    // can be called while async init is still in flight.
-    this.#surfaceManager = new SurfaceManager({
-      getModuleConfig: () => this.config.modules?.surfaces,
-    });
+    // SurfaceManager is constructed in the constructor body (before
+    // `#init` is called) so it exists for any `openSurface()` call
+    // that lands while async init is still in flight.
 
     // Initialize collaboration if configured
     await this.#initCollaboration(this.config.modules);

@@ -2476,4 +2476,83 @@ describe('SuperDoc core', () => {
       expect(resolver).toHaveBeenCalledWith(expect.objectContaining({ comment: unwrapped }));
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // SD-2916 PR-A: safe field defaults for delayed-init fields
+  // ---------------------------------------------------------------------------
+  //
+  // These tests pin the "before ready" contract for the four fields PR-A
+  // initializes at the field declaration (or in the constructor body for
+  // `#surfaceManager`). The async `#init` overwrites some of these later,
+  // but consumers reading them immediately after `new SuperDoc(...)` and
+  // before the `ready` event must see a usable value, not `undefined`.
+
+  describe('SD-2916 PR-A: safe field defaults', () => {
+    it('initializes `users` to [] immediately after construction (before async init resumes)', () => {
+      createAppHarness();
+      const instance = new SuperDoc({
+        selector: '#host',
+        documents: [],
+        modules: { comments: {}, toolbar: {} },
+        user: { name: 'Jane', email: 'jane@example.com' },
+      });
+
+      // No `await flushMicrotasks()` — we want the state visible while
+      // the async `#init` is still pending its first await.
+      expect(Array.isArray(instance.users)).toBe(true);
+      expect(instance.users).toHaveLength(0);
+    });
+
+    it('initializes `whiteboard` to null immediately after construction', () => {
+      createAppHarness();
+      const instance = new SuperDoc({
+        selector: '#host',
+        documents: [],
+        modules: { comments: {}, toolbar: {} },
+        user: { name: 'Jane', email: 'jane@example.com' },
+      });
+
+      // Whiteboard is constructed in `#initWhiteboard()` after the
+      // collaboration await; before that it must be a stable null.
+      expect(instance.whiteboard).toBeNull();
+    });
+
+    it('exposes `openSurface` immediately after construction (SurfaceManager constructed in ctor body)', () => {
+      createAppHarness();
+      const instance = new SuperDoc({
+        selector: '#host',
+        documents: [],
+        modules: { comments: {}, toolbar: {} },
+        user: { name: 'Jane', email: 'jane@example.com' },
+      });
+
+      // The handle returned must be a real object with `id`, `result`,
+      // `close`, etc. — not throw `Cannot read properties of undefined`.
+      const handle = instance.openSurface({ mode: 'dialog', render: () => null });
+      expect(handle).toBeDefined();
+      expect(typeof handle.id).toBe('string');
+      expect(typeof handle.close).toBe('function');
+      expect(handle.result).toBeInstanceOf(Promise);
+      // Resolve the handle to keep the surface registry clean for other tests.
+      handle.close({ status: 'cancelled' });
+    });
+
+    it('`version` is a non-empty string immediately after construction', () => {
+      createAppHarness();
+      const instance = new SuperDoc({
+        selector: '#host',
+        documents: [],
+        modules: { comments: {}, toolbar: {} },
+        user: { name: 'Jane', email: 'jane@example.com' },
+      });
+
+      // `#init` runs synchronously up to the first await (which is
+      // inside `#initCollaboration` only if collaboration is configured;
+      // without it the version overwrite happens before the constructor
+      // call returns). Either way the field must be a string before the
+      // consumer can read it.
+      expect(typeof instance.version).toBe('string');
+      expect(instance.version.length).toBeGreaterThan(0);
+    });
+  });
 });
