@@ -255,8 +255,16 @@ export class SuperDoc extends EventEmitter {
    */
   version = '0.0.0';
 
-  /** @type {User[]} */
-  users;
+  /**
+   * Local copy of the shared users list. Initialized to `[]` so direct
+   * reads (`superdoc.users`) are stable before the async `#init`
+   * re-seeds from `config.users`. Pre-ready `addSharedUser` /
+   * `removeSharedUser` mutations would be silently overwritten by the
+   * re-seed, so those methods guard with `#requireReady('addSharedUser')`
+   * and throw a clear lifecycle error instead.
+   * @type {User[]}
+   */
+  users = [];
 
   /** @type {import('yjs').Doc | undefined} */
   ydoc;
@@ -292,12 +300,12 @@ export class SuperDoc extends EventEmitter {
   /**
    * Pinia stores and Vue runtime references. Populated by `#initVueApp`
    * inside the async `#init`, which runs *after* `await #initCollaboration`,
-   * so these fields are briefly `undefined` between `new SuperDoc(config)`
-   * returning and the `ready` event firing. The non-null JSDoc here matches
-   * the existing pattern used for `users` / `version` / `whiteboard` and
-   * assumes consumers wait for `ready` before dereferencing. SD-2916 tracks
-   * the systematic soundness fix across all of these fields (declaring them
-   * `T | undefined` and casting at internal post-init access sites).
+   * so these fields are `undefined` between `new SuperDoc(config)`
+   * returning and the `ready` event firing. Typed as `T | undefined` so
+   * @ts-check forces every access path to either narrow or use the
+   * `#requireSuperdocStore` / `#requireCommentsStore` helpers below
+   * (which throw a clear "wait for ready" error). SD-2916 PR-B closed
+   * the delayed-init soundness gap.
    *
    * `@private` is a TypeScript-surface hide, not runtime privacy: the
    * fields still exist on the runtime instance and internal callers
@@ -310,19 +318,19 @@ export class SuperDoc extends EventEmitter {
    * `HeadlessToolbarSuperdocHost` directly without exposing
    * `superdocStore` publicly.
    *
-   * @type {ReturnType<typeof import('../stores/superdoc-store.js').useSuperdocStore>}
+   * @type {ReturnType<typeof import('../stores/superdoc-store.js').useSuperdocStore> | undefined}
    * @private
    */
   superdocStore;
 
   /**
-   * @type {ReturnType<typeof import('../stores/comments-store.js').useCommentsStore>}
+   * @type {ReturnType<typeof import('../stores/comments-store.js').useCommentsStore> | undefined}
    * @private
    */
   commentsStore;
 
   /**
-   * @type {ReturnType<typeof import('../composables/use-high-contrast-mode.js').useHighContrastMode>}
+   * @type {ReturnType<typeof import('../composables/use-high-contrast-mode.js').useHighContrastMode> | undefined}
    * @private
    */
   highContrastModeStore;
@@ -360,12 +368,12 @@ export class SuperDoc extends EventEmitter {
    * `superdocStore` / `commentsStore` / `highContrastModeStore` /
    * `commentsList`; not runtime privacy.
    *
-   * @type {import('vue').App}
+   * @type {import('vue').App | undefined}
    * @private
    */
   app;
 
-  /** @type {import('pinia').Pinia} */
+  /** @type {import('pinia').Pinia | undefined} */
   pinia;
 
   /** @type {number} Count of editors that have signaled `editorCreate`. */
@@ -634,6 +642,11 @@ export class SuperDoc extends EventEmitter {
   #startRuntime() {
     this.#initVueApp();
     this.readyEditors = 0;
+    // `#initVueApp()` assigns `this.app`, but TS can't follow the side
+    // effect; assert non-null here so the mount call type-checks.
+    if (!this.app) {
+      throw new Error('SuperDoc: #startRuntime called before #initVueApp populated this.app');
+    }
     this.app.mount(this.#mountWrapper);
   }
 
@@ -654,7 +667,7 @@ export class SuperDoc extends EventEmitter {
    * @returns {number} The number of required editors
    */
   get requiredNumberOfEditors() {
-    return this.superdocStore.documents.filter((d) => d.type === DOCX).length;
+    return this.#requireSuperdocStore('requiredNumberOfEditors').documents.filter((d) => d.type === DOCX).length;
   }
 
   /**
@@ -662,7 +675,7 @@ export class SuperDoc extends EventEmitter {
    */
   get state() {
     return {
-      documents: this.superdocStore.documents,
+      documents: this.#requireSuperdocStore('state').documents,
       users: this.users,
     };
   }
@@ -1044,7 +1057,7 @@ export class SuperDoc extends EventEmitter {
 
       // --- Seed the room authoritatively (while editor is still local) ---
       seedEditorStateToYDoc(sourceEditor, ydoc);
-      overwriteRoomComments(ydoc, this.commentsStore.commentsList);
+      overwriteRoomComments(ydoc, this.#requireCommentsStore('upgradeToCollaboration').commentsList);
       overwriteRoomLockState(ydoc, { isLocked: this.isLocked ?? false, lockedBy: this.lockedBy ?? null });
 
       // --- Attach collaboration config (awareness, flags, config.documents) ---
@@ -1095,6 +1108,64 @@ export class SuperDoc extends EventEmitter {
   #assertNotDestroyed() {
     if (this.#destroyed) {
       throw new Error('SuperDoc: instance was destroyed during upgrade');
+    }
+  }
+
+  /**
+   * Return the superdoc store, throwing a clear lifecycle error if
+   * `#initVueApp` hasn't populated it yet. Use from public methods
+   * that genuinely require the runtime to be ready (state-reading,
+   * mutation, export, focus). Pre-ready safe-no-op paths
+   * (`getPresentationEditorForDocument`, `navigateTo`, `getZoom`,
+   * etc.) keep their existing optional-chain pattern instead.
+   *
+   * SD-2916 PR-B: `superdocStore` is typed `T | undefined` so every
+   * non-optional access goes through this helper, which makes the
+   * "instance not yet ready" failure mode explicit instead of a
+   * generic TypeError on `.documents`.
+   *
+   * @param {string} methodName The public method name surfaced in
+   *   the error so consumers know which call needed the ready state.
+   */
+  #requireSuperdocStore(methodName) {
+    if (!this.superdocStore) {
+      throw new Error(
+        `SuperDoc: ${methodName} requires the instance to be ready; wait for the "ready" event before calling.`,
+      );
+    }
+    return this.superdocStore;
+  }
+
+  /**
+   * Counterpart to `#requireSuperdocStore` for the comments store.
+   * Used by paths that read `commentsStore.commentsList` or other
+   * non-optional store members. Pre-ready safe paths (`getComment`,
+   * `setActiveComment`, etc.) keep their existing `?.` pattern.
+   *
+   * @param {string} methodName
+   */
+  #requireCommentsStore(methodName) {
+    if (!this.commentsStore) {
+      throw new Error(
+        `SuperDoc: ${methodName} requires the instance to be ready; wait for the "ready" event before calling.`,
+      );
+    }
+    return this.commentsStore;
+  }
+
+  /**
+   * Lightweight readiness guard for fields whose only access is
+   * mutation (e.g. `users` via `addSharedUser`/`removeSharedUser`).
+   * The store fields are the most reliable "ready" proxy since they
+   * are the last things `#init` populates.
+   *
+   * @param {string} methodName
+   */
+  #requireReady(methodName) {
+    if (!this.superdocStore) {
+      throw new Error(
+        `SuperDoc: ${methodName} requires the instance to be ready; wait for the "ready" event before calling.`,
+      );
     }
   }
 
@@ -1319,7 +1390,7 @@ export class SuperDoc extends EventEmitter {
     const docxDoc = /** @type {Document} */ (
       /** @type {InternalConfig} */ (this.config).documents.find((d) => d.type === DOCX)
     );
-    const storeDoc = this.superdocStore.documents.find((d) => d.id === docxDoc.id);
+    const storeDoc = this.#requireSuperdocStore('upgradeToCollaboration').documents.find((d) => d.id === docxDoc.id);
     const editor = storeDoc?.getEditor?.();
 
     if (!editor) {
@@ -1329,21 +1400,28 @@ export class SuperDoc extends EventEmitter {
   }
 
   /**
-   * Add a user to the shared users list
+   * Add a user to the shared users list. Requires the instance to be
+   * ready; pre-ready mutations would be silently overwritten by the
+   * `this.users = this.config.users || []` re-seed inside `#init`.
+   *
    * @param {User} user The user to add
    * @returns {void}
    */
   addSharedUser(user) {
+    this.#requireReady('addSharedUser');
     if (this.users.some((u) => u.email === user.email)) return;
     this.users.push(user);
   }
 
   /**
-   * Remove a user from the shared users list
+   * Remove a user from the shared users list. Requires the instance
+   * to be ready for the same reason as `addSharedUser`.
+   *
    * @param {String} email The email of the user to remove
    * @returns {void}
    */
   removeSharedUser(email) {
+    this.#requireReady('removeSharedUser');
     this.users = this.users.filter((u) => u.email !== email);
   }
 
@@ -1361,7 +1439,9 @@ export class SuperDoc extends EventEmitter {
     // The errored editor came from `superdocStore.documents`, so the find
     // by its `documentId` is expected to hit. Cast the find result to a
     // RuntimeDocument to assert non-null at the consumer callback.
-    const doc = /** @type {RuntimeDocument} */ (this.superdocStore.documents.find((d) => d.id === documentId));
+    const doc = /** @type {RuntimeDocument} */ (
+      this.#requireSuperdocStore('onContentError').documents.find((d) => d.id === documentId)
+    );
     // `onContentError` is typed as optional on the public Config typedef
     // because consumers don't have to wire a handler. The class field
     // initializer installs a `() => null` default, but `#init` spreads
@@ -1460,7 +1540,7 @@ export class SuperDoc extends EventEmitter {
    */
   toggleRuler() {
     this.config.rulers = !this.config.rulers;
-    this.superdocStore.documents.forEach((doc) => {
+    this.#requireSuperdocStore('toggleRuler').documents.forEach((doc) => {
       // In Pinia store, refs are auto-unwrapped, so rulers is a plain boolean
       doc.rulers = this.config.rulers;
     });
@@ -1794,15 +1874,16 @@ export class SuperDoc extends EventEmitter {
 
   #setModeEditing() {
     if (this.config.role !== 'editor') return this.#setModeSuggesting();
-    if (this.superdocStore.documents.length > 0) {
-      const firstEditor = this.superdocStore.documents[0]?.getEditor();
+    const store = this.#requireSuperdocStore('setDocumentMode');
+    if (store.documents.length > 0) {
+      const firstEditor = store.documents[0]?.getEditor();
       if (firstEditor) this.setActiveEditor(firstEditor);
     }
 
     // Enable tracked changes for editing mode
     this.setTrackedChangesPreferences({ mode: 'review', enabled: true });
 
-    this.superdocStore.documents.forEach((doc) => {
+    store.documents.forEach((doc) => {
       doc.restoreComments();
       this.#applyDocumentMode(doc, 'editing');
     });
@@ -1810,15 +1891,16 @@ export class SuperDoc extends EventEmitter {
 
   #setModeSuggesting() {
     if (!['editor', 'suggester'].includes(this.config.role ?? '')) return this.#setModeViewing();
-    if (this.superdocStore.documents.length > 0) {
-      const firstEditor = this.superdocStore.documents[0]?.getEditor();
+    const store = this.#requireSuperdocStore('setDocumentMode');
+    if (store.documents.length > 0) {
+      const firstEditor = store.documents[0]?.getEditor();
       if (firstEditor) this.setActiveEditor(firstEditor);
     }
 
     // Enable tracked changes for suggesting mode
     this.setTrackedChangesPreferences({ mode: 'review', enabled: true });
 
-    this.superdocStore.documents.forEach((doc) => {
+    store.documents.forEach((doc) => {
       doc.restoreComments();
       this.#applyDocumentMode(doc, 'suggesting');
     });
@@ -1846,7 +1928,7 @@ export class SuperDoc extends EventEmitter {
       this.commentsStore?.clearEditorCommentPositions?.();
     }
 
-    this.superdocStore.documents.forEach((doc) => {
+    this.#requireSuperdocStore('setDocumentMode').documents.forEach((doc) => {
       if (commentsVisible || trackChangesVisible) {
         doc.restoreComments();
       } else {
@@ -1971,7 +2053,7 @@ export class SuperDoc extends EventEmitter {
   getHTML(options = {}) {
     /** @type {Editor[]} */
     const editors = [];
-    this.superdocStore.documents.forEach((doc) => {
+    this.#requireSuperdocStore('getHTML').documents.forEach((doc) => {
       const editor = doc.getEditor();
       if (editor) {
         editors.push(editor);
@@ -2093,7 +2175,7 @@ export class SuperDoc extends EventEmitter {
     // else: UI store unhydrated → leave `comments` undefined and
     // let the engine's `converter.comments` fallback fire.
 
-    const docxPromises = this.superdocStore.documents.map(async (doc) => {
+    const docxPromises = this.#requireSuperdocStore('exportEditorsToDOCX').documents.map(async (doc) => {
       if (!doc || doc.type !== DOCX) return null;
 
       const editor = typeof doc.getEditor === 'function' ? doc.getEditor() : null;
@@ -2125,8 +2207,9 @@ export class SuperDoc extends EventEmitter {
    */
   async #triggerCollaborationSaves() {
     this.#log('🦋 [superdoc] Triggering collaboration saves');
+    const store = this.#requireSuperdocStore('save');
     return new Promise((resolve) => {
-      this.superdocStore.documents.forEach((doc, index) => {
+      store.documents.forEach((doc, index) => {
         this.#log(`Before reset - Doc ${index}: pending = ${this.pendingCollaborationSaves}`);
         this.pendingCollaborationSaves = 0;
         if (doc.ydoc) {
@@ -2145,7 +2228,7 @@ export class SuperDoc extends EventEmitter {
         }
       });
       this.#log(
-        `FINAL pending = ${this.pendingCollaborationSaves}, but we have ${this.superdocStore.documents.filter((d) => d.ydoc).length} docs!`,
+        `FINAL pending = ${this.pendingCollaborationSaves}, but we have ${store.documents.filter((d) => d.ydoc).length} docs!`,
       );
     });
   }
@@ -2249,7 +2332,9 @@ export class SuperDoc extends EventEmitter {
     // unobserves Y.js maps. Only then is it safe to destroy the ydoc/provider.
     if (this.app) {
       this.#log('[superdoc] Unmounting app');
-      this.superdocStore.reset();
+      // `superdocStore` is populated in `#initVueApp` alongside `this.app`,
+      // so the guard above also asserts the store is ready.
+      this.superdocStore?.reset();
       this.app.unmount();
       this.removeAllListeners();
       delete this.app.config.globalProperties.$config;
@@ -2273,7 +2358,7 @@ export class SuperDoc extends EventEmitter {
     if (this.activeEditor) {
       this.activeEditor.focus();
     } else {
-      this.superdocStore.documents.find((doc) => {
+      this.#requireSuperdocStore('focus').documents.find((doc) => {
         const editor = doc.getEditor();
         if (editor) {
           editor.focus();
@@ -2294,6 +2379,10 @@ export class SuperDoc extends EventEmitter {
     // time this entry point is reachable the editor is fully constructed
     // and the method is installed, so the optional chain is a no-op.
     this.activeEditor.setHighContrastMode?.(isHighContrast);
-    this.highContrastModeStore.setHighContrastMode(isHighContrast);
+    // `activeEditor` is only set after the editor's mount completes, which
+    // happens after `#initVueApp` populates `highContrastModeStore`. The
+    // `if (!this.activeEditor) return` above is the runtime guarantee;
+    // the optional chain expresses that to TS without a redundant throw.
+    this.highContrastModeStore?.setHighContrastMode(isHighContrast);
   }
 }

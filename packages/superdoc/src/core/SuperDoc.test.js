@@ -2540,4 +2540,93 @@ describe('SuperDoc core', () => {
       expect(instance.version).not.toBe('0.0.0');
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // SD-2916 PR-B: lifecycle guards on ready-required methods
+  // ---------------------------------------------------------------------------
+  //
+  // PR-B types the remaining 5 delayed-init fields (superdocStore,
+  // commentsStore, highContrastModeStore, app, pinia) as `T | undefined`
+  // and adds `#requireSuperdocStore` / `#requireCommentsStore` /
+  // `#requireReady` helpers. Public methods that genuinely need the
+  // runtime to be ready (state, requiredNumberOfEditors, addSharedUser,
+  // removeSharedUser, focus, export*, setDocumentMode) now throw a
+  // clear "wait for the ready event" error instead of failing with a
+  // generic TypeError. Pre-ready safe paths (getComment,
+  // setHighContrastMode without an active editor, destroy()) still
+  // work without throwing.
+
+  describe('SD-2916 PR-B: lifecycle guards', () => {
+    const basePreReadyConfig = () => ({
+      selector: '#host',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      user: { name: 'Jane', email: 'jane@example.com' },
+    });
+
+    it('addSharedUser before ready throws a clear lifecycle error', () => {
+      createAppHarness();
+      const instance = new SuperDoc(basePreReadyConfig());
+
+      // No `await flushMicrotasks()` — fields populated by `#initVueApp`
+      // are still undefined here, so the `#requireReady` guard fires.
+      expect(() => instance.addSharedUser({ name: 'Bob', email: 'b@x.com' })).toThrow(
+        /SuperDoc: addSharedUser requires the instance to be ready/,
+      );
+    });
+
+    it('removeSharedUser before ready throws a clear lifecycle error', () => {
+      createAppHarness();
+      const instance = new SuperDoc(basePreReadyConfig());
+
+      expect(() => instance.removeSharedUser('b@x.com')).toThrow(
+        /SuperDoc: removeSharedUser requires the instance to be ready/,
+      );
+    });
+
+    it('reading the `state` getter before ready throws a clear lifecycle error', () => {
+      createAppHarness();
+      const instance = new SuperDoc(basePreReadyConfig());
+
+      expect(() => instance.state).toThrow(/SuperDoc: state requires the instance to be ready/);
+    });
+
+    it('reading `requiredNumberOfEditors` before ready throws a clear lifecycle error', () => {
+      createAppHarness();
+      const instance = new SuperDoc(basePreReadyConfig());
+
+      expect(() => instance.requiredNumberOfEditors).toThrow(
+        /SuperDoc: requiredNumberOfEditors requires the instance to be ready/,
+      );
+    });
+
+    it('destroy() before ready does not throw (existing `if (this.app)` guard still applies)', () => {
+      createAppHarness();
+      const instance = new SuperDoc(basePreReadyConfig());
+
+      // Pre-ready destroy is a valid usage path: a consumer who decides
+      // to tear down while async init is still in flight should not see
+      // a runtime error.
+      expect(() => instance.destroy()).not.toThrow();
+    });
+
+    it('getComment() before ready returns null (optional-chain path preserved)', () => {
+      createAppHarness();
+      const instance = new SuperDoc(basePreReadyConfig());
+
+      // `getComment` already early-returns via `?.` on `commentsStore`,
+      // so a pre-ready call returns null instead of throwing.
+      expect(instance.getComment('any-id')).toBeNull();
+    });
+
+    it('setHighContrastMode() before ready no-ops (gated by activeEditor)', () => {
+      createAppHarness();
+      const instance = new SuperDoc(basePreReadyConfig());
+
+      // The existing `if (!this.activeEditor) return` guard short-circuits
+      // before either `activeEditor.setHighContrastMode` or
+      // `highContrastModeStore.setHighContrastMode` is touched.
+      expect(() => instance.setHighContrastMode(true)).not.toThrow();
+    });
+  });
 });
