@@ -1539,8 +1539,11 @@ export class SuperDoc extends EventEmitter {
    * @returns {void}
    */
   toggleRuler() {
+    // Guard before mutating `this.config.rulers` so a pre-ready call
+    // throws without partially flipping the config.
+    const store = this.#requireSuperdocStore('toggleRuler');
     this.config.rulers = !this.config.rulers;
-    this.#requireSuperdocStore('toggleRuler').documents.forEach((doc) => {
+    store.documents.forEach((doc) => {
       // In Pinia store, refs are auto-unwrapped, so rulers is a plain boolean
       doc.rulers = this.config.rulers;
     });
@@ -1818,6 +1821,11 @@ export class SuperDoc extends EventEmitter {
   setDocumentMode(type) {
     if (!type) return;
 
+    // Guard before mutating `this.config.documentMode` so a pre-ready
+    // call throws without partially advancing the mode and triggering
+    // `#syncViewingVisibility` / tracked-change preference writes.
+    this.#requireReady('setDocumentMode');
+
     type = /** @type {DocumentMode} */ (type.toLowerCase());
     this.config.documentMode = type;
     this.#syncViewingVisibility();
@@ -1907,6 +1915,11 @@ export class SuperDoc extends EventEmitter {
   }
 
   #setModeViewing() {
+    // Capture the store at the top so a pre-ready call (either direct
+    // or through `setDocumentMode`) throws before `setTrackedChangesPreferences`
+    // mutates `config.layoutEngineOptions.trackedChanges`.
+    const store = this.#requireSuperdocStore('setDocumentMode');
+
     // `this.toolbar` infers as `SuperToolbar | null` from the field's
     // first assignment in `#addToolbar` (the `null` placeholder before
     // the SuperToolbar is constructed). `#addToolbar` runs once during
@@ -1928,7 +1941,7 @@ export class SuperDoc extends EventEmitter {
       this.commentsStore?.clearEditorCommentPositions?.();
     }
 
-    this.#requireSuperdocStore('setDocumentMode').documents.forEach((doc) => {
+    store.documents.forEach((doc) => {
       if (commentsVisible || trackChangesVisible) {
         doc.restoreComments();
       } else {

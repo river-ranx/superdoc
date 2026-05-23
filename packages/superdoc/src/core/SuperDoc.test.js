@@ -2568,7 +2568,7 @@ describe('SuperDoc core', () => {
       createAppHarness();
       const instance = new SuperDoc(basePreReadyConfig());
 
-      // No `await flushMicrotasks()` — fields populated by `#initVueApp`
+      // No `await flushMicrotasks()`: fields populated by `#initVueApp`
       // are still undefined here, so the `#requireReady` guard fires.
       expect(() => instance.addSharedUser({ name: 'Bob', email: 'b@x.com' })).toThrow(
         /SuperDoc: addSharedUser requires the instance to be ready/,
@@ -2627,6 +2627,31 @@ describe('SuperDoc core', () => {
       // before either `activeEditor.setHighContrastMode` or
       // `highContrastModeStore.setHighContrastMode` is touched.
       expect(() => instance.setHighContrastMode(true)).not.toThrow();
+    });
+
+    it('toggleRuler() before ready throws and leaves config.rulers unchanged', () => {
+      createAppHarness();
+      const instance = new SuperDoc({ ...basePreReadyConfig(), rulers: true });
+
+      // Guard fires before the `this.config.rulers = !this.config.rulers`
+      // mutation, so a failed pre-ready call must leave the config
+      // untouched (otherwise a consumer retry would see a flipped value).
+      const before = instance.config.rulers;
+      expect(() => instance.toggleRuler()).toThrow(/SuperDoc: toggleRuler requires the instance to be ready/);
+      expect(instance.config.rulers).toBe(before);
+    });
+
+    it("setDocumentMode('viewing') before ready throws and leaves config.documentMode unchanged", () => {
+      createAppHarness();
+      const instance = new SuperDoc({ ...basePreReadyConfig(), documentMode: 'editing' });
+
+      // Guard fires before `this.config.documentMode = type` and
+      // before `#syncViewingVisibility()` is invoked.
+      const before = instance.config.documentMode;
+      expect(() => instance.setDocumentMode('viewing')).toThrow(
+        /SuperDoc: setDocumentMode requires the instance to be ready/,
+      );
+      expect(instance.config.documentMode).toBe(before);
     });
   });
 });
