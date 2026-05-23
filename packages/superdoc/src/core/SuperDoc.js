@@ -613,8 +613,8 @@ export class SuperDoc extends EventEmitter {
   }
 
   #initWhiteboard() {
-    const config = this.config.modules?.whiteboard ?? {};
-    const enabled = config.enabled ?? false;
+    const config = this.config.modules?.whiteboard;
+    const enabled = config !== false && (config?.enabled ?? false);
 
     this.whiteboard = new Whiteboard({
       Renderer: WhiteboardRenderer,
@@ -1448,7 +1448,8 @@ export class SuperDoc extends EventEmitter {
     const commentId = trackedChange?.commentId || trackedChange?.id;
     if (!resolvedComment && commentId && this.commentsStore?.getComment) {
       const storeComment = this.commentsStore.getComment(commentId);
-      resolvedComment = storeComment?.getValues ? storeComment.getValues() : storeComment;
+      const getValues = storeComment?.getValues;
+      resolvedComment = typeof getValues === 'function' ? getValues.call(storeComment) : storeComment;
     }
 
     const context = {
@@ -1678,7 +1679,7 @@ export class SuperDoc extends EventEmitter {
   setDocumentMode(type) {
     if (!type) return;
 
-    type = type.toLowerCase();
+    type = /** @type {DocumentMode} */ (type.toLowerCase());
     this.config.documentMode = type;
     this.#syncViewingVisibility();
 
@@ -1845,7 +1846,7 @@ export class SuperDoc extends EventEmitter {
    * tracker ids.
    *
    * @param {import('./types/index.js').SearchMatch} match The match object returned by `superdoc.search()`.
-   * @returns {void}
+   * @returns {boolean | undefined} Whether the command dispatched, or `undefined` if no active editor.
    */
   goToSearchResult(match) {
     return this.activeEditor?.commands.goToSearchResult(match);

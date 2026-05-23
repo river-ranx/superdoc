@@ -186,7 +186,7 @@ export interface RuntimeDocument extends Document {
 /** Collaboration module configuration. */
 export interface CollaborationConfig {
   /** External Yjs document (provider-agnostic mode). */
-  ydoc?: object;
+  ydoc?: YDoc;
   /** External collaboration provider (provider-agnostic mode). */
   provider?: CollaborationProvider;
   /** Internal provider type (deprecated). */
@@ -1294,6 +1294,12 @@ export interface Config {
   selector: string | HTMLElement;
   /** The mode of the document (default: 'editing'). */
   documentMode?: DocumentMode;
+  /**
+   * When `documentMode` is `'viewing'`, allow the user to make text
+   * selections even though editing is disabled. Defaults to `false`.
+   * Forwarded to the underlying editor as `options.allowSelectionInViewMode`.
+   */
+  allowSelectionInViewMode?: boolean;
   /** The role of the user in this SuperDoc. */
   role?: 'editor' | 'viewer' | 'suggester';
   /**
@@ -1495,8 +1501,15 @@ export interface InternalConfig extends Config {
    * not part of the public Config surface.
    */
   socket?: HocuspocusProviderWebsocket;
-  /** Normalized to `[]` by `#init` if the consumer passes nothing or `undefined`. */
-  documents: Document[];
+  /**
+   * Normalized to `[]` by `#init` if the consumer passes nothing or
+   * `undefined`. Narrowed to `RuntimeDocument[]` because once `#init`
+   * runs, each entry has been augmented with the runtime-only fields
+   * (`role`, `getEditor`, `getPresentationEditor`, etc.). Consumers
+   * still pass `Document[]` via the public `Config` interface; this
+   * override only describes the post-init shape internal callsites see.
+   */
+  documents: RuntimeDocument[];
   /** Normalized to `{}` by `#init` if the consumer passes nothing or `undefined`. */
   modules: Modules;
   /** Spread of `DEFAULT_USER` over consumer input by `#init`; `name` always present. */
