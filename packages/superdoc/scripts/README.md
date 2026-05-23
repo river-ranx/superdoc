@@ -6,7 +6,9 @@ interface under `packages/document-api/scripts/`; both are summarized here so
 contributors have one place to learn the system.
 
 If you only have time for one sentence: **run `pnpm check:public` before
-opening or merging anything that touches public types.**
+opening or merging anything that touches public types.** It's the
+public type/interface preflight — it does not replace `pnpm test` or
+`pnpm build` for product correctness.
 
 ---
 
@@ -14,7 +16,7 @@ opening or merging anything that touches public types.**
 
 | Question | Command | Speed | Mutates files? |
 |---|---|---|---|
-| Am I safe to ship a PR? | `pnpm check:public` | ~5 min | no |
+| Are public interfaces safe? | `pnpm check:public` | ~5 min | no |
 | TypeScript compiles cleanly? | `pnpm check:types` | seconds | no |
 | Only SuperDoc public surface changed? | `pnpm check:public:superdoc` | ~3 min | no |
 | Only Document API contract changed? | `pnpm check:public:docapi` | seconds | no |
@@ -65,8 +67,8 @@ but have separate script chains because the validation needs differ.
 
 | Command | Runs | Mutates? |
 |---|---|---|
-| `generate:docapi` | `docapi:sync` (legacy alias) | yes — writes `packages/document-api/generated/**` |
-| `generate:all` | schemas, SDK clients, tool catalogs, reference docs | yes — multi-target generator |
+| `generate:docapi` | `docapi:sync` (legacy alias) | yes — writes Document API artifacts under `packages/document-api/generated/` (gitignored; run before `check:public:docapi` if it fails on missing files). |
+| `generate:all` | schemas, SDK clients, tool catalogs, reference docs | yes — multi-target generator. Some outputs are gitignored (`generated/`), others are committed (e.g. `apps/docs/document-api/reference/`); any tracked generated changes should be committed. |
 
 ### Legacy aliases
 
