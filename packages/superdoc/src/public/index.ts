@@ -48,7 +48,8 @@ export { DOCX, PDF, HTML, getFileObject, compareVersions };
 // First-class public API. Documented, advertised, supported long-term.
 // =============================================================================
 
-// Source: ./core/SuperDoc.js
+// Source: ./core/SuperDoc.ts (the .js specifier resolves via
+// `customConditions: ["source"]` + the package exports map).
 export { SuperDoc } from '../core/SuperDoc.js';
 
 // Source: ./core/theme/create-theme.ts

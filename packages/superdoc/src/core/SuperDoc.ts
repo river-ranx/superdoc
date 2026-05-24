@@ -216,13 +216,10 @@ function asEventListener(listener: ((...args: any[]) => void) | undefined): (...
  * @implements {SuperDocLike}
  */
 export class SuperDoc extends EventEmitter<SuperDocEventMap> {
-  /** @type {Array<string>} */
   static allowedTypes = [DOCX, PDF, HTML];
 
-  /** @type {boolean} */
   #destroyed = false;
 
-  /** @type {boolean} */
   #isUpgrading = false;
 
   /** @type {(() => void) | null} — aborts an in-flight upgrade (sync wait or ready wait) */
@@ -230,7 +227,6 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
 
   #mountWrapper: HTMLDivElement | null = null;
 
-  /** @type {SurfaceManager} */
   #surfaceManager;
   /**
    * Build-time SuperDoc version string. Initialized to `'0.0.0'` so the
@@ -585,7 +581,6 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
     }
 
     this.config.colors = shuffleArray(this.config.colors as `#${string}`[]);
-    /** @type {Map<unknown, unknown>} */
     this.userColorMap = new Map();
     this.colorIndex = 0;
 
@@ -593,7 +588,6 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
     this.version = __APP_VERSION__;
     this.#log('🦋 [superdoc] Using SuperDoc version:', this.version);
 
-    /** @type {string} */
     this.superdocId = config.superdocId || uuidv4();
     // Default to an empty palette when no colors are configured so downstream
     // assignment logic doesn't have to null-check on every access.
@@ -621,13 +615,10 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
     // --- One-time shell setup (survives upgrade) ---
     this.user = this.config.user;
     this.users = this.config.users || [];
-    /** @type {unknown} */
     this.socket = null;
     this.isDev = this.config.isDev || false;
 
-    /** @type {Editor | null | undefined} */
     this.activeEditor = null;
-    /** @type {unknown[]} */
     this.comments = [];
 
     this.isLocked = this.config.isLocked || false;
@@ -845,7 +836,7 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
       );
     }
     this.superdocStore.init(this.config);
-    const commentsModuleConfig = /** @type {InternalConfig} */ this.config.modules.comments;
+    const commentsModuleConfig = this.config.modules.comments;
     // `commentsModuleConfig` is `false | object | undefined`. A truthy
     // check already rules out both `false` and `undefined`, so an
     // explicit `!== false` afterwards is redundant.
@@ -920,7 +911,7 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
     // Fallback: internal provider creation.
     // Start a socket for all documents and general metaMap for this SuperDoc
     if (collaborationModuleConfig.providerType === 'hocuspocus') {
-      /** @type {InternalConfig} */ this.config.socket = new HocuspocusProviderWebsocket({
+      this.config.socket = new HocuspocusProviderWebsocket({
         url: collaborationModuleConfig.url as string,
       });
     }
@@ -977,7 +968,7 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
     this.provider = markRaw(provider);
 
     this.#assignUserColor();
-    const internalConfig = /** @type {InternalConfig} */ this.config;
+    const internalConfig = this.config;
     this._cleanupAwareness = setupAwarenessHandler(provider, this, internalConfig.user);
 
     internalConfig.documents.forEach((doc: RuntimeDocument) => {
@@ -1003,7 +994,7 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
     this._commentsCollabInitialized = false;
     this.ydoc = undefined;
     this.provider = undefined;
-    const cfg = /** @type {InternalConfig} */ this.config;
+    const cfg = this.config;
     delete cfg.modules.collaboration;
 
     cfg.documents.forEach((doc: RuntimeDocument) => {
@@ -1073,7 +1064,7 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
       overwriteRoomLockState(ydoc, { isLocked: this.isLocked ?? false, lockedBy: this.lockedBy ?? null });
 
       // --- Attach collaboration config (awareness, flags, config.documents) ---
-      /** @type {InternalConfig} */ this.config.modules.collaboration = { ydoc, provider };
+      this.config.modules.collaboration = { ydoc, provider };
       this.#attachExternalCollaboration(ydoc, provider);
 
       // --- Update live store documents in place (no Vue unmount) ---
@@ -1365,7 +1356,7 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
       throw new Error('SuperDoc: upgradeToCollaboration() requires both ydoc and provider');
     }
 
-    const cfg = /** @type {InternalConfig} */ this.config;
+    const cfg = this.config;
     const docxDocs = cfg.documents.filter((d: RuntimeDocument) => d.type === DOCX);
     if (docxDocs.length === 0) {
       throw new Error('SuperDoc: no DOCX document found for upgrade');
@@ -1700,7 +1691,6 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
    * @returns {Promise<boolean>} Whether the target was found and navigated to.
    */
   async navigateTo(target: NavigableAddress): Promise<boolean> {
-    /** @type {RuntimeDocument[] | undefined} */
     const storeDocs = this.superdocStore?.documents;
     if (!storeDocs?.length) return false;
     const presentationEditor = storeDocs[0].getPresentationEditor?.();
@@ -1726,7 +1716,6 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
    * await superdoc.scrollToElement('imported-25def254');
    */
   async scrollToElement(elementId: string): Promise<boolean> {
-    /** @type {RuntimeDocument[] | undefined} */
     const storeDocs = this.superdocStore?.documents;
     if (!storeDocs?.length) return false;
     const presentationEditor = storeDocs[0].getPresentationEditor?.();
@@ -1948,7 +1937,6 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
       });
     }
 
-    /** @type {RuntimeDocument[] | undefined} */
     const docs = this.superdocStore?.documents;
     if (Array.isArray(docs) && docs.length > 0) {
       docs.forEach((doc) => {
@@ -2028,7 +2016,7 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
    * Set the document to locked or unlocked
    */
   setLocked(lock = true) {
-    /** @type {InternalConfig} */ this.config.documents.forEach((doc: RuntimeDocument) => {
+    this.config.documents.forEach((doc: RuntimeDocument) => {
       // setLocked is a collaboration-only API; the surrounding flow only
       // calls it once each document has a Yjs doc attached. Cast away the
       // optional shape on the public Document typedef without changing
@@ -2266,7 +2254,7 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
       this._cleanupAwareness = null;
     }
 
-    const cfg = /** @type {InternalConfig} */ this.config;
+    const cfg = this.config;
     // `cancelWebsocketRetry` is set on `HocuspocusProviderWebsocket` only
     // while a reconnect timer is pending, and Hocuspocus clears it back to
     // `undefined` after firing. Destroy from the "already connected, no
