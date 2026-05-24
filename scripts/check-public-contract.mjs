@@ -68,7 +68,7 @@ const stages = [
     name: 'tier-discipline:test',
     cwd: REPO_ROOT,
     cmd: 'node',
-    args: ['--test', 'scripts/check-public-contract-tiers.test.mjs'],
+    args: ['--test', 'scripts/report-public-contract.test.mjs'],
     blurb:
       'Unit tests for the pure tier validator. Cheap (~50ms); verifies ' +
       'the validator catches every failure class before the next stage ' +
@@ -78,7 +78,7 @@ const stages = [
     name: 'tier-discipline',
     cwd: REPO_ROOT,
     cmd: 'node',
-    args: ['scripts/check-public-contract-tiers.mjs'],
+    args: ['scripts/report-public-contract.mjs', '--check'],
     blurb:
       'Public-contract tier discipline: package.json#exports vs publicContract ' +
       '(tier coverage, routing, legacy-raw allowlist). Cheap; fast-fails before ' +

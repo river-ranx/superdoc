@@ -1,23 +1,23 @@
 /**
- * Unit tests for the pure validator in
- * `scripts/check-public-contract-tiers.mjs`. Runs under `node --test`.
+ * Unit tests for the pure validator exported from
+ * `scripts/report-public-contract.mjs`. Runs under `node --test`.
  *
  * Each test builds a tiny in-memory publicContract + exports map,
  * calls `validatePublicContract`, and asserts the failure list
  * matches expectations. No fs / no spawn / no process exit.
  *
  * Local usage:
- *   node --test scripts/check-public-contract-tiers.test.mjs
+ *   node --test scripts/report-public-contract.test.mjs
  */
 
 import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
-import { validatePublicContract } from './check-public-contract-tiers.mjs';
+import { validatePublicContract } from './report-public-contract.mjs';
 
 /** Minimal exports entry shape with a types path. */
 const ent = (typesPath) => ({ types: typesPath, import: typesPath.replace(/\.d\.ts$/, '.js') });
 
-/** Minimal valid contract — used as a starting point and mutated per test. */
+/** Minimal valid contract - used as a starting point and mutated per test. */
 function baseContract() {
   return {
     supported: [{ subpath: '.', tier: 'supported', note: 'root' }],
@@ -162,7 +162,7 @@ describe('validatePublicContract', () => {
       contract.legacyRaw.push({ subpath: './super-editor', tier: 'legacy-raw', note: '' });
       const exportsMap = {
         ...baseExports(),
-        // Routes under public/ — should not be in legacyRaw.
+        // Routes under public/ - should not be in legacyRaw.
         './super-editor': ent('./dist/superdoc/src/public/super-editor.d.ts'),
       };
       const failures = validatePublicContract(contract, exportsMap);
