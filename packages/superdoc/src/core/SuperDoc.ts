@@ -203,10 +203,11 @@ interface SuperDocEventMap {
  * inspects the args its own signature names. Narrower typing would force
  * every callsite below to cast.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+/* eslint-disable @typescript-eslint/no-explicit-any */
 function asEventListener(listener: ((...args: any[]) => void) | undefined): (...args: any[]) => void {
   return listener as (...args: any[]) => void;
 }
+/* eslint-enable @typescript-eslint/no-explicit-any */
 
 /**
  * SuperDoc class
@@ -1302,6 +1303,9 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
     return new Promise<void>((resolve, reject) => {
       let timer: ReturnType<typeof setTimeout> | undefined;
       let settled = false;
+      // Initial no-op; reassigned below to the real cleanup once the
+      // sync observer is registered.
+      // eslint-disable-next-line @typescript-eslint/no-empty-function
       let syncCleanup = () => {};
 
       const settle = () => {
