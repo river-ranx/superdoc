@@ -101,7 +101,7 @@ it stopped running.
 | `audit-bundle.cjs` | postbuild | prosemirror-view single-instance check + bundle size budgets. | Duplicate PM instances break collaboration; no size discipline. |
 | `audit-declarations.cjs` | postbuild | Rule 1: bare `@superdoc/*` leaks. Rule 2: pnpm-internal paths. Rule 3: `_internal-shims.d.ts` regression. | Private specifiers ship to consumers; consumers hit unresolvable imports. |
 | `check-export-coverage.cjs` | postbuild | Every `package.json#exports` subpath carries a `types` field or is on the runtime-only allowlist. | `TS7016` returns for consumers on runtime-only subpaths. |
-| `verify-public-facade-emit.cjs` | postbuild | Per-facade expected symbol set + ESM/CJS parity + legacy command-signature compat. Has a hand-maintained `expectedNames` allowlist per facade (consolidation tracked separately). | Symbol set drift ships silently; CJS shims diverge from ESM. |
+| `verify-public-facade-emit.cjs` | postbuild | Per-facade expected symbol set + ESM/CJS parity + legacy command-signature compat. Derives the expected name set directly from the facade source file under `packages/superdoc/src/public/**`; rejects `export *` / `export * as X` in facade sources so the contract stays explicit. | Symbol set drift ships silently; CJS shims diverge from ESM; a wildcard re-export silently widens the public surface. |
 | `report-declaration-reachability.cjs` | postbuild | Instrumentation (not a gate): per-bucket reachability ratio of emitted declarations. | Loses visibility into unreachable emit (the SD-2952 trim target). |
 | `check-jsdoc.cjs` | wrapper stage 3 (`jsdoc-ratchet`) | Two gates: (a) per-file checkJs on the hand-curated `CHECKED_FILES` (currently 6 files; each must carry `// @ts-check` and stay clean against tsc); (b) ratchet over the public-reachable .js JSDoc surface — every file must be in `CHECKED_FILES`, carry `// @ts-check`, be on `jsdoc-allowlist.cjs` with a reason, or be in `jsdoc-debt-snapshot.json` as known pre-existing debt. New public JSDoc files that aren't accounted for fail with a clear "add @ts-check or allowlist" message. Stale snapshot entries (file gone, gained @ts-check, moved out of public surface) also fail. The allowlist contract is enforced too: every entry must carry a non-empty reason, point at an existing file, and still resolve to a public-reachable JSDoc file. Refresh the snapshot with `pnpm --filter superdoc run check:jsdoc -- --write`. Runs as stage 3 of `check:public:superdoc`. | New public-reachable JSDoc files could land without type coverage; existing ones could lose their `// @ts-check` directive without surfacing as a regression; the allowlist could grow silent / typo-shaped exemptions. |
 
@@ -201,7 +201,7 @@ type-surface.config.cjs               (single source of truth)
 src/public/index.ts                  (declarative root facade)
    │
    ├─ vite-plugin-dts             ──> emits public/index.d.ts
-   ├─ verify-public-facade-emit   ──> expected names allowlist
+   ├─ verify-public-facade-emit   ──> parses facade source as the contract
    ├─ snapshot.mjs (root family)  ──> drift snapshot
    └─ check-all-public-types-fixture ──> consumer fixture coverage
 
