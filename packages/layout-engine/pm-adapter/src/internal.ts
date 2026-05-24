@@ -10,7 +10,7 @@
  * - Normalize whitespace and handle empty paragraphs
  */
 
-import type { FlowBlock, ParagraphBlock } from '@superdoc/contracts';
+import type { FlowBlock, ParagraphAttrs, ParagraphBlock } from '@superdoc/contracts';
 import { resolveSectionDirection } from './direction/resolveSectionDirection.js';
 import { isValidTrackedMode } from './tracked-changes.js';
 import {
@@ -283,7 +283,11 @@ export function toFlowBlocks(pmDoc: PMNode | object, options?: AdapterOptions): 
   const hydratedBlocks = hydrateImageBlocks(blocks, options?.mediaFiles);
 
   // Post-process: Merge drop-cap paragraphs with their following text paragraphs
-  const mergedBlocks = mergeDropCapParagraphs(hydratedBlocks);
+  const dropCapMergedBlocks = mergeDropCapParagraphs(hydratedBlocks);
+
+  // Post-process: Fuse specVanish paragraphs forward into the next paragraph,
+  // matching Word per ECMA-376 §17.3.2.36 (SD-3269 follow-up).
+  const mergedBlocks = mergeSpecVanishParagraphs(dropCapMergedBlocks);
 
   // Commit cache cycle - swaps next to previous, retaining only blocks seen this render
   flowBlockCache?.commit();
@@ -370,6 +374,57 @@ function mergeDropCapParagraphs(blocks: FlowBlock[]): FlowBlock[] {
     // Not a drop-cap or no following paragraph - keep as-is
     result.push(block);
     i += 1;
+  }
+
+  return result;
+}
+
+/**
+ * Fuse paragraphs whose paragraph-mark rPr carries `w:specVanish` into the
+ * next paragraph block. ECMA-376 §17.3.2.36 states the paragraph mark "shall
+ * never be used to break the end of a paragraph for display" in that case;
+ * Word renders the two paragraphs as one continuous flow and drops the
+ * successor's auto-generated numbering marker. Numbering counters still
+ * advance per OOXML paragraph, so subsequent items skip a slot (matches
+ * pdftotext extraction of Word's own PDF export).
+ *
+ * Strategy: keep the predecessor's block id, attrs, marker, and indent;
+ * concatenate `predecessor.runs ++ successor.runs`; drop the successor block.
+ * Chains of specVanish paragraphs collapse left-to-right.
+ *
+ * @param blocks - Array of flow blocks to process
+ * @returns New array with specVanish paragraphs fused into their successors
+ */
+function mergeSpecVanishParagraphs(blocks: FlowBlock[]): FlowBlock[] {
+  const result: FlowBlock[] = [];
+
+  for (const block of blocks) {
+    const prev = result.length > 0 ? result[result.length - 1] : undefined;
+    if (block.kind === 'paragraph' && prev?.kind === 'paragraph' && (prev as ParagraphBlock).attrs?.specVanish) {
+      const head = prev as ParagraphBlock;
+      const tail = block as ParagraphBlock;
+      // Keep the predecessor's id/attrs (style, marker, indent) and append
+      // the successor's runs. The successor's marker is implicitly dropped
+      // because its block no longer exists. Carry the specVanish flag forward
+      // only if the successor itself has one — that keeps chains collapsing
+      // left-to-right across consecutive specVanish paragraphs.
+      const mergedAttrs: ParagraphAttrs = { ...head.attrs };
+      if (tail.attrs?.specVanish) {
+        mergedAttrs.specVanish = true;
+      } else {
+        delete (mergedAttrs as Record<string, unknown>).specVanish;
+      }
+      const merged: ParagraphBlock = {
+        kind: 'paragraph',
+        id: head.id,
+        runs: [...head.runs, ...tail.runs],
+        attrs: mergedAttrs,
+        ...(head.sourceAnchor ? { sourceAnchor: head.sourceAnchor } : {}),
+      };
+      result[result.length - 1] = merged;
+      continue;
+    }
+    result.push(block);
   }
 
   return result;

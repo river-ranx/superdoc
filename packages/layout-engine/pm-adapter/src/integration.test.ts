@@ -527,6 +527,95 @@ describe('PM → FlowBlock → Measure integration', () => {
     expect(xPositions.size).toBeGreaterThan(1);
   });
 
+  // SD-3269 follow-up: w:specVanish on the paragraph-mark rPr suppresses the
+  // paragraph break for display (ECMA-376 §17.3.2.36). Word renders the next
+  // paragraph as a continuation of the specVanish paragraph; the next
+  // paragraph's auto-generated marker is dropped along with its block.
+  it('fuses a specVanish paragraph forward into the next paragraph block', () => {
+    const fixture = {
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          attrs: {
+            paragraphProperties: {
+              runProperties: { vanish: true, specVanish: true },
+            },
+          },
+          content: [{ type: 'text', text: 'Head ' }],
+        },
+        {
+          type: 'paragraph',
+          attrs: {},
+          content: [{ type: 'text', text: 'Tail' }],
+        },
+      ],
+    };
+
+    const { blocks } = toFlowBlocks(fixture);
+
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0].kind).toBe('paragraph');
+    const merged = blocks[0] as { runs: Array<{ text?: string }>; attrs?: { specVanish?: boolean } };
+    expect(merged.attrs?.specVanish).toBeUndefined();
+    const text = merged.runs.map((r) => r.text ?? '').join('');
+    expect(text).toBe('Head Tail');
+  });
+
+  it('chains multiple specVanish paragraphs into a single block', () => {
+    const fixture = {
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          attrs: { paragraphProperties: { runProperties: { vanish: true, specVanish: true } } },
+          content: [{ type: 'text', text: 'A ' }],
+        },
+        {
+          type: 'paragraph',
+          attrs: { paragraphProperties: { runProperties: { vanish: true, specVanish: true } } },
+          content: [{ type: 'text', text: 'B ' }],
+        },
+        {
+          type: 'paragraph',
+          attrs: {},
+          content: [{ type: 'text', text: 'C' }],
+        },
+      ],
+    };
+
+    const { blocks } = toFlowBlocks(fixture);
+
+    expect(blocks).toHaveLength(1);
+    const merged = blocks[0] as { runs: Array<{ text?: string }>; attrs?: { specVanish?: boolean } };
+    expect(merged.attrs?.specVanish).toBeUndefined();
+    const text = merged.runs.map((r) => r.text ?? '').join('');
+    expect(text).toBe('A B C');
+  });
+
+  // A bare paragraph (no successor) keeps its specVanish flag — there's
+  // nothing to fuse into. Importer round-trip preservation still works since
+  // pm-adapter only re-emits the flag, it does not invent it.
+  it('leaves a trailing specVanish paragraph untouched when there is no successor', () => {
+    const fixture = {
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          attrs: { paragraphProperties: { runProperties: { vanish: true, specVanish: true } } },
+          content: [{ type: 'text', text: 'Alone' }],
+        },
+      ],
+    };
+
+    const { blocks } = toFlowBlocks(fixture);
+
+    expect(blocks).toHaveLength(1);
+    const block = blocks[0] as { runs: Array<{ text?: string }>; attrs?: { specVanish?: boolean } };
+    expect(block.attrs?.specVanish).toBe(true);
+    expect(block.runs.map((r) => r.text ?? '').join('')).toBe('Alone');
+  });
+
   it('renders paragraph shading backgrounds end to end', async () => {
     const fixture = {
       type: 'doc',

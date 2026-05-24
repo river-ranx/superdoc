@@ -391,6 +391,17 @@ export const computeParagraphAttrs = (
     directionContext,
   };
 
+  // SD-3269: w:specVanish on the paragraph-mark rPr suppresses the paragraph
+  // break for display per ECMA-376 §17.3.2.36. The pm-adapter post-process
+  // fuses the next paragraph's runs into this block and drops the successor;
+  // numbering counters on subsequent paragraphs are unchanged, matching Word.
+  if (
+    resolvedParagraphProperties.runProperties?.specVanish === true ||
+    paragraphProperties.runProperties?.specVanish === true
+  ) {
+    paragraphAttrs.specVanish = true;
+  }
+
   if (normalizedNumberingProperties && normalizedListRendering) {
     const markerRunProperties = resolveRunProperties(
       converterContext!,

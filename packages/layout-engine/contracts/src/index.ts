@@ -1569,6 +1569,14 @@ export type ParagraphAttrs = {
   /** Marks an empty paragraph that only exists to carry section properties. */
   sectPrMarker?: boolean;
   /**
+   * w:specVanish on the paragraph-mark rPr (ECMA-376 §17.3.2.36):
+   * "a paragraph mark shall never be used to break the end of a paragraph for display".
+   * The pm-adapter post-process fuses the next paragraph's runs into this block and
+   * drops the successor; the successor's auto-generated list marker disappears with
+   * it. Numbering counters on subsequent paragraphs are unchanged, matching Word.
+   */
+  specVanish?: boolean;
+  /**
    * Resolved direction context for the paragraph (inline direction + writing mode).
    * Single source of truth for paragraph direction-aware rendering decisions.
    *
