@@ -2198,7 +2198,9 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
     );
 
     const docxFiles = await Promise.all(docxPromises);
-    return docxFiles.filter(Boolean);
+    // Type-predicate filter so callers see `Blob[]` instead of `(Blob | null)[]`.
+    // `filter(Boolean)` narrows at runtime but not in the type system.
+    return docxFiles.filter((file): file is Blob => file != null);
   }
 
   /**
@@ -2234,19 +2236,18 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
   }
 
   /**
-   * Save the superdoc if in collaboration mode
-   * @returns {Promise<void[]>} Resolves when all documents have saved
+   * Save the superdoc if in collaboration mode. Resolves when all
+   * collaboration documents have flushed their pending writes.
    */
-  async save() {
+  async save(): Promise<void> {
     const savePromises = [
       this.#triggerCollaborationSaves(),
       // this.exportEditorsToDOCX(),
     ];
 
     this.#log('🦋 [superdoc] Saving superdoc');
-    const result = await Promise.all(savePromises);
-    this.#log('🦋 [superdoc] Save complete:', result);
-    return result;
+    await Promise.all(savePromises);
+    this.#log('🦋 [superdoc] Save complete');
   }
 
   /**
