@@ -9,8 +9,6 @@
     "export:returns",
     "exportEditorsToDOCX:parameters",
     "exportEditorsToDOCX:returns",
-    "getPresentationEditorForDocument:parameters",
-    "getPresentationEditorForDocument:returns",
     "lockSuperdoc:parameters",
     "lockSuperdoc:returns",
     "removeCommentsList:returns",
