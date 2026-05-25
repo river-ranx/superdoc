@@ -690,6 +690,33 @@ const SDT_CONTAINER_STYLES = `
   background-color: transparent;
 }
 
+/* Global content-control chrome opt-out: preserve SDT wrappers/datasets while
+ * suppressing all built-in visual chrome. Label elements are not emitted by
+ * renderer/helpers when this class is present (DOM non-emission), and these
+ * rules neutralize border/padding/hover/selection visuals. */
+.superdoc-cc-chrome-none .superdoc-structured-content-inline,
+.superdoc-cc-chrome-none .superdoc-structured-content-block {
+  border: none;
+  padding: 0;
+  border-radius: 0;
+  background: none;
+}
+
+.superdoc-cc-chrome-none .superdoc-structured-content-inline:hover,
+.superdoc-cc-chrome-none .superdoc-structured-content-block:hover,
+.superdoc-cc-chrome-none .superdoc-structured-content-block.sdt-group-hover,
+.superdoc-cc-chrome-none .superdoc-structured-content-block[data-lock-mode].sdt-group-hover,
+.superdoc-cc-chrome-none .superdoc-structured-content-inline[data-lock-mode]:hover {
+  border: none;
+  background: none;
+}
+
+.superdoc-cc-chrome-none .superdoc-structured-content-inline.ProseMirror-selectednode,
+.superdoc-cc-chrome-none .superdoc-structured-content-block.ProseMirror-selectednode {
+  border-color: transparent;
+  background: none;
+}
+
 /* Hover highlight for SDT containers.
  * Hover adds background highlight and z-index boost.
  * Block SDTs use .sdt-group-hover class (event delegation for multi-fragment coordination).
@@ -705,6 +732,19 @@ const SDT_CONTAINER_STYLES = `
 .superdoc-structured-content-inline[data-lock-mode]:hover:not(.ProseMirror-selectednode, [data-appearance='hidden']) {
   background-color: var(--sd-content-controls-lock-hover-bg, rgba(98, 155, 231, 0.08));
   z-index: 9999999;
+}
+
+/* Keep lock-hover highlight disabled when chrome is globally suppressed.
+ * Declared after the base lock-hover rule so cascade order is deterministic. */
+.superdoc-cc-chrome-none .superdoc-structured-content-block[data-lock-mode].sdt-group-hover:not(
+    .ProseMirror-selectednode
+  ),
+.superdoc-cc-chrome-none .superdoc-structured-content-inline[data-lock-mode]:hover:not(
+    .ProseMirror-selectednode,
+    [data-appearance='hidden']
+  ) {
+  background-color: transparent;
+  z-index: auto;
 }
 
 /* Viewing mode: remove structured content affordances */

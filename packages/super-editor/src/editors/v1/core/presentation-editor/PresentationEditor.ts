@@ -648,6 +648,7 @@ export class PresentationEditor extends EventEmitter {
       presence: validatedPresence,
       showBookmarks: options.layoutEngineOptions?.showBookmarks ?? false,
       showFormattingMarks: options.layoutEngineOptions?.showFormattingMarks ?? false,
+      contentControlsChrome: options.layoutEngineOptions?.contentControlsChrome,
     };
     this.#trackedChangesOverrides = options.layoutEngineOptions?.trackedChanges;
 
@@ -6467,6 +6468,7 @@ export class PresentationEditor extends EventEmitter {
       ruler: this.#layoutOptions.ruler,
       pageGap: this.#layoutState.layout?.pageGap ?? effectiveGap,
       showFormattingMarks: this.#layoutOptions.showFormattingMarks ?? false,
+      contentControlsChrome: this.#layoutOptions.contentControlsChrome ?? 'default',
     });
 
     // Pass the current zoom so virtualization accounts for the CSS transform scale

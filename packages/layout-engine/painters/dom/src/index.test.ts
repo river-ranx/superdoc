@@ -2503,6 +2503,62 @@ describe('DomPainter', () => {
     expect(fragment.dataset.sdtSectionLocked).toBe('true');
   });
 
+  it('keeps documentSection tooltip when contentControlsChrome is none', () => {
+    const sectionBlock: FlowBlock = {
+      kind: 'paragraph',
+      id: 'section-para-tooltip',
+      runs: [{ text: 'Confidential terms', fontFamily: 'Arial', fontSize: 16, pmStart: 0, pmEnd: 18 }],
+      attrs: {
+        sdt: {
+          type: 'documentSection',
+          id: 'section-2',
+          title: 'Locked Section',
+          description: 'Confidential clause',
+          sectionType: 'locked',
+          isLocked: true,
+        },
+      },
+    };
+
+    const sectionMeasure: Measure = {
+      kind: 'paragraph',
+      lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 18, width: 120, ascent: 12, descent: 4, lineHeight: 20 }],
+      totalHeight: 20,
+    };
+
+    const sectionLayout: Layout = {
+      pageSize: { w: 400, h: 500 },
+      pages: [
+        {
+          number: 1,
+          fragments: [
+            {
+              kind: 'para',
+              blockId: 'section-para-tooltip',
+              fromLine: 0,
+              toLine: 1,
+              x: 20,
+              y: 30,
+              width: 320,
+              pmStart: 0,
+              pmEnd: 18,
+            },
+          ],
+        },
+      ],
+    };
+
+    const painter = createTestPainter({
+      blocks: [sectionBlock],
+      measures: [sectionMeasure],
+      contentControlsChrome: 'none',
+    });
+    painter.paint(sectionLayout, mount);
+
+    expect(mount.classList.contains('superdoc-cc-chrome-none')).toBe(true);
+    expect(mount.querySelector('.superdoc-document-section__tooltip')).toBeTruthy();
+  });
+
   it('annotates fragments with both primary SDT and container SDT metadata', () => {
     // Test case: TOC paragraph inside a documentSection
     // Should have docPart metadata as primary (data-sdt-*) and section as container (data-sdt-container-*)
@@ -2710,6 +2766,74 @@ describe('DomPainter', () => {
 
     // Verify text content (label text + run text)
     expect(wrapper.textContent).toContain('controlled text');
+  });
+
+  it('omits inline content-control label when contentControlsChrome is none', () => {
+    const inlineScBlock: FlowBlock = {
+      kind: 'paragraph',
+      id: 'inline-sc-no-chrome',
+      runs: [
+        { text: 'Before ', fontFamily: 'Arial', fontSize: 16, pmStart: 0, pmEnd: 7 },
+        {
+          text: 'controlled',
+          fontFamily: 'Arial',
+          fontSize: 16,
+          pmStart: 7,
+          pmEnd: 17,
+          sdt: {
+            type: 'structuredContent',
+            scope: 'inline',
+            id: 'sc-inline-none',
+            tag: 'dropdown',
+            alias: 'Test Dropdown',
+          },
+        },
+        { text: ' after', fontFamily: 'Arial', fontSize: 16, pmStart: 17, pmEnd: 23 },
+      ],
+      attrs: {},
+    };
+
+    const inlineScMeasure: Measure = {
+      kind: 'paragraph',
+      lines: [{ fromRun: 0, fromChar: 0, toRun: 2, toChar: 6, width: 200, ascent: 12, descent: 4, lineHeight: 20 }],
+      totalHeight: 20,
+    };
+
+    const inlineScLayout: Layout = {
+      pageSize: { w: 612, h: 792 },
+      pages: [
+        {
+          number: 1,
+          fragments: [
+            {
+              kind: 'para',
+              blockId: 'inline-sc-no-chrome',
+              fromLine: 0,
+              toLine: 1,
+              x: 30,
+              y: 40,
+              width: 552,
+              pmStart: 0,
+              pmEnd: 23,
+            },
+          ],
+        },
+      ],
+    };
+
+    const painter = createTestPainter({
+      blocks: [inlineScBlock],
+      measures: [inlineScMeasure],
+      contentControlsChrome: 'none',
+    });
+    painter.paint(inlineScLayout, mount);
+
+    const wrapper = mount.querySelector(
+      '.superdoc-structured-content-inline[data-sdt-id="sc-inline-none"]',
+    ) as HTMLElement | null;
+    expect(wrapper).toBeTruthy();
+    if (!wrapper) return;
+    expect(wrapper.querySelector('.superdoc-structured-content-inline__label')).toBeNull();
   });
 
   it('omits chrome and alias label when inline SDT appearance is hidden (SD-3110)', () => {
@@ -12778,6 +12902,64 @@ describe('applyRunDataAttributes', () => {
         // Should have container boundary markers
         expect(fragment.dataset.sdtContainerStart).toBe('true');
         expect(fragment.dataset.sdtContainerEnd).toBe('true');
+      });
+
+      it('omits block structured-content label when contentControlsChrome is none', () => {
+        const blockSdtBlock: FlowBlock = {
+          kind: 'paragraph',
+          id: 'block-sdt-none',
+          runs: [{ text: 'Content in block SDT', fontFamily: 'Arial', fontSize: 16, pmStart: 0, pmEnd: 20 }],
+          attrs: {
+            sdt: {
+              type: 'structuredContent',
+              scope: 'block',
+              id: 'scb-block-none',
+              tag: '{"fieldType":"signer"}',
+              alias: 'Block Content Control',
+            },
+          },
+        };
+
+        const blockSdtMeasure: Measure = {
+          kind: 'paragraph',
+          lines: [
+            { fromRun: 0, fromChar: 0, toRun: 0, toChar: 20, width: 180, ascent: 12, descent: 4, lineHeight: 20 },
+          ],
+          totalHeight: 20,
+        };
+
+        const blockSdtLayout: Layout = {
+          pageSize: { w: 400, h: 500 },
+          pages: [
+            {
+              number: 1,
+              fragments: [
+                {
+                  kind: 'para',
+                  blockId: 'block-sdt-none',
+                  fromLine: 0,
+                  toLine: 1,
+                  x: 20,
+                  y: 30,
+                  width: 320,
+                  pmStart: 0,
+                  pmEnd: 20,
+                },
+              ],
+            },
+          ],
+        };
+
+        const painter = createTestPainter({
+          blocks: [blockSdtBlock],
+          measures: [blockSdtMeasure],
+          contentControlsChrome: 'none',
+        });
+        painter.paint(blockSdtLayout, mount);
+
+        const fragment = mount.querySelector('.superdoc-fragment') as HTMLElement;
+        expect(fragment.classList.contains('superdoc-structured-content-block')).toBe(true);
+        expect(fragment.querySelector('.superdoc-structured-content__label')).toBeFalsy();
       });
 
       it('updates block SDT boundaries when appending a new fragment during patch rendering', () => {

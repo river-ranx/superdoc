@@ -834,6 +834,7 @@ const editorOptions = (doc) => {
           zoom: (activeZoom.value ?? 100) / 100,
           emitCommentPositionsInViewing: isViewingMode() && shouldRenderCommentsInViewing.value,
           enableCommentsInViewing: isViewingCommentsVisible.value,
+          contentControlsChrome: proxy.$superdoc.config.modules?.contentControls?.chrome,
         }
       : undefined,
     permissionResolver: (payload = {}) =>

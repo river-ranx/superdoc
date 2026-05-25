@@ -99,6 +99,7 @@ export type RenderParagraphContentParams = {
   convertFinalParagraphMark?: boolean;
   lineTopOffset?: number;
   sourceAnchor?: SourceAnchor;
+  contentControlsChrome?: 'default' | 'none';
 };
 
 export type RenderParagraphContentResult = {
@@ -131,6 +132,7 @@ export const renderParagraphContent = (params: RenderParagraphContentParams): Re
     onSdtContainerChrome,
     applySdtDataset,
     applyContainerSdtDataset,
+    contentControlsChrome,
     renderDropCap,
     lineTopOffset = 0,
   } = params;
@@ -155,7 +157,17 @@ export const renderParagraphContent = (params: RenderParagraphContentParams): Re
     ancestorContainerSdts,
   });
   if (applySdtChrome) {
-    if (applySdtContainerChrome(doc, frameEl, block.attrs?.sdt, block.attrs?.containerSdt, sdtBoundary)) {
+    if (
+      applySdtContainerChrome(
+        doc,
+        frameEl,
+        block.attrs?.sdt,
+        block.attrs?.containerSdt,
+        sdtBoundary,
+        undefined,
+        contentControlsChrome,
+      )
+    ) {
       onSdtContainerChrome?.();
     }
   }

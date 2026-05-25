@@ -49,6 +49,16 @@ describe('ensureSdtContainerStyles', () => {
     expect(cssText).toContain(".superdoc-structured-content-inline[data-appearance='hidden'] {");
     expect(cssText).toContain('background-color: transparent;');
   });
+
+  it('includes global content-controls chrome-none suppression selectors', () => {
+    ensureSdtContainerStyles(document);
+    const styleEl = document.querySelector('[data-superdoc-sdt-container-styles="true"]');
+    const cssText = styleEl?.textContent ?? '';
+
+    expect(cssText).toContain('.superdoc-cc-chrome-none .superdoc-structured-content-inline');
+    expect(cssText).toContain('.superdoc-cc-chrome-none .superdoc-structured-content-block');
+    expect(cssText).toContain('.superdoc-cc-chrome-none .superdoc-structured-content-block.sdt-group-hover');
+  });
 });
 
 describe('ensureTrackChangeStyles', () => {
