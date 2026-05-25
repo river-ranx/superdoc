@@ -1,7 +1,7 @@
 import type { EditorState, Transaction, Plugin } from 'prosemirror-state';
 import { AddMarkStep, RemoveMarkStep, ReplaceAroundStep, ReplaceStep, Transform } from 'prosemirror-transform';
 import type { EditorView as PmEditorView } from 'prosemirror-view';
-import type { Node as PmNode, Schema } from 'prosemirror-model';
+import type { Mark as PmMark, Node as PmNode, Schema } from 'prosemirror-model';
 import type { Doc as YDoc, XmlFragment as YXmlFragment } from 'yjs';
 import type { EditorOptions, User, FieldValue, DocxFileEntry } from './types/EditorConfig.js';
 import type { EditorHelpers, ExtensionStorage, ProseMirrorJSON, PageStyles, Toolbar } from './types/EditorTypes.js';
@@ -181,6 +181,95 @@ const rangeHasTrackedReviewMark = (doc: PmNode, from: number, to: number): boole
   return found;
 };
 
+const rangeIsTrackedInsertionOnly = (doc: PmNode, from: number, to: number): boolean => {
+  if (from >= to) return false;
+
+  const docStart = 0;
+  const docEnd = doc.content.size;
+  const clampedFrom = Math.max(docStart, Math.min(docEnd, from));
+  const clampedTo = Math.max(docStart, Math.min(docEnd, to));
+  if (clampedFrom >= clampedTo) return false;
+
+  let sawTrackedInsertion = false;
+  let sawUntrackedInline = false;
+  let sawNonInsertionTrackedMark = false;
+
+  doc.nodesBetween(clampedFrom, clampedTo, (node, pos) => {
+    if (!node.isInline || !node.isLeaf) return;
+    if (pos + node.nodeSize <= clampedFrom || pos >= clampedTo) return;
+
+    const trackedMarks = (node.marks ?? []).filter(isTrackedReviewMark);
+    if (!trackedMarks.length) {
+      sawUntrackedInline = true;
+      return;
+    }
+
+    sawTrackedInsertion = true;
+    if (!trackedMarks.every((mark) => mark.type?.name === TrackInsertMarkName)) {
+      sawNonInsertionTrackedMark = true;
+    }
+  });
+
+  return sawTrackedInsertion && !sawUntrackedInline && !sawNonInsertionTrackedMark;
+};
+
+const getSingleTrackedInsertionMarkInRange = (
+  doc: PmNode,
+  from: number,
+  to: number,
+): PmMark | null => {
+  if (!rangeIsTrackedInsertionOnly(doc, from, to)) return null;
+
+  /** @type {import('prosemirror-model').Mark[]} */
+  const insertionMarks = [];
+  const seenIds = new Set<string>();
+  doc.nodesBetween(from, to, (node, pos) => {
+    if (!node.isInline || !node.isLeaf) return;
+    if (pos + node.nodeSize <= from || pos >= to) return;
+
+    const insertionMark = (node.marks ?? []).find((mark) => mark.type?.name === TrackInsertMarkName);
+    const id = typeof insertionMark?.attrs?.id === 'string' ? insertionMark.attrs.id : null;
+    if (!insertionMark || !id || seenIds.has(id)) return;
+    seenIds.add(id);
+    insertionMarks.push(insertionMark);
+  });
+
+  return insertionMarks.length === 1 ? insertionMarks[0] : null;
+};
+
+const resolveDirectInsertionDeleteCommentMeta = (
+  state: EditorState,
+  tr: Transaction,
+):
+  | {
+      insertedMark: PmMark;
+      deletionMark: null;
+      formatMark: null;
+      deletionNodes: [];
+      step: ReplaceStep;
+      emitCommentEvent: true;
+    }
+  | null => {
+  if (!tr.docChanged || tr.steps.length !== 1) return null;
+
+  const [step] = tr.steps;
+  if (!(step instanceof ReplaceStep) || step.from === step.to || step.slice.content.size !== 0) return null;
+
+  const docs = (tr as unknown as { docs?: PmNode[] }).docs ?? [];
+  const docBeforeStep = docs[0] ?? state.doc;
+  const insertedMark = getSingleTrackedInsertionMarkInRange(docBeforeStep, step.from, step.to);
+  if (!insertedMark) return null;
+
+  return {
+    insertedMark,
+    deletionMark: null,
+    formatMark: null,
+    deletionNodes: [],
+    step,
+    emitCommentEvent: true,
+  };
+};
+
 const collapsedPositionIsInsideTrackedReviewMark = (doc: PmNode, pos: number): boolean => {
   const boundedPos = Math.max(0, Math.min(doc.content.size, pos));
   const $pos = doc.resolve(boundedPos);
@@ -223,6 +312,12 @@ const collapsedInsertionExtendsTrackedReviewMark = (
 
 const stepTouchesTrackedReviewState = (step: unknown, doc: PmNode): boolean => {
   if (step instanceof ReplaceStep) {
+    // Direct deletes wholly inside an unresolved insertion mutate that
+    // insertion in place to match Word. They should not be rerouted into a
+    // synthetic tracked delete.
+    if (step.from !== step.to && step.slice.content.size === 0 && rangeIsTrackedInsertionOnly(doc, step.from, step.to)) {
+      return false;
+    }
     if (rangeHasTrackedReviewMark(doc, step.from, step.to)) return true;
     if (step.from === step.to && step.slice.content.size > 0) {
       return (
@@ -2930,6 +3025,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
       const trackChangesState = TrackChangesBasePluginKey.getState(prevState);
       const isTrackChangesActive = trackChangesState?.isTrackChangesActive ?? false;
       const skipTrackChanges = transactionToApply.getMeta('skipTrackChanges') === true;
+      const directInsertionDeleteCommentMeta = resolveDirectInsertionDeleteCommentMeta(prevState, transactionToApply);
       const protectsExistingTrackedReviewState = transactionTouchesTrackedReviewState(prevState, transactionToApply);
       if (protectsExistingTrackedReviewState && skipTrackChanges) {
         transactionToApply.setMeta('protectTrackedReviewState', true);
@@ -2937,6 +3033,9 @@ export class Editor extends EventEmitter<EditorEventMap> {
 
       const shouldTrack =
         ((isTrackChangesActive || forceTrackChanges) && !skipTrackChanges) || protectsExistingTrackedReviewState;
+      if (!shouldTrack && directInsertionDeleteCommentMeta && !transactionToApply.getMeta(TrackChangesBasePluginKey)) {
+        transactionToApply.setMeta(TrackChangesBasePluginKey, directInsertionDeleteCommentMeta);
+      }
       if (shouldTrack && forceTrackChanges && !this.options.user) {
         throw new Error('forceTrackChanges requires a user to be configured on the editor instance.');
       }

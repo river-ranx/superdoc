@@ -14,6 +14,7 @@ const FIXED_DATE = '2026-05-21T00:00:00.000Z';
 const FOREIGN_INSERT_ID = 'foreign-insert';
 const INSERTED_TEXT = 'here is my new text, do you like it?';
 const INSERTED_TAIL = 'do you like it?';
+const INSERTED_TEXT_AFTER_DIRECT_DELETE = INSERTED_TEXT.replace(INSERTED_TAIL, '');
 const CURRENT_DIR = dirname(fileURLToPath(import.meta.url));
 const WORD_REPLACEMENT_FIXTURE = resolve(
   CURRENT_DIR,
@@ -304,7 +305,7 @@ describe('Editor dispatch tracked-change meta', () => {
     }
   });
 
-  it('protects another user tracked insertion from direct delete while local track mode is off', () => {
+  it('mutates another user tracked insertion in place on direct delete while local track mode is off', () => {
     ({ editor } = initTestEditor({
       mode: 'text',
       content: '<p></p>',
@@ -318,19 +319,11 @@ describe('Editor dispatch tracked-change meta', () => {
 
     deleteText(editor, INSERTED_TAIL);
 
-    expect(editor.state.doc.textContent).toContain(INSERTED_TEXT);
-    expect(textForMarkId(editor, TrackInsertMarkName, FOREIGN_INSERT_ID)).toBe(INSERTED_TEXT);
-
-    const childDeletion = markEntries(editor, TrackDeleteMarkName).find(({ text }) => text === INSERTED_TAIL);
-    expect(childDeletion?.mark.attrs).toEqual(
-      expect.objectContaining({
-        authorEmail: BOB.email,
-        overlapParentId: FOREIGN_INSERT_ID,
-      }),
-    );
+    expect(textForMarkId(editor, TrackInsertMarkName, FOREIGN_INSERT_ID)).toBe(INSERTED_TEXT_AFTER_DIRECT_DELETE);
+    expect(markEntries(editor, TrackDeleteMarkName)).toHaveLength(0);
   });
 
-  it('protects anonymous live tracked insertion from direct delete without a configured editor user', () => {
+  it('mutates an anonymous live tracked insertion in place on direct delete without a configured editor user', () => {
     ({ editor } = initTestEditor({
       mode: 'text',
       content: '<p></p>',
@@ -343,20 +336,11 @@ describe('Editor dispatch tracked-change meta', () => {
 
     deleteText(editor, INSERTED_TAIL);
 
-    expect(editor.state.doc.textContent).toContain(INSERTED_TEXT);
-    expect(textForMarkId(editor, TrackInsertMarkName, FOREIGN_INSERT_ID)).toBe(INSERTED_TEXT);
-
-    const childDeletion = markEntries(editor, TrackDeleteMarkName).find(({ text }) => text === INSERTED_TAIL);
-    expect(childDeletion?.mark.attrs).toEqual(
-      expect.objectContaining({
-        author: '',
-        authorEmail: '',
-        overlapParentId: FOREIGN_INSERT_ID,
-      }),
-    );
+    expect(textForMarkId(editor, TrackInsertMarkName, FOREIGN_INSERT_ID)).toBe(INSERTED_TEXT_AFTER_DIRECT_DELETE);
+    expect(markEntries(editor, TrackDeleteMarkName)).toHaveLength(0);
   });
 
-  it('protects anonymous live tracked insertion from document-api direct delete', () => {
+  it('mutates an anonymous live tracked insertion in place from document-api direct delete', () => {
     ({ editor } = initTestEditor({
       mode: 'text',
       content: '<p></p>',
@@ -367,20 +351,11 @@ describe('Editor dispatch tracked-change meta', () => {
     const receipt = editor.doc.delete({ ref: getFirstMatchRef(editor, INSERTED_TAIL) }, { changeMode: 'direct' });
 
     expect(receipt.success).toBe(true);
-    expect(editor.state.doc.textContent).toContain(INSERTED_TEXT);
-    expect(textForMarkId(editor, TrackInsertMarkName, FOREIGN_INSERT_ID)).toBe(INSERTED_TEXT);
-
-    const childDeletion = markEntries(editor, TrackDeleteMarkName).find(({ text }) => text === INSERTED_TAIL);
-    expect(childDeletion?.mark.attrs).toEqual(
-      expect.objectContaining({
-        author: '',
-        authorEmail: '',
-        overlapParentId: FOREIGN_INSERT_ID,
-      }),
-    );
+    expect(textForMarkId(editor, TrackInsertMarkName, FOREIGN_INSERT_ID)).toBe(INSERTED_TEXT_AFTER_DIRECT_DELETE);
+    expect(markEntries(editor, TrackDeleteMarkName)).toHaveLength(0);
   });
 
-  it('protects tracked insertion created by document-api insert from document-api direct delete', () => {
+  it('mutates tracked insertion created by document-api insert from document-api direct delete', () => {
     ({ editor } = initTestEditor({
       mode: 'text',
       content: '<p></p>',
@@ -406,31 +381,19 @@ describe('Editor dispatch tracked-change meta', () => {
     const deleteReceipt = editor.doc.delete({ ref: getFirstMatchRef(editor, 'review') }, { changeMode: 'direct' });
 
     expect(deleteReceipt.success).toBe(true);
-    expect(editor.state.doc.textContent).toContain('live-review-comment');
+    expect(editor.state.doc.textContent).toContain('live--comment');
 
-    expect(textForMarkId(editor, TrackInsertMarkName, insertMark?.mark.attrs.id)).toBe('live-review-comment');
-
-    const childDeletion = markEntries(editor, TrackDeleteMarkName).find(({ text }) => text === 'review');
-    expect(childDeletion?.mark.attrs).toEqual(
-      expect.objectContaining({
-        author: 'CLI',
-        authorId: 'cli',
-        authorEmail: '',
-        overlapParentId: insertMark?.mark.attrs.id,
-      }),
-    );
+    expect(textForMarkId(editor, TrackInsertMarkName, insertMark?.mark.attrs.id)).toBe('live--comment');
+    expect(markEntries(editor, TrackDeleteMarkName)).toHaveLength(0);
 
     const trackedChanges = editor.doc.trackChanges.list();
-    expect(trackedChanges.total).toBe(2);
-    expect(trackedChanges.items.map((item) => item.raw?.type ?? item.type).sort()).toEqual(['delete', 'insert']);
+    expect(trackedChanges.total).toBe(1);
+    expect(trackedChanges.items.map((item) => item.raw?.type ?? item.type)).toEqual(['insert']);
 
     const comments = editor.doc.comments.list();
-    expect(comments.total).toBe(2);
+    expect(comments.total).toBe(1);
     expect(comments.items).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ trackedChangeType: 'insert', trackedChangeText: 'live-review-comment' }),
-        expect.objectContaining({ trackedChangeType: 'delete', deletedText: 'review' }),
-      ]),
+      expect.arrayContaining([expect.objectContaining({ trackedChangeType: 'insert', trackedChangeText: 'live--comment' })]),
     );
   });
 
@@ -506,7 +469,7 @@ describe('Editor dispatch tracked-change meta', () => {
     );
   });
 
-  it('emits review comment state for a protected child deletion instead of only truncating the parent', () => {
+  it('does not emit a child deletion review comment on direct delete inside a tracked insertion', () => {
     ({ editor } = initTestEditor({
       mode: 'text',
       content: '<p></p>',
@@ -526,13 +489,16 @@ describe('Editor dispatch tracked-change meta', () => {
         payload?.trackedChangeType === TrackDeleteMarkName,
     )?.[1];
 
-    expect(childDeletionEvent).toEqual(
-      expect.objectContaining({
-        deletedText: expect.stringContaining(INSERTED_TAIL),
-        authorEmail: BOB.email,
-      }),
+    expect(childDeletionEvent).toBeUndefined();
+    expect(textForMarkId(editor, TrackInsertMarkName, FOREIGN_INSERT_ID)).toBe(INSERTED_TEXT_AFTER_DIRECT_DELETE);
+    expect(editor.doc.comments.list().items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          trackedChangeType: 'insert',
+          trackedChangeText: INSERTED_TEXT_AFTER_DIRECT_DELETE,
+        }),
+      ]),
     );
-    expect(textForMarkId(editor, TrackInsertMarkName, FOREIGN_INSERT_ID)).toBe(INSERTED_TEXT);
   });
 
   it('still allows direct deletion of untracked plain text while local track mode is off', () => {
