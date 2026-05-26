@@ -1,17 +1,17 @@
 # superdoc root export inventory (SD-3212 PR A0)
 
-Generated: 2026-05-26T00:59:49.957Z
+Generated: 2026-05-26T10:45:50.855Z
 Source: packed and installed `tests/consumer-typecheck/node_modules/superdoc`
 
 ## Counts
 
 | Source | Path | Count |
 |---|---|---|
-| types.import | `./dist/superdoc/src/public/index.d.ts` | 208 |
-| types.require | `./dist/superdoc/src/public/index.d.cts` | 208 |
+| types.import | `./dist/superdoc/src/public/index.d.ts` | 213 |
+| types.require | `./dist/superdoc/src/public/index.d.cts` | 213 |
 | import | `./dist/superdoc.es.js` | 41 |
 | require | `./dist/superdoc.cjs` | 41 |
-| **union** |  | **208** |
+| **union** |  | **213** |
 
 ## Divergences
 
@@ -19,7 +19,7 @@ Source: packed and installed `tests/consumer-typecheck/node_modules/superdoc`
 - types.require only (not in types.import): 0
 - ESM only (not in CJS): 0
 - CJS only (not in ESM): 0
-- typed but no runtime export (phantom risk): 167
+- typed but no runtime export (phantom risk): 172
 - runtime export but not typed (silent shadow on root): 0
 
 ### Type-only names (no runtime)
@@ -159,11 +159,16 @@ Source: packed and installed `tests/consumer-typecheck/node_modules/superdoc`
 - `SelectionHandle`
 - `SelectionInfo`
 - `StoryLocator`
+- `SuperDocAwarenessUpdatePayload`
+- `SuperDocCommentsUpdatePayload`
+- `SuperDocEditorPayload`
 - `SuperDocExceptionEditorPayload`
 - `SuperDocExceptionPayload`
 - `SuperDocExceptionRestorePayload`
 - `SuperDocExceptionStorePayload`
 - `SuperDocLayoutEngineOptions`
+- `SuperDocLockedPayload`
+- `SuperDocReadyPayload`
 - `SuperDocState`
 - `SuperDocTelemetryConfig`
 - `SurfaceComponentProps`
@@ -223,7 +228,7 @@ Source: packed and installed `tests/consumer-typecheck/node_modules/superdoc`
 | `CommentsPayload` | ✓ | ✓ |   |   | 2 | ✓ | 0 | 0 | 0 |   |
 | `CommentsPluginKey` | ✓ | ✓ | ✓ | ✓ | 2 |   | 0 | 0 | 1 | ✓ |
 | `CommentsType` | ✓ | ✓ |   |   | 1 | ✓ | 0 | 0 | 0 |   |
-| `Config` | ✓ | ✓ |   |   | 6 | ✓ | 2 | 1 | 2 | ✓ |
+| `Config` | ✓ | ✓ |   |   | 7 | ✓ | 2 | 1 | 2 | ✓ |
 | `ContextMenu` | ✓ | ✓ | ✓ | ✓ | 1 |   | 7 | 0 | 31 |   |
 | `ContextMenuConfig` | ✓ | ✓ |   |   | 2 | ✓ | 0 | 0 | 0 |   |
 | `ContextMenuContext` | ✓ | ✓ |   |   | 2 | ✓ | 0 | 0 | 0 |   |
@@ -286,7 +291,7 @@ Source: packed and installed `tests/consumer-typecheck/node_modules/superdoc`
 | `LinkPopoverContext` | ✓ | ✓ |   |   | 1 | ✓ | 2 | 0 | 0 |   |
 | `LinkPopoverResolution` | ✓ | ✓ |   |   | 1 | ✓ | 1 | 0 | 0 |   |
 | `LinkPopoverResolver` | ✓ | ✓ |   |   | 1 | ✓ | 0 | 0 | 0 |   |
-| `ListDefinitionsPayload` | ✓ | ✓ |   |   | 1 | ✓ | 0 | 0 | 0 |   |
+| `ListDefinitionsPayload` | ✓ | ✓ |   |   | 2 | ✓ | 0 | 0 | 0 |   |
 | `Measure` | ✓ | ✓ |   |   | 3 | ✓ | 0 | 0 | 1 |   |
 | `Modules` | ✓ | ✓ |   |   | 1 | ✓ | 4 | 0 | 0 |   |
 | `NavigableAddress` | ✓ | ✓ |   |   | 2 | ✓ | 0 | 0 | 0 |   |
@@ -347,11 +352,16 @@ Source: packed and installed `tests/consumer-typecheck/node_modules/superdoc`
 | `StoryLocator` | ✓ | ✓ |   |   | 1 | ✓ | 116 | 0 | 3 |   |
 | `SuperConverter` | ✓ | ✓ | ✓ | ✓ | 1 |   | 0 | 0 | 3 | ✓ |
 | `SuperDoc` | ✓ | ✓ | ✓ | ✓ | 21 |   | 1014 | 180 | 244 | ✓ |
+| `SuperDocAwarenessUpdatePayload` | ✓ | ✓ |   |   | 2 |   | 0 | 0 | 0 |   |
+| `SuperDocCommentsUpdatePayload` | ✓ | ✓ |   |   | 2 |   | 0 | 0 | 0 |   |
+| `SuperDocEditorPayload` | ✓ | ✓ |   |   | 2 |   | 0 | 0 | 0 |   |
 | `SuperDocExceptionEditorPayload` | ✓ | ✓ |   |   | 2 |   | 0 | 0 | 0 |   |
 | `SuperDocExceptionPayload` | ✓ | ✓ |   |   | 2 |   | 0 | 0 | 0 |   |
 | `SuperDocExceptionRestorePayload` | ✓ | ✓ |   |   | 1 |   | 0 | 0 | 0 |   |
 | `SuperDocExceptionStorePayload` | ✓ | ✓ |   |   | 2 |   | 0 | 0 | 0 |   |
 | `SuperDocLayoutEngineOptions` | ✓ | ✓ |   |   | 2 | ✓ | 0 | 0 | 0 |   |
+| `SuperDocLockedPayload` | ✓ | ✓ |   |   | 2 |   | 0 | 0 | 0 |   |
+| `SuperDocReadyPayload` | ✓ | ✓ |   |   | 2 |   | 0 | 0 | 0 |   |
 | `SuperDocState` | ✓ | ✓ |   |   | 2 |   | 0 | 0 | 0 |   |
 | `SuperDocTelemetryConfig` | ✓ | ✓ |   |   | 1 | ✓ | 0 | 0 | 0 |   |
 | `SuperEditor` | ✓ | ✓ | ✓ | ✓ | 1 |   | 16 | 0 | 5 |   |
