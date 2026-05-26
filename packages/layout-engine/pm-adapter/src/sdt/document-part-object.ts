@@ -53,7 +53,7 @@ export function handleDocumentPartObjectNode(node: PMNode, context: NodeHandlerC
   const tocId =
     docPartObjectId && docPartObjectId.length > 0
       ? docPartObjectId
-      : typeof sdBlockId === 'string'
+      : typeof sdBlockId === 'string' && sdBlockId.length > 0
         ? sdBlockId
         : undefined;
 
