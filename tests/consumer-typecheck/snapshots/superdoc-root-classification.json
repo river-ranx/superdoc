@@ -1,14 +1,14 @@
 {
   "generatedAt": "2026-05-19T11:33:50.546Z",
   "summary": {
-    "total": 206,
+    "total": 208,
     "byBucket": {
       "legacy-root": 60,
       "internal-candidate": 8,
-      "supported-root": 138
+      "supported-root": 140
     },
     "byConfidence": {
-      "high": 103,
+      "high": 105,
       "medium": 101,
       "low": 2
     }
@@ -415,6 +415,17 @@
       "bucket": "supported-root",
       "rationale": "Customer-facing core API type or runtime export. Type-reachable through documented config / callback / event / method surfaces; runtime exports are documented utilities.",
       "confidence": "medium",
+      "source": "core",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
+      "name": "Document",
+      "bucket": "supported-root",
+      "rationale": "Customer-facing core API type or runtime export. Consumer-supplied document descriptor used in Config.documents and now SuperDocState.documents; the public counterpart to the internal RuntimeDocument (which carries runtime-only fields and stays internal).",
+      "confidence": "high",
       "source": "core",
       "inDts": true,
       "inDcts": true,
@@ -1714,6 +1725,17 @@
       "rationale": "Types Config.layoutEngineOptions at core/types/index.ts:1350,1505. Documented Config field.",
       "confidence": "high",
       "source": "locked",
+      "inDts": true,
+      "inDcts": true,
+      "inEsm": false,
+      "inCjs": false
+    },
+    {
+      "name": "SuperDocState",
+      "bucket": "supported-root",
+      "rationale": "Public return shape of the SuperDoc#state getter; introduced to replace an inline anonymous return that leaked the internal RuntimeDocument type. Exposes `documents` as Document[] (the public view).",
+      "confidence": "high",
+      "source": "core",
       "inDts": true,
       "inDcts": true,
       "inEsm": false,

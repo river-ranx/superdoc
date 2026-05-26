@@ -53,6 +53,7 @@ import type {
   CoreCommandMap,
   DirectSurfaceRequest,
   DocRange,
+  Document,
   DocumentApi,
   DocumentMode,
   DocumentProtectionState,
@@ -163,6 +164,7 @@ import type {
   SuperDocExceptionRestorePayload,
   SuperDocExceptionStorePayload,
   SuperDocLayoutEngineOptions,
+  SuperDocState,
   SuperDocTelemetryConfig,
   SurfaceComponentProps,
   SurfaceFloatingPlacement,
@@ -227,6 +229,7 @@ const _real_ContextMenuSection: AssertNotAny<ContextMenuSection> = true;
 const _real_CoreCommandMap: AssertNotAny<CoreCommandMap> = true;
 const _real_DirectSurfaceRequest: AssertNotAny<DirectSurfaceRequest> = true;
 const _real_DocRange: AssertNotAny<DocRange> = true;
+const _real_Document: AssertNotAny<Document> = true;
 const _real_DocumentApi: AssertNotAny<DocumentApi> = true;
 const _real_DocumentMode: AssertNotAny<DocumentMode> = true;
 const _real_DocumentProtectionState: AssertNotAny<DocumentProtectionState> = true;
@@ -337,6 +340,7 @@ const _real_SuperDocExceptionPayload: AssertNotAny<SuperDocExceptionPayload> = t
 const _real_SuperDocExceptionRestorePayload: AssertNotAny<SuperDocExceptionRestorePayload> = true;
 const _real_SuperDocExceptionStorePayload: AssertNotAny<SuperDocExceptionStorePayload> = true;
 const _real_SuperDocLayoutEngineOptions: AssertNotAny<SuperDocLayoutEngineOptions> = true;
+const _real_SuperDocState: AssertNotAny<SuperDocState> = true;
 const _real_SuperDocTelemetryConfig: AssertNotAny<SuperDocTelemetryConfig> = true;
 const _real_SurfaceComponentProps: AssertNotAny<SurfaceComponentProps> = true;
 const _real_SurfaceFloatingPlacement: AssertNotAny<SurfaceFloatingPlacement> = true;

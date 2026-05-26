@@ -139,6 +139,25 @@ export interface Document {
 }
 
 /**
+ * Public snapshot shape returned by `SuperDoc#state`. Always reflects
+ * the most recent values from the Pinia store; consumers must re-read
+ * on change rather than caching.
+ *
+ * `documents` is typed as the public `Document[]` view. Internally the
+ * runtime tracks `RuntimeDocument`, which adds runtime-only fields
+ * (`getEditor`, `getPresentationEditor`, `restoreComments`, etc.) for
+ * SuperDoc's own lifecycle plumbing. Those fields are not part of the
+ * supported surface; consumers using `state.documents` should treat
+ * each entry as `Document` and not rely on the richer runtime shape.
+ */
+export interface SuperDocState {
+  /** Documents tracked by the instance, in consumer-provided order. */
+  documents: Document[];
+  /** Shared users (drives presence + "@"-mention surfaces). */
+  users: User[];
+}
+
+/**
  * External collaboration provider interface. Accepts any Yjs-compatible
  * provider (HocuspocusProvider, LiveblocksYjsProvider, TiptapCollabProvider,
  * etc.). Re-exported from `@superdoc/super-editor` so `Config.modules.collaboration.provider`

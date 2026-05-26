@@ -7,16 +7,16 @@ Input: tests/consumer-typecheck/snapshots/superdoc-root-exports.json (205 names,
 
 | Bucket | Count |
 |---|---|
-| supported-root | 138 |
+| supported-root | 140 |
 | legacy-root | 60 |
 | move-to-subpath | 0 |
 | internal-candidate | 8 |
 | NEEDS-REVIEW | 0 |
-| **total** | **206** |
+| **total** | **208** |
 
-Confidence: high=103, medium=101, needs-review=0.
+Confidence: high=105, medium=101, needs-review=0.
 
-## supported-root (138)
+## supported-root (140)
 
 | Name | Confidence | Source | Rationale |
 |---|---|---|---|
@@ -41,6 +41,7 @@ Confidence: high=103, medium=101, needs-review=0.
 | `DOCX` | high | locked | Content-format constant. Heavily documented (133 doc mentions). Customer-facing. |
 | `DirectSurfaceRequest` | medium | surface | Headless Surface API type. Public extension surface for custom UI integrations. |
 | `DocRange` | medium | core | Customer-facing core API type or runtime export. Type-reachable through documented config / callback / event / method surfaces; runtime exports are documented utilities. |
+| `Document` | high | core | Consumer-supplied document descriptor used in Config.documents and SuperDocState.documents; the public counterpart to the internal RuntimeDocument (which carries runtime-only fields and stays internal). |
 | `DocumentApi` | high | doc-api | Document API navigation/address/selection type. Promoted into the root facade by SD-3185. |
 | `DocumentMode` | medium | core | Customer-facing core API type or runtime export. Type-reachable through documented config / callback / event / method surfaces; runtime exports are documented utilities. |
 | `DocumentProtectionState` | high | doc-api | Document API navigation/address/selection type. Promoted into the root facade by SD-3185. |
@@ -116,6 +117,7 @@ Confidence: high=103, medium=101, needs-review=0.
 | `StoryLocator` | high | doc-api | Document API navigation/address/selection type. Promoted into the root facade by SD-3185. |
 | `SuperDoc` | medium | core | Customer-facing core API type or runtime export. Type-reachable through documented config / callback / event / method surfaces; runtime exports are documented utilities. |
 | `SuperDocLayoutEngineOptions` | high | locked | Types Config.layoutEngineOptions at core/types/index.ts:1350,1505. Documented Config field. |
+| `SuperDocState` | high | core | Public return shape of the SuperDoc#state getter; introduced to replace an inline anonymous return that leaked the internal RuntimeDocument type. Exposes `documents` as Document[] (the public view). |
 | `SuperDocTelemetryConfig` | high | locked | Backs Config.telemetry; documented at apps/docs/resources/telemetry.mdx (enabled/endpoint/metadata/licenseKey). |
 | `SurfaceComponentProps` | medium | surface | Headless Surface API type. Public extension surface for custom UI integrations. |
 | `SurfaceFloatingPlacement` | medium | surface | Headless Surface API type. Public extension surface for custom UI integrations. |

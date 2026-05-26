@@ -76,6 +76,7 @@ import type {
   SearchMatch,
   SuperDocExceptionPayload,
   SuperDocExceptionStorePayload,
+  SuperDocState,
   SurfaceHandle,
   SurfaceRequest,
   UpgradeToCollaborationOptions,
@@ -686,8 +687,13 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
    * Snapshot of the current SuperDoc state. Always reflects the most
    * recent values from the Pinia store; consumers must re-read on
    * change rather than caching.
+   *
+   * @see {@link SuperDocState} for the public return shape. The runtime
+   * still walks `RuntimeDocument[]` internally, but `state.documents`
+   * is exposed as the public `Document[]` view - consumers should not
+   * rely on the richer runtime fields (`getEditor`, etc.).
    */
-  get state(): { documents: RuntimeDocument[]; users: User[] } {
+  get state(): SuperDocState {
     return {
       documents: this.#requireSuperdocStore('state').documents,
       users: this.users,
