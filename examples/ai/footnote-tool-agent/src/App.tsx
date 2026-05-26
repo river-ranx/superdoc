@@ -60,15 +60,22 @@ export default function App() {
   }, []);
 
   const send = async () => {
-    const api = superdocRef.current?.activeEditor?.doc;
-    if (!api || running || !prompt.trim()) return;
-
+    // `abortRef.current` is the synchronous in-flight guard. `running` is
+    // React state and is batched, so a fast double-trigger (double-click,
+    // Cmd+Enter twice within one frame) can pass a state-based guard before
+    // setRunning(true) takes effect and start two loops that overwrite each
+    // other's abort controller. The ref check holds because refs update
+    // immediately, not on the next render.
     const userText = prompt.trim();
+    const api = superdocRef.current?.activeEditor?.doc;
+    if (!api || abortRef.current || !userText) return;
+
+    const controller = new AbortController();
+    abortRef.current = controller;
     setPrompt('');
     setError(null);
     setChat((c) => [...c, { kind: 'user', text: userText }]);
     setRunning(true);
-    abortRef.current = new AbortController();
 
     // Bind editor.doc once so handlers are plain (args) → result functions.
     // Add more tools by appending entries to this object and mirroring
@@ -89,14 +96,18 @@ export default function App() {
               : [...c, { kind: 'tool', name: event.name, ok: event.result.ok, reason: event.result.ok ? undefined : event.result.reason }],
           );
         },
-        signal: abortRef.current.signal,
+        signal: controller.signal,
       });
     } catch (err) {
       if ((err as Error).name === 'AbortError') return;
       setError((err as Error).message || String(err));
     } finally {
+      // Clear only if it's still our controller — guards against accidental
+      // clearing if a future edit allows overlapping turns.
+      if (abortRef.current === controller) {
+        abortRef.current = null;
+      }
       setRunning(false);
-      abortRef.current = null;
     }
   };
 
