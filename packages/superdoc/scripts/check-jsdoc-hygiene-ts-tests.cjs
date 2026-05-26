@@ -14,7 +14,16 @@
  * Each fixture is an in-memory TypeScript source snippet plus the
  * expected list of (tag, class) pairs the scanner should emit.
  *
- * Run with: node packages/superdoc/scripts/check-jsdoc-hygiene-ts.test.cjs
+ * Wired into check:public:superdoc as the `jsdoc-hygiene-ts-test`
+ * stage, which runs immediately before `jsdoc-hygiene-ts` so AST
+ * drift surfaces here, not as a silent zero-result downstream.
+ *
+ * File is intentionally named `*-tests.cjs` (not `*.test.cjs`) so
+ * vitest doesn't pick it up via the `*.test.*` glob — this is a
+ * standalone Node runner, not a vitest suite.
+ *
+ * Run manually with:
+ *   node packages/superdoc/scripts/check-jsdoc-hygiene-ts-tests.cjs
  */
 
 const { findViolations } = require('./check-jsdoc-hygiene-ts.cjs');
