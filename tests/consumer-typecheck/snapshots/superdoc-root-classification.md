@@ -7,16 +7,16 @@ Input: tests/consumer-typecheck/snapshots/superdoc-root-exports.json (205 names,
 
 | Bucket | Count |
 |---|---|
-| supported-root | 140 |
+| supported-root | 145 |
 | legacy-root | 60 |
 | move-to-subpath | 0 |
 | internal-candidate | 8 |
 | NEEDS-REVIEW | 0 |
-| **total** | **208** |
+| **total** | **213** |
 
-Confidence: high=105, medium=101, needs-review=0.
+Confidence: high=110, medium=101, needs-review=0.
 
-## supported-root (140)
+## supported-root (145)
 
 | Name | Confidence | Source | Rationale |
 |---|---|---|---|
@@ -116,7 +116,12 @@ Confidence: high=105, medium=101, needs-review=0.
 | `SelectionInfo` | high | doc-api | Document API navigation/address/selection type. Promoted into the root facade by SD-3185. |
 | `StoryLocator` | high | doc-api | Document API navigation/address/selection type. Promoted into the root facade by SD-3185. |
 | `SuperDoc` | medium | core | Customer-facing core API type or runtime export. Type-reachable through documented config / callback / event / method surfaces; runtime exports are documented utilities. |
+| `SuperDocAwarenessUpdatePayload` | high | core | Payload emitted with the awareness-update event and passed to Config.onAwarenessUpdate; promoted to a named public type so callback signatures stop using inline shapes. |
+| `SuperDocCommentsUpdatePayload` | high | core | Payload emitted with the comments-update event and passed to Config.onCommentsUpdate; promoted to a named public type so callback signatures stop using inline shapes. |
+| `SuperDocEditorPayload` | high | core | Wrapper payload emitted with editorBeforeCreate / editorCreate / collaboration-ready events; promoted to a named public type so callback signatures match the runtime wrapper instead of a bare Editor. |
 | `SuperDocLayoutEngineOptions` | high | locked | Types Config.layoutEngineOptions at core/types/index.ts:1350,1505. Documented Config field. |
+| `SuperDocLockedPayload` | high | core | Payload emitted with the locked event and passed to Config.onLocked; promoted to a named public type so the lockedBy: User \| null contract is consumer-typable. |
+| `SuperDocReadyPayload` | high | core | Payload emitted with the ready event and passed to Config.onReady; promoted to a named public type for consistency with the other event payloads. |
 | `SuperDocState` | high | core | Public return shape of the SuperDoc#state getter; introduced to replace an inline anonymous return that leaked the internal RuntimeDocument type. Exposes `documents` as Document[] (the public view). |
 | `SuperDocTelemetryConfig` | high | locked | Backs Config.telemetry; documented at apps/docs/resources/telemetry.mdx (enabled/endpoint/metadata/licenseKey). |
 | `SurfaceComponentProps` | medium | surface | Headless Surface API type. Public extension surface for custom UI integrations. |

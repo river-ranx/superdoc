@@ -68,14 +68,20 @@ import type {
   Config,
   DocumentMode,
   Editor,
+  EditorUpdateEvent,
   ExportParams,
   InternalConfig,
   Modules,
   NavigableAddress,
   RuntimeDocument,
   SearchMatch,
+  SuperDocAwarenessUpdatePayload,
+  SuperDocCommentsUpdatePayload,
+  SuperDocEditorPayload,
   SuperDocExceptionPayload,
   SuperDocExceptionStorePayload,
+  SuperDocLockedPayload,
+  SuperDocReadyPayload,
   SuperDocState,
   SurfaceHandle,
   SurfaceRequest,
@@ -88,13 +94,8 @@ import type * as Y from 'yjs';
 // as a type here without a separate `import type` declaration.
 import type { WhiteboardData } from './whiteboard/Whiteboard.js';
 
-// Event payload shapes (formerly JSDoc typedefs above the class).
-interface SuperDocReadyPayload {
-  superdoc: SuperDoc;
-}
-interface SuperDocEditorPayload {
-  editor: Editor;
-}
+// Internal-only event payload shapes (consumer-facing payloads are
+// exported from `core/types/index.ts` and imported above).
 interface SuperDocWhiteboardPayload {
   whiteboard: Whiteboard;
 }
@@ -116,28 +117,6 @@ interface SuperDocContentErrorPayload {
   error: unknown;
   editor: Editor;
 }
-interface SuperDocLockedPayload {
-  isLocked: boolean;
-  lockedBy?: User | null;
-}
-interface SuperDocEditorUpdatePayload {
-  editor?: Editor;
-  sourceEditor?: Editor;
-  surface: string;
-  headerId: string | null;
-  sectionType: string | null;
-}
-interface SuperDocAwarenessUpdatePayload {
-  states: AwarenessState[];
-  added: number[];
-  removed: number[];
-  superdoc: SuperDoc;
-}
-interface SuperDocCommentsUpdatePayload {
-  type: string;
-  comment?: Comment;
-  changes?: Array<{ key: string; commentId: string; fileId?: string | null }>;
-}
 
 /**
  * SuperDoc lifecycle event registry. Keys are event names emitted via
@@ -155,7 +134,7 @@ interface SuperDocEventMap {
   zoomChange: [SuperDocZoomPayload];
   'formatting-marks-change': [SuperDocFormattingMarksPayload];
   'document-mode-change': [SuperDocDocumentModeChangePayload];
-  'editor-update': [SuperDocEditorUpdatePayload];
+  'editor-update': [EditorUpdateEvent];
   'content-error': [SuperDocContentErrorPayload];
   'fonts-resolved': [FontsResolvedPayload];
   'pagination-update': [SuperDocPaginationPayload];
@@ -187,30 +166,6 @@ interface SuperDocEventMap {
 // editor's `onFontsResolved` option. Cleanup of this transport (relay
 // through SuperDoc instead) is a follow-up; typing it here matches the
 // current consumer-visible contract.
-
-/**
- * Adapts an optional `Config` callback to EventEmitter's
- * `(...args: any[]) => void` listener signature.
- *
- * Every callback wrapped by this helper defaults to `() => null` in the
- * class-field initializer, so EventEmitter receives a function in normal
- * use. This helper is a runtime identity cast: behavior is unchanged if
- * that invariant ever breaks (e.g. a consumer explicitly passes
- * `undefined`), and EventEmitter sees the same value it would have
- * without the wrapper. Sites with a `null` default (`onFontsResolved`,
- * `onTrackedChangeBubbleAccept`, `onTrackedChangeBubbleReject`) use a
- * separate `if`-guard pattern instead of this helper.
- *
- * The `any[]` here is correct: EventEmitter dispatches whatever payload
- * each emit site supplies, and the consumer-supplied callback only
- * inspects the args its own signature names. Narrower typing would force
- * every callsite below to cast.
- */
-/* eslint-disable @typescript-eslint/no-explicit-any */
-function asEventListener(listener: ((...args: any[]) => void) | undefined): (...args: any[]) => void {
-  return listener as (...args: any[]) => void;
-}
-/* eslint-enable @typescript-eslint/no-explicit-any */
 
 /**
  * SuperDoc class
@@ -857,26 +812,41 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
     this.#syncViewingVisibility();
   }
 
-  #initListeners() {
-    this.on('editorBeforeCreate', asEventListener(this.config.onEditorBeforeCreate));
-    this.on('editorCreate', asEventListener(this.config.onEditorCreate));
-    this.on('editorDestroy', asEventListener(this.config.onEditorDestroy));
-    this.on('ready', asEventListener(this.config.onReady));
-    this.on('comments-update', asEventListener(this.config.onCommentsUpdate));
-    this.on('awareness-update', asEventListener(this.config.onAwarenessUpdate));
-    this.on('locked', asEventListener(this.config.onLocked));
-    this.on('pdf:document-ready', asEventListener(this.config.onPdfDocumentReady));
-    this.on('sidebar-toggle', asEventListener(this.config.onSidebarToggle));
-    this.on('collaboration-ready', asEventListener(this.config.onCollaborationReady));
-    this.on('editor-update', asEventListener(this.config.onEditorUpdate));
-    this.on('content-error', this.onContentError);
-    this.on('exception', asEventListener(this.config.onException));
-    this.on('list-definitions-change', asEventListener(this.config.onListDefinitionsChange));
-    this.on('pagination-update', asEventListener(this.config.onPaginationUpdate));
+  /**
+   * Register an optional `Config` callback as a listener for the matching
+   * SuperDoc event. The event key constrains `K`, so TypeScript verifies
+   * that the consumer-typed `Config.onX` matches the runtime
+   * `SuperDocEventMap[event]` payload at compile time. No-ops on
+   * `undefined`, so optional callbacks do not register dead listeners.
+   *
+   * This is the gate that prevents callback/event contract drift; the
+   * earlier `any → any` bridge let mismatches like `lockedBy: User` vs
+   * runtime `User | null` ship undetected.
+   */
+  #onConfig<K extends keyof SuperDocEventMap>(
+    event: K,
+    listener: EventEmitter.EventListener<SuperDocEventMap, K> | undefined,
+  ): void {
+    if (listener) this.on(event, listener);
+  }
 
-    if (this.config.onFontsResolved) {
-      this.on('fonts-resolved', this.config.onFontsResolved);
-    }
+  #initListeners() {
+    this.#onConfig('editorBeforeCreate', this.config.onEditorBeforeCreate);
+    this.#onConfig('editorCreate', this.config.onEditorCreate);
+    this.#onConfig('editorDestroy', this.config.onEditorDestroy);
+    this.#onConfig('ready', this.config.onReady);
+    this.#onConfig('comments-update', this.config.onCommentsUpdate);
+    this.#onConfig('awareness-update', this.config.onAwarenessUpdate);
+    this.#onConfig('locked', this.config.onLocked);
+    this.#onConfig('pdf:document-ready', this.config.onPdfDocumentReady);
+    this.#onConfig('sidebar-toggle', this.config.onSidebarToggle);
+    this.#onConfig('collaboration-ready', this.config.onCollaborationReady);
+    this.#onConfig('editor-update', this.config.onEditorUpdate);
+    this.on('content-error', this.onContentError);
+    this.#onConfig('exception', this.config.onException);
+    this.#onConfig('list-definitions-change', this.config.onListDefinitionsChange);
+    this.#onConfig('pagination-update', this.config.onPaginationUpdate);
+    this.#onConfig('fonts-resolved', this.config.onFontsResolved);
   }
 
   /**
@@ -1624,7 +1594,12 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
 
     this.toolbar = new SuperToolbar(config);
 
-    this.toolbar.on('exception', asEventListener(this.config.onException));
+    // Toolbar bridge: forwards SuperToolbar's exception events into the
+    // user's Config.onException callback. SuperToolbar's event types are
+    // not aligned with SuperDocEventMap, so this is intentionally a
+    // local cast rather than going through the typed `#onConfig` helper.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    this.toolbar.on('exception', this.config.onException as any);
     // `this.toolbar` infers as `SuperToolbar | null` from the field's
     // first assignment in `#addToolbar` (the `null` placeholder a few
     // lines up). The closure registers after the SuperToolbar instance

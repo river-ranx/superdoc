@@ -159,11 +159,16 @@ import type {
   SelectionHandle,
   SelectionInfo,
   StoryLocator,
+  SuperDocAwarenessUpdatePayload,
+  SuperDocCommentsUpdatePayload,
+  SuperDocEditorPayload,
   SuperDocExceptionEditorPayload,
   SuperDocExceptionPayload,
   SuperDocExceptionRestorePayload,
   SuperDocExceptionStorePayload,
   SuperDocLayoutEngineOptions,
+  SuperDocLockedPayload,
+  SuperDocReadyPayload,
   SuperDocState,
   SuperDocTelemetryConfig,
   SurfaceComponentProps,
@@ -335,11 +340,16 @@ const _real_SelectionCurrentInput: AssertNotAny<SelectionCurrentInput> = true;
 const _real_SelectionHandle: AssertNotAny<SelectionHandle> = true;
 const _real_SelectionInfo: AssertNotAny<SelectionInfo> = true;
 const _real_StoryLocator: AssertNotAny<StoryLocator> = true;
+const _real_SuperDocAwarenessUpdatePayload: AssertNotAny<SuperDocAwarenessUpdatePayload> = true;
+const _real_SuperDocCommentsUpdatePayload: AssertNotAny<SuperDocCommentsUpdatePayload> = true;
+const _real_SuperDocEditorPayload: AssertNotAny<SuperDocEditorPayload> = true;
 const _real_SuperDocExceptionEditorPayload: AssertNotAny<SuperDocExceptionEditorPayload> = true;
 const _real_SuperDocExceptionPayload: AssertNotAny<SuperDocExceptionPayload> = true;
 const _real_SuperDocExceptionRestorePayload: AssertNotAny<SuperDocExceptionRestorePayload> = true;
 const _real_SuperDocExceptionStorePayload: AssertNotAny<SuperDocExceptionStorePayload> = true;
 const _real_SuperDocLayoutEngineOptions: AssertNotAny<SuperDocLayoutEngineOptions> = true;
+const _real_SuperDocLockedPayload: AssertNotAny<SuperDocLockedPayload> = true;
+const _real_SuperDocReadyPayload: AssertNotAny<SuperDocReadyPayload> = true;
 const _real_SuperDocState: AssertNotAny<SuperDocState> = true;
 const _real_SuperDocTelemetryConfig: AssertNotAny<SuperDocTelemetryConfig> = true;
 const _real_SurfaceComponentProps: AssertNotAny<SurfaceComponentProps> = true;
