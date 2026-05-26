@@ -1,17 +1,17 @@
 # superdoc root export inventory (SD-3212 PR A0)
 
-Generated: 2026-05-26T10:45:50.855Z
+Generated: 2026-05-26T11:53:56.060Z
 Source: packed and installed `tests/consumer-typecheck/node_modules/superdoc`
 
 ## Counts
 
 | Source | Path | Count |
 |---|---|---|
-| types.import | `./dist/superdoc/src/public/index.d.ts` | 213 |
-| types.require | `./dist/superdoc/src/public/index.d.cts` | 213 |
+| types.import | `./dist/superdoc/src/public/index.d.ts` | 214 |
+| types.require | `./dist/superdoc/src/public/index.d.cts` | 214 |
 | import | `./dist/superdoc.es.js` | 41 |
 | require | `./dist/superdoc.cjs` | 41 |
-| **union** |  | **213** |
+| **union** |  | **214** |
 
 ## Divergences
 
@@ -19,7 +19,7 @@ Source: packed and installed `tests/consumer-typecheck/node_modules/superdoc`
 - types.require only (not in types.import): 0
 - ESM only (not in CJS): 0
 - CJS only (not in ESM): 0
-- typed but no runtime export (phantom risk): 172
+- typed but no runtime export (phantom risk): 173
 - runtime export but not typed (silent shadow on root): 0
 
 ### Type-only names (no runtime)
@@ -124,6 +124,7 @@ Source: packed and installed `tests/consumer-typecheck/node_modules/superdoc`
 - `PasswordPromptRenderContext`
 - `PasswordPromptResolution`
 - `PermissionParams`
+- `PermissionResolverParams`
 - `PositionHit`
 - `PresenceOptions`
 - `PresentationEditorOptions`
@@ -228,7 +229,7 @@ Source: packed and installed `tests/consumer-typecheck/node_modules/superdoc`
 | `CommentsPayload` | ✓ | ✓ |   |   | 2 | ✓ | 0 | 0 | 0 |   |
 | `CommentsPluginKey` | ✓ | ✓ | ✓ | ✓ | 2 |   | 0 | 0 | 1 | ✓ |
 | `CommentsType` | ✓ | ✓ |   |   | 1 | ✓ | 0 | 0 | 0 |   |
-| `Config` | ✓ | ✓ |   |   | 7 | ✓ | 2 | 1 | 2 | ✓ |
+| `Config` | ✓ | ✓ |   |   | 8 | ✓ | 2 | 1 | 2 | ✓ |
 | `ContextMenu` | ✓ | ✓ | ✓ | ✓ | 1 |   | 7 | 0 | 31 |   |
 | `ContextMenuConfig` | ✓ | ✓ |   |   | 2 | ✓ | 0 | 0 | 0 |   |
 | `ContextMenuContext` | ✓ | ✓ |   |   | 2 | ✓ | 0 | 0 | 0 |   |
@@ -253,7 +254,7 @@ Source: packed and installed `tests/consumer-typecheck/node_modules/superdoc`
 | `EditorState` | ✓ | ✓ |   |   | 4 | ✓ | 7 | 0 | 1 | ✓ |
 | `EditorSurface` | ✓ | ✓ |   |   | 1 | ✓ | 0 | 0 | 0 |   |
 | `EditorTransactionEvent` | ✓ | ✓ |   |   | 1 | ✓ | 0 | 0 | 0 |   |
-| `EditorUpdateEvent` | ✓ | ✓ |   |   | 1 | ✓ | 0 | 0 | 0 |   |
+| `EditorUpdateEvent` | ✓ | ✓ |   |   | 2 | ✓ | 0 | 0 | 0 |   |
 | `EditorView` | ✓ | ✓ |   |   | 4 | ✓ | 2 | 0 | 0 | ✓ |
 | `EntityAddress` | ✓ | ✓ |   |   | 2 | ✓ | 276 | 0 | 8 |   |
 | `ExportDocxParams` | ✓ | ✓ |   |   | 2 | ✓ | 0 | 0 | 0 |   |
@@ -293,7 +294,7 @@ Source: packed and installed `tests/consumer-typecheck/node_modules/superdoc`
 | `LinkPopoverResolver` | ✓ | ✓ |   |   | 1 | ✓ | 0 | 0 | 0 |   |
 | `ListDefinitionsPayload` | ✓ | ✓ |   |   | 2 | ✓ | 0 | 0 | 0 |   |
 | `Measure` | ✓ | ✓ |   |   | 3 | ✓ | 0 | 0 | 1 |   |
-| `Modules` | ✓ | ✓ |   |   | 1 | ✓ | 4 | 0 | 0 |   |
+| `Modules` | ✓ | ✓ |   |   | 2 | ✓ | 4 | 0 | 0 |   |
 | `NavigableAddress` | ✓ | ✓ |   |   | 2 | ✓ | 0 | 0 | 0 |   |
 | `OpenOptions` | ✓ | ✓ |   |   | 3 | ✓ | 1 | 0 | 0 |   |
 | `PDF` | ✓ | ✓ | ✓ | ✓ | 2 |   | 35 | 0 | 1 | ✓ |
@@ -312,6 +313,7 @@ Source: packed and installed `tests/consumer-typecheck/node_modules/superdoc`
 | `PasswordPromptRenderContext` | ✓ | ✓ |   |   | 1 | ✓ | 2 | 0 | 0 |   |
 | `PasswordPromptResolution` | ✓ | ✓ |   |   | 1 | ✓ | 1 | 0 | 0 |   |
 | `PermissionParams` | ✓ | ✓ |   |   | 1 | ✓ | 0 | 0 | 0 |   |
+| `PermissionResolverParams` | ✓ | ✓ |   |   | 2 |   | 0 | 0 | 0 |   |
 | `PositionHit` | ✓ | ✓ |   |   | 3 | ✓ | 0 | 0 | 0 |   |
 | `PresenceOptions` | ✓ | ✓ |   |   | 3 | ✓ | 0 | 0 | 0 |   |
 | `PresentationEditor` | ✓ | ✓ | ✓ | ✓ | 3 |   | 0 | 0 | 40 | ✓ |

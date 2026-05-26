@@ -90,6 +90,7 @@ export type { PasswordPromptContext } from '../core/types/index.js';
 export type { PasswordPromptHandle } from '../core/types/index.js';
 export type { PasswordPromptRenderContext } from '../core/types/index.js';
 export type { PasswordPromptResolution } from '../core/types/index.js';
+export type { PermissionResolverParams } from '../core/types/index.js';
 export type { ResolvedFindReplaceTexts } from '../core/types/index.js';
 export type { ResolvedPasswordPromptTexts } from '../core/types/index.js';
 export type { SearchMatch } from '../core/types/index.js';

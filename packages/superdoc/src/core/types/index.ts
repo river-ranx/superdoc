@@ -1007,16 +1007,57 @@ export interface FindReplaceConfig {
 // Modules
 // ---------------------------------------------------------------------------
 
-/** Permission resolver shared by the top-level Config and the comments module. */
-type PermissionResolverParams = {
+/**
+ * Payload passed to a permission resolver callback. SuperDoc invokes
+ * the resolver when a consumer registers one via
+ * `Config.permissionResolver` or `Modules.comments.permissionResolver`,
+ * forwarding the in-flight check so the resolver can decide whether
+ * to override the built-in policy.
+ *
+ * Returning `boolean` from the resolver overrides the default;
+ * returning `undefined` (or any non-boolean) falls through to
+ * `defaultDecision`, which the resolver receives so it can mirror or
+ * branch off the built-in policy without re-deriving it.
+ *
+ * `comment` and `trackedChange` are typed as `object | null` because
+ * consumer comment / tracked-change shapes vary; resolvers that read
+ * fields on those payloads should narrow before use.
+ *
+ * Distinct from `CanPerformPermissionParams`, which is the input
+ * shape consumers pass _to_ `SuperDoc#canPerformPermission`. That
+ * input becomes part of this resolver payload after SuperDoc resolves
+ * `currentUser`, `superdoc`, and `defaultDecision`.
+ */
+export interface PermissionResolverParams {
+  /** The permission key being checked (e.g. `'comment.create'`). */
   permission: string;
-  role?: string;
-  isInternal?: boolean;
-  comment?: object | null;
-  trackedChange?: object | null;
-  currentUser?: User | null;
-  superdoc?: SuperDoc | null;
-};
+  /**
+   * The effective role (consumer-supplied or falling back to
+   * `Config.role`). The key is always present on the payload; the
+   * value is `undefined` when `Config.role` was never set.
+   */
+  role: string | undefined;
+  /**
+   * The effective internal/external flag (consumer-supplied or
+   * `Config.isInternal`). The key is always present; the value is
+   * `undefined` when `Config.isInternal` was never set.
+   */
+  isInternal: boolean | undefined;
+  /**
+   * What the built-in policy would return if the resolver does not
+   * override. Resolvers can return this value to defer to the
+   * default, or branch off it.
+   */
+  defaultDecision: boolean;
+  /** The comment object being acted on, if any. Shape is consumer-defined. */
+  comment: object | null;
+  /** The tracked-change payload (as emitted by the editor) being acted on, if any. */
+  trackedChange: object | null;
+  /** The active user performing the action; resolved from `Config.user`. */
+  currentUser: User | null;
+  /** The SuperDoc instance the check ran against. */
+  superdoc: SuperDoc | null;
+}
 
 /**
  * Input shape for `SuperDoc#canPerformPermission`. All fields are
@@ -1026,9 +1067,10 @@ type PermissionResolverParams = {
  * because the runtime forwards the full payload to the resolver
  * context, and consumer comment / tracked-change shapes vary; the
  * named fields below are the ones the method itself reads. Distinct
- * from the non-exported `PermissionResolverParams` helper, which
- * models the resolver callback payload with resolved `currentUser`
- * and `superdoc` context attached.
+ * from `PermissionResolverParams`, which is the exported resolver
+ * callback payload SuperDoc passes to configured permission resolvers
+ * (with resolved `currentUser`, `superdoc`, and `defaultDecision`
+ * context attached).
  */
 export interface CanPerformPermissionParams {
   /** The permission key to check (e.g. `'comment.create'`). Required at runtime; omitting returns `false`. */

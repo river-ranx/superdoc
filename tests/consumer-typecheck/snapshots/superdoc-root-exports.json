@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-05-26T10:45:50.855Z",
+  "generatedAt": "2026-05-26T11:53:56.060Z",
   "ticket": "SD-3212 PR A0",
   "package": "superdoc",
   "rootExport": {
@@ -125,6 +125,7 @@
         "PasswordPromptRenderContext",
         "PasswordPromptResolution",
         "PermissionParams",
+        "PermissionResolverParams",
         "PositionHit",
         "PresenceOptions",
         "PresentationEditor",
@@ -344,6 +345,7 @@
         "PasswordPromptRenderContext",
         "PasswordPromptResolution",
         "PermissionParams",
+        "PermissionResolverParams",
         "PositionHit",
         "PresenceOptions",
         "PresentationEditor",
@@ -545,11 +547,11 @@
     }
   },
   "counts": {
-    "types.import": 213,
-    "types.require": 213,
+    "types.import": 214,
+    "types.require": 214,
     "import": 41,
     "require": 41,
-    "union": 213
+    "union": 214
   },
   "divergences": {
     "typesImportVsRequire": {
@@ -662,6 +664,7 @@
         "PasswordPromptRenderContext",
         "PasswordPromptResolution",
         "PermissionParams",
+        "PermissionResolverParams",
         "PositionHit",
         "PresenceOptions",
         "PresentationEditorOptions",

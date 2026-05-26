@@ -124,6 +124,7 @@ import type {
   PasswordPromptRenderContext,
   PasswordPromptResolution,
   PermissionParams,
+  PermissionResolverParams,
   PositionHit,
   PresenceOptions,
   PresentationEditorOptions,
@@ -305,6 +306,7 @@ const _real_PasswordPromptHandle: AssertNotAny<PasswordPromptHandle> = true;
 const _real_PasswordPromptRenderContext: AssertNotAny<PasswordPromptRenderContext> = true;
 const _real_PasswordPromptResolution: AssertNotAny<PasswordPromptResolution> = true;
 const _real_PermissionParams: AssertNotAny<PermissionParams> = true;
+const _real_PermissionResolverParams: AssertNotAny<PermissionResolverParams> = true;
 const _real_PositionHit: AssertNotAny<PositionHit> = true;
 const _real_PresenceOptions: AssertNotAny<PresenceOptions> = true;
 const _real_PresentationEditorOptions: AssertNotAny<PresentationEditorOptions> = true;

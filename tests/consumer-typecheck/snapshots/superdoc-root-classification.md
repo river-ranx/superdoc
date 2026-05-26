@@ -7,16 +7,16 @@ Input: tests/consumer-typecheck/snapshots/superdoc-root-exports.json (205 names,
 
 | Bucket | Count |
 |---|---|
-| supported-root | 145 |
+| supported-root | 146 |
 | legacy-root | 60 |
 | move-to-subpath | 0 |
 | internal-candidate | 8 |
 | NEEDS-REVIEW | 0 |
-| **total** | **213** |
+| **total** | **214** |
 
-Confidence: high=110, medium=101, needs-review=0.
+Confidence: high=111, medium=101, needs-review=0.
 
-## supported-root (145)
+## supported-root (146)
 
 | Name | Confidence | Source | Rationale |
 |---|---|---|---|
@@ -90,6 +90,7 @@ Confidence: high=110, medium=101, needs-review=0.
 | `PasswordPromptRenderContext` | medium | password-prompt | PasswordPrompt surface API type. Public. |
 | `PasswordPromptResolution` | medium | password-prompt | PasswordPrompt surface API type. Public. |
 | `PermissionParams` | medium | core | Customer-facing core API type or runtime export. Type-reachable through documented config / callback / event / method surfaces; runtime exports are documented utilities. |
+| `PermissionResolverParams` | high | config-supported | Payload passed to permission resolver callbacks registered via Config.permissionResolver or Modules.comments.permissionResolver; promoted from a non-exported helper to a named public type so resolver authors can import the contract. |
 | `ProofingCapabilities` | medium | proofing | Proofing module type. Public for proofing-provider integrations. |
 | `ProofingCheckRequest` | medium | proofing | Proofing module type. Public for proofing-provider integrations. |
 | `ProofingCheckResult` | medium | proofing | Proofing module type. Public for proofing-provider integrations. |
