@@ -92,6 +92,10 @@ describe('document-api story: cross-editor diff handoff (SD-3279)', () => {
     expect(tracked.total).toBeGreaterThan(0);
     expect(insertions.total).toBeGreaterThan(0);
 
+    // Customer-visible result: the preview now contains the target content.
+    const previewText = await client.doc.getText({ sessionId: previewSessionId });
+    expect(previewText).toContain(targetParagraph);
+
     await client.doc.close({ sessionId: baseSessionId, discard: true });
     await client.doc.close({ sessionId: previewSessionId, discard: true });
   });
