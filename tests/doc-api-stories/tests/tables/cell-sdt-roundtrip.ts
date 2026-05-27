@@ -19,10 +19,15 @@ const DATE_TEXT = '18 January 2025';
 const LABEL_TEXT = 'COMMENCEMENT DATE';
 const DATE_FULL = '2025-01-18T00:00:00Z';
 
-// Synthetic minimal document.xml carrying the IT-1119 OOXML shape:
+// Build a synthetic minimal document.xml carrying the IT-1119 OOXML shape:
 // <w:tr> with a direct <w:tc> followed by a cell-level <w:sdt>
 // (ECMA-376 §17.5.2.32, CT_SdtCell) whose <w:sdtContent> wraps a single <w:tc>.
-const SYNTHETIC_DOCUMENT_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+// When `includeSdtEndPr` is true, the wrapper also carries <w:sdtEndPr/>
+// (CT_SdtCell schema: sdtEndPr is 0..1 and Word emits it for end-marker
+// formatting on some controls).
+function buildSyntheticDocumentXml(options: { includeSdtEndPr: boolean }): string {
+  const sdtEndPrFragment = options.includeSdtEndPr ? '<w:sdtEndPr><w:rPr><w:b/></w:rPr></w:sdtEndPr>' : '';
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml">
   <w:body>
     <w:p><w:r><w:t>Cell-level SDT round-trip fixture for SD-3289</w:t></w:r></w:p>
@@ -50,6 +55,7 @@ const SYNTHETIC_DOCUMENT_XML = `<?xml version="1.0" encoding="UTF-8" standalone=
               <w:calendar w:val="gregorian"/>
             </w:date>
           </w:sdtPr>
+          ${sdtEndPrFragment}
           <w:sdtContent>
             <w:tc>
               <w:tcPr><w:tcW w:w="5920" w:type="dxa"/></w:tcPr>
@@ -65,6 +71,7 @@ const SYNTHETIC_DOCUMENT_XML = `<?xml version="1.0" encoding="UTF-8" standalone=
     </w:sectPr>
   </w:body>
 </w:document>`;
+}
 
 // Synthetic docProps/core.xml so the generated fixture carries no third-party
 // metadata from the base template. Public-repo safety net.
@@ -82,11 +89,11 @@ async function loadJsZip(): Promise<JsZipConstructor> {
   return jsZipPromise;
 }
 
-async function buildFixture(outputPath: string): Promise<string> {
+async function buildFixture(outputPath: string, options: { includeSdtEndPr: boolean }): Promise<string> {
   const JSZip = await loadJsZip();
   const sourceBytes = await readFile(TEMPLATE_DOCX);
   const zip = await JSZip.loadAsync(sourceBytes);
-  zip.file('word/document.xml', SYNTHETIC_DOCUMENT_XML);
+  zip.file('word/document.xml', buildSyntheticDocumentXml(options));
   zip.file('docProps/core.xml', SYNTHETIC_CORE_XML);
   const outputBytes = await zip.generateAsync({ type: 'nodebuffer' });
   await writeFile(outputPath, outputBytes);
@@ -109,7 +116,7 @@ describe('document-api story: cell-level SDT round-trip (SD-3289 / IT-1119)', ()
 
   it('imports cell-level SDT, finds the date text, and preserves the wrapper on export', async () => {
     const fixturePath = outPath('cell-sdt-fixture.docx');
-    await buildFixture(fixturePath);
+    await buildFixture(fixturePath, { includeSdtEndPr: false });
 
     const sessionId = sid('cell-sdt-roundtrip');
     await client.doc.open({ sessionId, doc: fixturePath });
@@ -151,5 +158,45 @@ describe('document-api story: cell-level SDT round-trip (SD-3289 / IT-1119)', ()
     expect(wrappedTcMatch).not.toBeNull();
     const dateOccurrencesInWrappedCell = wrappedTcMatch![0].split(DATE_TEXT).length - 1;
     expect(dateOccurrencesInWrappedCell).toBe(1);
+  });
+
+  it('preserves every sdtPr child (id, full date subtree, sdtEndPr) on round-trip', async () => {
+    const fixturePath = outPath('cell-sdt-fixture-full-fidelity.docx');
+    await buildFixture(fixturePath, { includeSdtEndPr: true });
+
+    const sessionId = sid('cell-sdt-full-fidelity');
+    await client.doc.open({ sessionId, doc: fixturePath });
+
+    const exportedPath = outPath('cell-sdt-roundtrip-full-fidelity.docx');
+    const saveResult = unwrap<any>(await client.doc.save({ sessionId, out: exportedPath, force: true }));
+    expect(saveResult?.saved).toBe(true);
+
+    const documentXml = await readDocxPart(exportedPath, 'word/document.xml');
+    const sdtBlockMatch = documentXml.match(/<w:sdt\b[\s\S]*?<\/w:sdt>/);
+    expect(sdtBlockMatch).not.toBeNull();
+    const sdtBlock = sdtBlockMatch![0];
+
+    // Every sdtPr child from the source fixture must survive byte-equivalently
+    // in the exported wrapper. Opaque sdtPr preservation is what the v1 fix
+    // promises; this guards against any narrowing of that contract.
+    expect(sdtBlock).toMatch(/<w:sdtPr\b/);
+    expect(sdtBlock).toMatch(/<w:id\b[^>]*\bw:val="849213029"/);
+    expect(sdtBlock).toMatch(/<w:date\b[^>]*\bw:fullDate="2025-01-18T00:00:00Z"/);
+    expect(sdtBlock).toMatch(/<w:dateFormat\b[^>]*\bw:val="d MMMM yyyy"/);
+    expect(sdtBlock).toMatch(/<w:lid\b[^>]*\bw:val="en-AU"/);
+    expect(sdtBlock).toMatch(/<w:storeMappedDataAs\b[^>]*\bw:val="dateTime"/);
+    expect(sdtBlock).toMatch(/<w:calendar\b[^>]*\bw:val="gregorian"/);
+
+    // sdtEndPr from the source fixture must also survive (CT_SdtCell allows
+    // 0..1 sdtEndPr; the fix preserves it opaquely).
+    expect(sdtBlock).toMatch(/<w:sdtEndPr\b/);
+
+    // sdtEndPr must appear in document order between sdtPr and sdtContent.
+    const sdtPrEnd = sdtBlock.indexOf('</w:sdtPr>');
+    const sdtEndPrStart = sdtBlock.indexOf('<w:sdtEndPr');
+    const sdtContentStart = sdtBlock.indexOf('<w:sdtContent');
+    expect(sdtPrEnd).toBeGreaterThan(-1);
+    expect(sdtEndPrStart).toBeGreaterThan(sdtPrEnd);
+    expect(sdtContentStart).toBeGreaterThan(sdtEndPrStart);
   });
 });
