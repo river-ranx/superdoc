@@ -4,6 +4,7 @@ import {
   computeLinePmRange,
   expandRunsForInlineNewlines,
   isEmptyInlineSdtPlaceholderRun,
+  isEmptySdtPlaceholderRun,
   normalizeBaselineShift,
   shouldApplyJustify,
   sliceRunsForLine,
@@ -640,7 +641,7 @@ const renderExplicitlyPositionedRuns = ({
       continue;
     }
 
-    if (isEmptyInlineSdtPlaceholderRun(baseRun)) {
+    if (isEmptySdtPlaceholderRun(baseRun)) {
       const elem = renderRun(baseRun, context, runContext, trackedConfig);
       if (elem) {
         if (styleId) {

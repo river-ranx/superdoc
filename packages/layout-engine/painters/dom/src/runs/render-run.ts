@@ -1,5 +1,5 @@
 import type { FieldAnnotationRun, ImageRun, MathRun, Run, TextRun } from '@superdoc/contracts';
-import { isEmptyInlineSdtPlaceholderRun } from '@superdoc/contracts';
+import { EMPTY_SDT_PLACEHOLDER_TEXT, isEmptySdtPlaceholderRun } from '@superdoc/contracts';
 import type { FragmentRenderContext } from '../renderer.js';
 import type { RunRenderContext, TrackedChangesRenderConfig } from './types.js';
 import { renderFieldAnnotationRun } from './field-annotation-run.js';
@@ -13,10 +13,16 @@ export const isBreakRun = (run: Run): run is import('@superdoc/contracts').Break
 export const isFieldAnnotationRun = (run: Run): run is FieldAnnotationRun => run.kind === 'fieldAnnotation';
 export const isMathRun = (run: Run): run is MathRun => run.kind === 'math';
 
-const renderEmptyInlineSdtPlaceholderRun = (run: TextRun, renderContext: RunRenderContext): HTMLElement | null => {
+const renderEmptySdtPlaceholderRun = (run: TextRun, renderContext: RunRenderContext): HTMLElement | null => {
   const elem = renderContext.doc.createElement('span');
-  elem.classList.add('superdoc-empty-inline-sdt-placeholder');
+  elem.classList.add('superdoc-empty-sdt-placeholder');
+  if (run.visualPlaceholder === 'emptyInlineSdt') {
+    elem.classList.add('superdoc-empty-inline-sdt-placeholder');
+  } else if (run.visualPlaceholder === 'emptyBlockSdt') {
+    elem.classList.add('superdoc-empty-block-sdt-placeholder');
+  }
   elem.setAttribute('aria-hidden', 'true');
+  elem.dataset.placeholderText = EMPTY_SDT_PLACEHOLDER_TEXT;
   elem.dataset.layoutEpoch = String(renderContext.layoutEpoch);
   if (run.pmStart != null) elem.dataset.pmStart = String(run.pmStart);
   if (run.pmEnd != null) elem.dataset.pmEnd = String(run.pmEnd);
@@ -60,8 +66,8 @@ export const renderRun = (
     return null;
   }
 
-  if (isEmptyInlineSdtPlaceholderRun(run)) {
-    return renderEmptyInlineSdtPlaceholderRun(run, renderContext);
+  if (isEmptySdtPlaceholderRun(run)) {
+    return renderEmptySdtPlaceholderRun(run, renderContext);
   }
 
   // Handle TextRun
