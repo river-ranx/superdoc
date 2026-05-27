@@ -12,11 +12,17 @@
  * UNACCOUNTED — public surface backed by JS source with no `@ts-check`
  * directive and no entry in any of the existing tracking lists.
  *
- * **Report-only.** This script is not a gate (always exits 0 except on
- * structural errors like missing dist or unreadable package.json). The
- * inventory is intended as survey input for follow-up types-only
- * extraction work; once stable, a follow-up PR can flip a strict
- * sub-check that fails on net-new UNACCOUNTED entries.
+ * **Report-only findings.** The UNACCOUNTED count never fails the
+ * script — the inventory is survey input for follow-up types-only
+ * extraction work. A future PR can promote a strict sub-check that
+ * fails on net-new UNACCOUNTED entries.
+ *
+ * **Structural failures DO fail (exit 1).** A missing dist tree or
+ * unreadable package.json prevents the audit from producing a
+ * meaningful inventory; in that case the script exits non-zero so a
+ * broken input pipeline is distinguishable from a clean "zero
+ * unaccounted" run. Requires `pnpm build` (or `pnpm run type-check`
+ * to emit declarations only) to have run first.
  *
  * Sources of truth this script consumes:
  *   - `packages/superdoc/package.json` and
@@ -266,6 +272,13 @@ const HR = '='.repeat(72);
 console.log('[report-js-contract-owners] JS contract-owner audit (SD-673, report-only)');
 console.log(HR);
 
+// Structural-failure tracking: missing dist or unreadable package
+// inputs exit non-zero so an audit run that produced no real inventory
+// is distinguishable from one that genuinely found zero unaccounted
+// owners. "Report-only" applies to findings (UNACCOUNTED count never
+// fails); it does not apply to a broken input pipeline.
+let structuralFailure = false;
+
 const sections = [];
 for (const [label, root] of [
   ['superdoc', superdocRoot],
@@ -275,6 +288,7 @@ for (const [label, root] of [
   if (result.error) {
     console.log(`SKIP  ${label}: ${result.error}`);
     sections.push({ label, error: result.error });
+    structuralFailure = true;
     continue;
   }
 
@@ -359,9 +373,18 @@ for (const s of sections) {
 console.log('');
 console.log(HR);
 console.log(
-  'Report-only. Not a CI gate. Use the inventory to choose targets for\n' +
-    'types-only extraction or `@ts-check` adoption. Once UNACCOUNTED is\n' +
-    'stable at zero per package, a follow-up PR can promote this to a\n' +
-    'no-growth ratchet.',
+  'Report-only. The UNACCOUNTED count never fails. Use the inventory to\n' +
+    'choose targets for types-only extraction or `@ts-check` adoption.\n' +
+    'Once UNACCOUNTED stabilizes at zero per package, a follow-up PR can\n' +
+    'promote this to a strict no-growth ratchet.',
 );
+
+if (structuralFailure) {
+  console.log('');
+  console.log('FAIL  one or more packages skipped (missing dist or unreadable input).');
+  console.log('      Run `pnpm build` (or `pnpm run type-check` to emit declarations only)');
+  console.log('      and retry. The audit cannot produce a meaningful inventory with');
+  console.log('      partial inputs.');
+  process.exit(1);
+}
 process.exit(0);

@@ -46,7 +46,10 @@
  *
  * Adding a file to CHECKED_FILES:
  *   1. Add `// @ts-check` as the first line.
- *   2. Append the file's repo-relative path to CHECKED_FILES below.
+ *   2. Append the file's repo-relative path to the `CHECKED_FILES`
+ *      array in `./jsdoc-checked-files.cjs` (the shared source of
+ *      truth consumed by both this gate and
+ *      `report-js-contract-owners.cjs`).
  *   3. Run `pnpm --filter superdoc run check:jsdoc` and fix what
  *      surfaces. If the file was on the debt snapshot, also rerun
  *      with `--write` to drop the stale entry.
