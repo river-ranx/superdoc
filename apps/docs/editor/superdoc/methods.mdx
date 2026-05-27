@@ -332,9 +332,13 @@ const superdoc = new SuperDoc({
   onEditorCreate: ({ editor }) => {
     // Each per-document editor reaches `onEditorCreate` in `documents` order.
     createdEditors.push(editor);
-  },
-  onReady: ({ superdoc }) => {
-    if (createdEditors[1]) superdoc.setActiveEditor(createdEditors[1]);
+
+    // Switch to the second editor as soon as it exists.
+    if (createdEditors.length === 2) {
+      queueMicrotask(() => {
+        superdoc.setActiveEditor(editor);
+      });
+    }
   },
 });
 ```
