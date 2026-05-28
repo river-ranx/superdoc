@@ -1323,7 +1323,7 @@ watch(showCommentsSidebar, (value) => {
 });
 
 // Emit layout-change event when container width changes.
-// Capture base document width once at 100% zoom to avoid feedback loops.
+// Capture base document width after layout resolves to avoid stale measurements.
 let baseDocumentWidth = null;
 let lastEmittedFitZoom = null;
 
@@ -1331,8 +1331,9 @@ const emitLayoutChange = () => {
   const containerWidth = superdocContainerWidth.value;
   if (!proxy.$superdoc || containerWidth <= 0) return;
 
-  // Capture base width once on first call (document at 100% zoom)
+  // Wait for document layout to resolve before capturing base width
   if (baseDocumentWidth === null) {
+    if (!isReady.value) return;
     const docEl = superdocRoot.value?.querySelector('.superdoc__document');
     const measured = docEl?.clientWidth || docEl?.getBoundingClientRect?.().width || 0;
     baseDocumentWidth = measured > 0 ? measured : DEFAULT_DOCUMENT_VISIBLE_MIN_WIDTH_PX;
@@ -1353,6 +1354,9 @@ const emitLayoutChange = () => {
 };
 
 watch(superdocContainerWidth, emitLayoutChange);
+watch(isReady, (ready) => {
+  if (ready) emitLayoutChange();
+});
 
 /**
  * Scroll the page to a given commentId
