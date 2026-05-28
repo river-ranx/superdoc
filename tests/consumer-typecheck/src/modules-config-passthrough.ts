@@ -67,6 +67,14 @@ const config: Config = {
       suppressInternalExternalComments: false,
     },
 
+    // Documented field: built-in SDT chrome mode (SD-3159). A consumer must be
+    // able to set the union value and get IDE help on it; the pass-through
+    // index signature accepts forwarded extras like every other module config.
+    contentControls: {
+      chrome: 'none',
+      forwardedFlag: true,
+    },
+
     ai: {
       apiKey: 'test-key',
       endpoint: 'https://example.invalid/ai',

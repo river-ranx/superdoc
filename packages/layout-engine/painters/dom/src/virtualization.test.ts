@@ -222,6 +222,9 @@ describe('DomPainter virtualization (vertical)', () => {
 
     mount.scrollTop = 3 * (500 + 72);
     mount.dispatchEvent(new Event('scroll'));
+    // Page 0 must actually evict before we can prove it remounts; without this
+    // the test would pass even if virtualization silently stopped evicting.
+    expect(mount.querySelector('.superdoc-page[data-page-index="0"]')).toBeNull();
 
     mount.scrollTop = 0;
     mount.dispatchEvent(new Event('scroll'));

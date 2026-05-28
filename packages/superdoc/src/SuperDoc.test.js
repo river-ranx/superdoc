@@ -828,6 +828,27 @@ describe('SuperDoc.vue', () => {
     expect(options.layoutEngineOptions.flowMode).toBe('paginated');
   });
 
+  it('forwards modules.contentControls.chrome into layoutEngineOptions for PresentationEditor', async () => {
+    const superdocStub = createSuperdocStub();
+    superdocStub.config.modules.contentControls = { chrome: 'none' };
+
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const options = wrapper.findComponent(SuperEditorStub).props('options');
+    expect(options.layoutEngineOptions.contentControlsChrome).toBe('none');
+  });
+
+  it('leaves contentControlsChrome undefined when modules.contentControls is not configured', async () => {
+    const superdocStub = createSuperdocStub();
+
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const options = wrapper.findComponent(SuperEditorStub).props('options');
+    expect(options.layoutEngineOptions.contentControlsChrome).toBeUndefined();
+  });
+
   it('handles replay comment update/delete events and triggers tracked-change resync', async () => {
     const superdocStub = createSuperdocStub();
     const wrapper = await mountComponent(superdocStub);

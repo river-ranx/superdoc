@@ -785,9 +785,11 @@ const SDT_CONTAINER_STYLES = `
 }
 
 /* Global content-control chrome opt-out: preserve SDT wrappers/datasets while
- * suppressing all built-in visual chrome. Label elements are not emitted by
- * renderer/helpers when this class is present (DOM non-emission), and these
- * rules neutralize border/padding/hover/selection visuals. */
+ * suppressing built-in visual chrome on structured-content controls. Their
+ * label elements are not emitted by renderer/helpers when this class is
+ * present (DOM non-emission), and these rules neutralize
+ * border/padding/hover/selection visuals. documentSection chrome (e.g. the
+ * locked-section tooltip) is intentionally preserved and not in scope. */
 .superdoc-cc-chrome-none .superdoc-structured-content-inline,
 .superdoc-cc-chrome-none .superdoc-structured-content-block {
   border: none;
