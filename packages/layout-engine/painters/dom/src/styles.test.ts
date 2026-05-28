@@ -221,6 +221,23 @@ describe('ensureSdtContainerStyles', () => {
     expect(beforeRule).toContain('background: none;');
   });
 
+  it('suppresses block SDT resting background paint in viewing and print modes', () => {
+    ensureSdtContainerStyles(document);
+
+    const styleEl = document.querySelector('[data-superdoc-sdt-container-styles="true"]');
+    const cssText = styleEl?.textContent ?? '';
+    const viewingBeforeRule =
+      cssText.match(
+        /\.presentation-editor--viewing \.superdoc-structured-content-block::before,[\s\S]*?\{([^}]*)\}/,
+      )?.[1] ?? '';
+    const printBeforeRule =
+      cssText.match(/@media print\s*\{[\s\S]*?\.superdoc-structured-content-block::before\s*\{([^}]*)\}/)?.[1] ?? '';
+
+    expect(cssText).toContain('.presentation-editor--viewing .superdoc-structured-content-block::before,');
+    expect(viewingBeforeRule).toContain('background: none;');
+    expect(printBeforeRule).toContain('background: none;');
+  });
+
   it('keeps hidden-appearance inline SDTs transparent at rest', () => {
     ensureSdtContainerStyles(document);
     const styleEl = document.querySelector('[data-superdoc-sdt-container-styles="true"]');

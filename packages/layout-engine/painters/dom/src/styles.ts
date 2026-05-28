@@ -821,6 +821,7 @@ const SDT_CONTAINER_STYLES = `
   border: none;
 }
 
+.presentation-editor--viewing .superdoc-structured-content-block::before,
 .presentation-editor--viewing .superdoc-structured-content-block:hover::before,
 .presentation-editor--viewing .superdoc-structured-content-block.sdt-group-hover::before,
 .presentation-editor--viewing .superdoc-structured-content-block[data-lock-mode].sdt-group-hover::before {
@@ -860,6 +861,10 @@ const SDT_CONTAINER_STYLES = `
 
   .superdoc-structured-content-block::after {
     border: none;
+  }
+
+  .superdoc-structured-content-block::before {
+    background: none;
   }
 
   .superdoc-document-section__tooltip,
