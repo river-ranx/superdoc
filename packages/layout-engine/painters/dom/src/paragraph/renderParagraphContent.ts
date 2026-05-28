@@ -35,6 +35,8 @@ import {
 import { renderLegacyListMarker, renderResolvedListMarker, resolvePainterListTextStartPx } from './list-marker.js';
 import { applyParagraphBlockStyles, clearParagraphFrameIndentStyles } from './styles.js';
 
+const INLINE_SDT_CHROME_EXTRA_WIDTH_PX = 4;
+
 export type RenderedParagraphLineInfo = {
   el: HTMLElement;
   top: number;
@@ -297,6 +299,7 @@ const applyBlockSdtChromeBounds = (
 
     const lineWidth = Math.max(0, line.naturalWidth ?? line.width ?? 0);
     if (lineWidth <= 0) continue;
+    const inlineSdtChromeWidth = hasExplicitSegmentPositioning(line) ? 0 : getInlineSdtChromeExtraWidth(runsForLine);
 
     const resolvedLine = content?.lines[index];
     const lineIndex = resolvedLine?.lineIndex ?? lineIndexBase + index;
@@ -313,12 +316,13 @@ const applyBlockSdtChromeBounds = (
       resolvedLine,
       content,
     );
-    const alignmentSlack = Math.max(0, availableWidth - paintedLineWidth);
+    const paintedLineWidthWithChrome = paintedLineWidth + inlineSdtChromeWidth;
+    const alignmentSlack = Math.max(0, availableWidth - paintedLineWidthWithChrome);
     const alignment = resolveTextAlign(block.attrs?.alignment, getParagraphInlineDirection(block.attrs) === 'rtl');
     const lineLeft =
       lineOffset + (alignment === 'center' ? alignmentSlack / 2 : alignment === 'right' ? alignmentSlack : 0);
     contentLeft = Math.min(contentLeft, lineLeft);
-    contentRight = Math.max(contentRight, lineLeft + paintedLineWidth);
+    contentRight = Math.max(contentRight, lineLeft + paintedLineWidthWithChrome);
   }
 
   if (!Number.isFinite(contentLeft) || !Number.isFinite(contentRight)) return;
@@ -329,6 +333,26 @@ const applyBlockSdtChromeBounds = (
 
   element.style.setProperty('--sd-sdt-chrome-left', `${chromeLeft}px`);
   element.style.setProperty('--sd-sdt-chrome-width', `${chromeWidth}px`);
+};
+
+const getInlineSdtChromeExtraWidth = (runs: Run[]): number => {
+  let wrapperCount = 0;
+  let currentSdtId: string | null = null;
+
+  for (const run of runs) {
+    const sdt = 'sdt' in run ? run.sdt : undefined;
+    const sdtId =
+      sdt?.type === 'structuredContent' && sdt.scope === 'inline' && sdt.id && sdt.appearance !== 'hidden'
+        ? String(sdt.id)
+        : null;
+
+    if (sdtId !== currentSdtId) {
+      if (sdtId) wrapperCount += 1;
+      currentSdtId = sdtId;
+    }
+  }
+
+  return wrapperCount * INLINE_SDT_CHROME_EXTRA_WIDTH_PX;
 };
 
 const resolveBlockSdtChromeLineOffset = (

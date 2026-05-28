@@ -91,6 +91,70 @@ describe('renderParagraphContent', () => {
     expect(frameEl.style.getPropertyValue('--sd-sdt-chrome-width')).toBe('');
   });
 
+  it('includes nested inline SDT paint chrome in block SDT bounds', () => {
+    const doc = document.implementation.createHTMLDocument('paragraph-content');
+    const frameEl = doc.createElement('div');
+    const block: ParagraphBlock = {
+      kind: 'paragraph',
+      id: 'nested-inline-block-sdt',
+      runs: [
+        { text: 'Outer lead ', fontFamily: 'Arial', fontSize: 16 },
+        {
+          text: 'inner value',
+          fontFamily: 'Arial',
+          fontSize: 16,
+          sdt: {
+            type: 'structuredContent',
+            scope: 'inline',
+            id: 'inline-sdt',
+            alias: 'Inner Inline',
+          },
+        },
+        { text: ' outer trail', fontFamily: 'Arial', fontSize: 16 },
+      ],
+      attrs: {
+        sdt: {
+          type: 'structuredContent',
+          scope: 'block',
+          id: 'block-sdt',
+          alias: 'Outer Block',
+        },
+      },
+    };
+    const measure: ParagraphMeasure = {
+      kind: 'paragraph',
+      lines: [
+        {
+          fromRun: 0,
+          fromChar: 0,
+          toRun: 2,
+          toChar: 12,
+          width: 120,
+          ascent: 12,
+          descent: 4,
+          lineHeight: 20,
+        },
+      ],
+      totalHeight: 20,
+    };
+
+    renderParagraphContent({
+      doc,
+      frameEl,
+      block,
+      measure,
+      containerKind: 'body-fragment',
+      width: 200,
+      localStartLine: 0,
+      localEndLine: 1,
+      applySdtDataset: () => {},
+      renderLine: () => doc.createElement('div'),
+    });
+
+    expect(frameEl.style.getPropertyValue('--sd-sdt-chrome-left')).toBe('0px');
+    expect(frameEl.style.getPropertyValue('--sd-sdt-chrome-width')).toBe('124px');
+  });
+
   it('marks the final remeasured override line as the paragraph final line', () => {
     const doc = document.implementation.createHTMLDocument('paragraph-content');
     const frameEl = doc.createElement('div');
