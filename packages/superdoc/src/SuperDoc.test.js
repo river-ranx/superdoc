@@ -2625,4 +2625,53 @@ describe('SuperDoc.vue', () => {
     const styleVars = wrapper.vm.superdocStyleVars;
     expect(styleVars['--sd-comments-highlight-hover']).toBe('#abcdef88');
   });
+
+  it('does not emit layout-change before isReady', async () => {
+    const superdocStub = createSuperdocStub();
+    superdocStoreStub.isReady.value = false;
+
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    // Set up container width measurement
+    const rootEl = wrapper.find('.superdoc').element;
+    const parentEl = rootEl.parentElement;
+    Object.defineProperty(rootEl, 'clientWidth', { configurable: true, value: 1200 });
+    if (parentEl) Object.defineProperty(parentEl, 'clientWidth', { configurable: true, value: 1200 });
+
+    // Trigger recalculation while not ready
+    wrapper.vm.recalculateCompactCommentsMode();
+    await nextTick();
+
+    // Should not emit before isReady
+    const layoutChangeCalls = superdocStub.emit.mock.calls.filter(([name]) => name === 'layout-change');
+    expect(layoutChangeCalls.length).toBe(0);
+  });
+
+  it('includes documentWidth and fitZoom in layout-change payload when ready', async () => {
+    const superdocStub = createSuperdocStub();
+    superdocStoreStub.isReady.value = true;
+
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    // Set up container width measurement
+    const rootEl = wrapper.find('.superdoc').element;
+    const parentEl = rootEl.parentElement;
+    Object.defineProperty(rootEl, 'clientWidth', { configurable: true, value: 1200 });
+    if (parentEl) Object.defineProperty(parentEl, 'clientWidth', { configurable: true, value: 1200 });
+
+    // Trigger recalculation
+    wrapper.vm.recalculateCompactCommentsMode();
+    await nextTick();
+
+    const layoutChangeCalls = superdocStub.emit.mock.calls.filter(([name]) => name === 'layout-change');
+    if (layoutChangeCalls.length > 0) {
+      const payload = layoutChangeCalls[layoutChangeCalls.length - 1][1];
+      expect(payload).toHaveProperty('containerWidth');
+      expect(payload).toHaveProperty('documentWidth');
+      expect(payload).toHaveProperty('fitZoom');
+      expect(typeof payload.fitZoom).toBe('number');
+    }
+  });
 });
