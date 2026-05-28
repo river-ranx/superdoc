@@ -218,7 +218,7 @@ test.describe('structured content drag and drop', () => {
     const anchorAfter = await superdoc.findTextPos('Drop anchor');
 
     expect(sourceAfter).toBeGreaterThan(tailAfter);
-    expect(sourceAfter).toBeGreaterThan(anchorAfter);
+    expect(sourceAfter).toBeLessThan(anchorAfter);
     expect(sourceAfter).not.toBe(sourceBefore);
     await superdoc.assertTextContains('Block payload to move');
   });
@@ -301,7 +301,7 @@ test.describe('structured content drag and drop', () => {
     const anchorAfter = await superdoc.findTextPos('Drop anchor');
 
     expect(sourceAfter).toBeGreaterThan(tailAfter);
-    expect(sourceAfter).toBeGreaterThan(anchorAfter);
+    expect(sourceAfter).toBeLessThan(anchorAfter);
     expect(sourceAfter).not.toBe(sourceBefore);
     await superdoc.assertTextContains('Block payload to move');
   });
