@@ -48,6 +48,7 @@ import {
 } from './inline-converters/common.js';
 import { runNodeChildrenToRuns } from './inline-converters/run.js';
 import { structuredContentNodeToBlocks } from './inline-converters/structured-content.js';
+import { smartTagNodeToBlocks } from './inline-converters/smart-tag.js';
 import { pageReferenceNodeToBlock } from './inline-converters/page-reference.js';
 import { fieldAnnotationNodeToRun } from './inline-converters/field-annotation.js';
 import { bookmarkStartNodeToBlocks } from './inline-converters/bookmark-start.js';
@@ -969,6 +970,10 @@ const INLINE_CONVERTERS_REGISTRY: Record<string, InlineConverterSpec> = {
   },
   structuredContent: {
     inlineConverter: structuredContentNodeToBlocks,
+  },
+  smartTag: {
+    inlineConverter: smartTagNodeToBlocks,
+    extraCheck: (node: PMNode) => Array.isArray(node.content),
   },
   fieldAnnotation: {
     inlineConverter: fieldAnnotationNodeToRun,
