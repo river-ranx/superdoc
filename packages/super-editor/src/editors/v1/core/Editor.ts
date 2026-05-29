@@ -3232,7 +3232,11 @@ export class Editor extends EventEmitter<EditorEventMap> {
     const uiEvent = transaction.getMeta('uiEvent');
     const recentPointerDown = Date.now() - this.#lastPointerDownAt <= CONTENT_CONTROL_POINTER_WINDOW_MS;
     const source: 'keyboard' | 'pointer' = uiEvent === 'click' || recentPointerDown ? 'pointer' : 'keyboard';
-    const activeContentControl = this.#resolveActiveContentControlRef(nextState);
+    // Full active stack (innermost first), matching ui.contentControls
+    // activeIds. `active` is the deepest control; `activePath` lets nested-aware
+    // custom UI read the surrounding controls without combining with observe().
+    const activePath = nextState.selection ? this.#collectActiveSdtRefs(nextState.selection) : [];
+    const activeContentControl = activePath[0] ?? null;
 
     if (selectionHasChanged) {
       const previous = this.#lastActiveContentControlRef;
@@ -3242,12 +3246,14 @@ export class Editor extends EventEmitter<EditorEventMap> {
           this.emit('contentControlFocus', {
             active: activeContentControl,
             previous,
+            activePath,
             source,
           });
         } else if (previous) {
           this.emit('contentControlBlur', {
             active: null,
             previous,
+            activePath: [],
             source,
           });
         }
@@ -3263,13 +3269,6 @@ export class Editor extends EventEmitter<EditorEventMap> {
     }
   }
 
-  #resolveActiveContentControlRef(state: EditorState): SdtRef | null {
-    const selection = state.selection;
-    if (!selection) return null;
-
-    const refs = this.#collectActiveSdtRefs(selection);
-    return refs[0] ?? null;
-  }
 
   #collectActiveSdtRefs(selection: EditorState['selection']): SdtRef[] {
     const refs: SdtRef[] = [];

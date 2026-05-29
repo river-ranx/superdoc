@@ -113,9 +113,12 @@ describe('Editor content-control events', () => {
 
     expect(focus).toHaveBeenCalledTimes(2);
     expect(focus.mock.calls[0][0]).toMatchObject({ active: { id: a.id, scope: 'inline' }, previous: null, source: 'keyboard' });
+    expect(focus.mock.calls[0][0].activePath.map((r) => r.id)).toEqual([a.id]);
     expect(focus.mock.calls[1][0]).toMatchObject({ active: { id: b.id }, previous: { id: a.id }, source: 'keyboard' });
+    expect(focus.mock.calls[1][0].activePath.map((r) => r.id)).toEqual([b.id]);
     expect(blur).toHaveBeenCalledTimes(1);
     expect(blur.mock.calls[0][0]).toMatchObject({ active: null, previous: { id: b.id }, source: 'keyboard' });
+    expect(blur.mock.calls[0][0].activePath).toEqual([]);
 
     editor.destroy();
   });
@@ -213,6 +216,47 @@ describe('Editor content-control events', () => {
     const blockFocus = focus.mock.calls.map((c) => c[0]).find((p) => p.active?.id === block.id);
     expect(blockFocus).toBeTruthy();
     expect(blockFocus.active).toMatchObject({ id: block.id, scope: 'block', controlType: 'richText' });
+    expect(blockFocus.activePath.map((r) => r.id)).toEqual([block.id]);
+
+    editor.destroy();
+  });
+
+  it('exposes the full activePath (innermost first) for a nested inline-in-block control', () => {
+    const editor = makeEditor();
+    const schema = editor.state.schema;
+    // Build a deterministic nested doc: block control > paragraph > [text, inline control, text].
+    const inner = schema.nodes.structuredContent.create(
+      { id: 'cc-inner', tag: 'cc-inner', controlType: 'text' },
+      schema.text('nested'),
+    );
+    const para = schema.nodes.paragraph.create(null, [schema.text('a '), inner, schema.text(' b')]);
+    const outer = schema.nodes.structuredContentBlock.create(
+      { id: 'cc-outer', tag: 'cc-outer', controlType: 'richText' },
+      para,
+    );
+    editor.dispatch(editor.state.tr.replaceWith(0, editor.state.doc.content.size, outer));
+
+    let innerInside = null;
+    editor.state.doc.descendants((node, pos) => {
+      if (innerInside === null && node.type.name === 'structuredContent') innerInside = pos + 1;
+      return true;
+    });
+    expect(innerInside).not.toBeNull();
+
+    // Baseline inside the outer block but before the inline (active = outer only).
+    selectAt(editor, 2);
+    const focus = vi.fn();
+    editor.on('contentControlFocus', focus);
+    selectAt(editor, innerInside); // caret inside the nested inline control
+
+    const ev = focus.mock.calls.map((c) => c[0]).find((p) => p.active?.id === 'cc-inner');
+    expect(ev).toBeTruthy();
+    if (!ev) return;
+    // `active` is the deepest control; activePath is the full stack innermost-first.
+    expect(ev.active.id).toBe('cc-inner');
+    expect(ev.active.scope).toBe('inline');
+    expect(ev.activePath.map((r) => r.id)).toEqual(['cc-inner', 'cc-outer']);
+    expect(ev.activePath.map((r) => r.scope)).toEqual(['inline', 'block']);
 
     editor.destroy();
   });

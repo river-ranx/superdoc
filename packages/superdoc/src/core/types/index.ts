@@ -1446,6 +1446,13 @@ export interface SdtRef {
 export interface ContentControlActiveChangePayload {
   active: SdtRef | null;
   previous: SdtRef | null;
+  /**
+   * Active content-control stack for the new selection, innermost first
+   * (matches `ui.contentControls` activeIds). `active` is `activePath[0]`.
+   * Empty when the selection is not inside any control. Lets nested-aware
+   * custom UI read the surrounding controls without combining with observe().
+   */
+  activePath: SdtRef[];
   source: 'keyboard' | 'pointer';
 }
 

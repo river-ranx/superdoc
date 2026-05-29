@@ -250,9 +250,10 @@ superdoc.on('fonts-resolved', ({ documentFonts, unsupportedFonts }) => {
 Fires when selection enters a content control, switches between controls, or leaves all controls.
 
 ```javascript
-superdoc.on('content-control:active-change', ({ active, previous, source }) => {
+superdoc.on('content-control:active-change', ({ active, previous, activePath, source }) => {
   // source: 'keyboard' | 'pointer'
   // active / previous: SdtRef | null
+  // activePath: SdtRef[] - full active stack, innermost first ([] when none)
 });
 ```
 
@@ -267,6 +268,11 @@ type SdtRef = {
   scope: 'inline' | 'block';
 };
 ```
+
+`active` is the deepest control (`activePath[0]`). For **nested** controls (an
+inline field inside a block clause), `activePath` carries the whole stack
+innermost-first, so you can update nested custom UI without also reading
+`ui.contentControls.observe()`. `activePath` is empty on blur.
 
 How to interpret:
 

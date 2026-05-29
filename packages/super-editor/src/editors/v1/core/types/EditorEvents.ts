@@ -145,12 +145,16 @@ export interface SdtRef {
 export interface ContentControlFocusPayload {
   active: SdtRef;
   previous: SdtRef | null;
+  /** Active control stack, innermost first (matches ui.contentControls activeIds). */
+  activePath: SdtRef[];
   source: 'keyboard' | 'pointer';
 }
 
 export interface ContentControlBlurPayload {
   active: null;
   previous: SdtRef;
+  /** Empty on blur: selection left all controls. */
+  activePath: SdtRef[];
   source: 'keyboard' | 'pointer';
 }
 
