@@ -45,6 +45,33 @@ export type ToolProvider = 'openai' | 'anthropic' | 'vercel' | 'generic';
 export type CacheStrategy = 'explicit' | 'automatic' | 'unsupported' | 'disabled';
 
 /**
+ * One operation row in a {@link ToolCatalogEntry}. Each catalog entry can
+ * dispatch to one or more operations (e.g. multi-action intent tools), so
+ * the catalog records the operation id and the action discriminator that
+ * routes to it.
+ */
+export type ToolCatalogOperation = {
+  operationId: string;
+  intentAction: string;
+  required?: string[];
+  requiredOneOf?: string[][];
+};
+
+/**
+ * One entry in the {@link ToolCatalog}. Matches the shape of the catalog
+ * emitted by the legacy preset's codegen — kept stable as the public
+ * catalog row shape so TypeScript consumers can introspect `tools[i]`
+ * without losing property typing.
+ */
+export type ToolCatalogEntry = {
+  toolName: string;
+  description: string;
+  inputSchema: Record<string, unknown>;
+  mutates: boolean;
+  operations: ToolCatalogOperation[];
+};
+
+/**
  * Full tool catalog shape. The legacy preset returns the existing codegen
  * catalog with `contractVersion`, `generatedAt`, `toolCount`, `tools`.
  */
@@ -52,7 +79,7 @@ export type ToolCatalog = {
   contractVersion: string;
   generatedAt: string | null;
   toolCount: number;
-  tools: unknown[];
+  tools: ToolCatalogEntry[];
 };
 
 export interface GetToolsOptions {

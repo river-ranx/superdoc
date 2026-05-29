@@ -21,7 +21,15 @@ import type { BoundDocApi } from '../generated/client.js';
 import type { InvokeOptions } from '../runtime/process.js';
 import { SuperDocCliError } from '../runtime/errors.js';
 import { dispatchIntentTool } from '../generated/intent-dispatch.generated.js';
-import type { PresetDescriptor, GetToolsOptions, GetToolsResult, ToolCatalog, ToolProvider } from '../presets.js';
+import type {
+  GetToolsOptions,
+  GetToolsResult,
+  PresetDescriptor,
+  ToolCatalog,
+  ToolCatalogEntry,
+  ToolCatalogOperation,
+  ToolProvider,
+} from '../presets.js';
 
 // Resolve tools directory relative to package root (works from both src/ and dist/)
 const toolsDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'tools');
@@ -32,23 +40,6 @@ const providerFileByName: Record<ToolProvider, string> = {
   vercel: 'tools.vercel.json',
   generic: 'tools.generic.json',
 };
-
-type OperationEntry = {
-  operationId: string;
-  intentAction: string;
-  required?: string[];
-  requiredOneOf?: string[][];
-};
-
-type ToolCatalogEntry = {
-  toolName: string;
-  description: string;
-  inputSchema: Record<string, unknown>;
-  mutates: boolean;
-  operations: OperationEntry[];
-};
-
-type LegacyToolCatalog = ToolCatalog & { tools: ToolCatalogEntry[] };
 
 const STRIP_EMPTY_OPTIONAL_ARGS = new Set(['parentId', 'parentCommentId', 'id', 'status']);
 
@@ -103,11 +94,11 @@ async function readProviderTools(provider: ToolProvider): Promise<{
 }
 
 // Cached catalog instance — loaded once per process.
-let _catalogCache: LegacyToolCatalog | null = null;
+let _catalogCache: ToolCatalog | null = null;
 
-async function getCachedCatalog(): Promise<LegacyToolCatalog> {
+async function getCachedCatalog(): Promise<ToolCatalog> {
   if (_catalogCache == null) {
-    _catalogCache = await readJson<LegacyToolCatalog>('catalog.json');
+    _catalogCache = await readJson<ToolCatalog>('catalog.json');
   }
   return _catalogCache;
 }
@@ -210,7 +201,7 @@ function validateToolArgs(toolName: string, args: Record<string, unknown>, tool:
   // 3. Reject missing per-operation required keys. For multi-action tools,
   //    resolve the operation by action; for single-op tools, use the sole entry.
   const action = args.action;
-  let op: OperationEntry | undefined;
+  let op: ToolCatalogOperation | undefined;
   if (typeof action === 'string' && tool.operations.length > 1) {
     op = tool.operations.find((o) => o.intentAction === action);
   } else if (tool.operations.length === 1) {
@@ -230,7 +221,7 @@ function validateOperationRequired(
   toolName: string,
   action: unknown,
   args: Record<string, unknown>,
-  op: OperationEntry,
+  op: ToolCatalogOperation,
 ): void {
   const actionLabel = typeof action === 'string' ? ` action "${action}"` : '';
 
@@ -262,8 +253,16 @@ function validateOperationRequired(
 
 async function legacyGetTools(provider: ToolProvider, options?: GetToolsOptions): Promise<GetToolsResult> {
   const { tools } = await readProviderTools(provider);
-  const rawTools = Array.isArray(tools) ? tools : [];
-  return applyCacheMarkers(rawTools, provider, options?.cache === true);
+  // Fail fast on malformed provider artifacts so agents don't silently boot
+  // with zero tools. Matches the pre-presets behavior of the public
+  // `listTools` path (TOOLS_ASSET_INVALID).
+  if (!Array.isArray(tools)) {
+    throw new SuperDocCliError('Tool provider bundle is missing tools array.', {
+      code: 'TOOLS_ASSET_INVALID',
+      details: { provider },
+    });
+  }
+  return applyCacheMarkers(tools, provider, options?.cache === true);
 }
 
 async function legacyGetCatalog(): Promise<ToolCatalog> {
@@ -316,8 +315,7 @@ async function legacyDispatch(
   }
 
   const catalog = await getCachedCatalog();
-  const entries = catalog.tools as ToolCatalogEntry[];
-  const tool = entries.find((t) => t.toolName === toolName);
+  const tool = catalog.tools.find((t) => t.toolName === toolName);
   if (tool == null) {
     throw new SuperDocCliError(`Unknown tool: ${toolName}`, {
       code: 'TOOL_DISPATCH_NOT_FOUND',

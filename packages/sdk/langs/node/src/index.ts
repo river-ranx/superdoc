@@ -262,6 +262,8 @@ export type {
   CacheStrategy,
   SystemPromptForProviderResult,
   ToolCatalog,
+  ToolCatalogEntry,
+  ToolCatalogOperation,
   ToolChooserInput,
   ToolProvider,
 } from './tools.js';

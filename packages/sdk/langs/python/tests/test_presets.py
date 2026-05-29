@@ -57,6 +57,21 @@ def test_get_preset_nonexistent_raises_preset_not_found():
     assert 'legacy' in excinfo.value.details['availablePresets']
 
 
+def test_get_preset_empty_string_raises_preset_not_found():
+    """Empty string is NOT the default — it must fail fast like Node."""
+    with pytest.raises(SuperDocError) as excinfo:
+        get_preset('')
+    assert excinfo.value.code == 'PRESET_NOT_FOUND'
+
+
+def test_choose_tools_empty_preset_raises_preset_not_found():
+    """Cross-lang parity with Node: chooseTools({preset: ''}) must throw, not
+    silently use legacy."""
+    with pytest.raises(SuperDocError) as excinfo:
+        choose_tools({'provider': 'openai', 'preset': ''})
+    assert excinfo.value.code == 'PRESET_NOT_FOUND'
+
+
 # ---------------------------------------------------------------------------
 # choose_tools — default preset equivalence
 # ---------------------------------------------------------------------------

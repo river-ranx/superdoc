@@ -50,6 +50,39 @@ describe('preset registry', () => {
       expect(details.availablePresets).toContain('legacy');
     }
   });
+
+  test('getPreset("") throws PRESET_NOT_FOUND (empty string is not the default)', () => {
+    try {
+      getPreset('');
+      throw new Error('Expected getPreset("") to throw.');
+    } catch (error) {
+      expect(error).toBeInstanceOf(SuperDocCliError);
+      expect((error as SuperDocCliError).code).toBe('PRESET_NOT_FOUND');
+    }
+  });
+
+  test('chooseTools({preset: ""}) throws PRESET_NOT_FOUND (cross-lang parity)', async () => {
+    await expect(chooseTools({ provider: 'openai', preset: '' })).rejects.toMatchObject({
+      code: 'PRESET_NOT_FOUND',
+    });
+  });
+});
+
+describe('public ToolCatalog type — structural access', () => {
+  test('getToolCatalog().tools entries expose typed properties', async () => {
+    const catalog = await getToolCatalog();
+    expect(catalog.tools.length).toBeGreaterThan(0);
+    const first = catalog.tools[0]!;
+    // These property accesses validate that ToolCatalog.tools is structurally
+    // typed (ToolCatalogEntry[]) — not unknown[]. Compile failure here means
+    // the public catalog row type regressed.
+    expect(typeof first.toolName).toBe('string');
+    expect(typeof first.description).toBe('string');
+    expect(typeof first.mutates).toBe('boolean');
+    expect(Array.isArray(first.operations)).toBe(true);
+    expect(typeof first.operations[0]?.operationId).toBe('string');
+    expect(typeof first.operations[0]?.intentAction).toBe('string');
+  });
 });
 
 describe('chooseTools — default preset equivalence', () => {

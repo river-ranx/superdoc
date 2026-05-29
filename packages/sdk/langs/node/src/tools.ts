@@ -16,11 +16,13 @@ import {
   listPresets,
   type CacheStrategy,
   type ToolCatalog,
+  type ToolCatalogEntry,
+  type ToolCatalogOperation,
   type ToolProvider,
 } from './presets.js';
 
 export { DEFAULT_PRESET, getPreset, listPresets };
-export type { CacheStrategy, ToolCatalog, ToolProvider };
+export type { CacheStrategy, ToolCatalog, ToolCatalogEntry, ToolCatalogOperation, ToolProvider };
 
 // ---------------------------------------------------------------------------
 // chooseTools — provider-shaped tool list with optional cache markers

@@ -147,8 +147,16 @@ def _legacy_get_tools(provider: ToolProvider, *, cache: bool = False) -> Dict[st
         raise SuperDocError('provider is required.', code='INVALID_ARGUMENT', details={'provider': provider})
     provider_file = _read_json_asset(_PROVIDER_FILE[provider])
     tools = provider_file.get('tools')
-    raw_tools = tools if isinstance(tools, list) else []
-    return _apply_cache_markers(cast(List[Any], raw_tools), provider, cache)
+    # Fail fast on malformed provider artifacts so agents don't silently boot
+    # with zero tools. Matches the Node legacy preset's behavior and the
+    # pre-presets contract of the public list_tools path.
+    if not isinstance(tools, list):
+        raise SuperDocError(
+            'Tool provider bundle is missing tools array.',
+            code='TOOLS_ASSET_INVALID',
+            details={'provider': provider},
+        )
+    return _apply_cache_markers(cast(List[Any], tools), provider, cache)
 
 
 def _legacy_get_catalog() -> Dict[str, Any]:

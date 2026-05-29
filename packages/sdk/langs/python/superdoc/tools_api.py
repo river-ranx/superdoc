@@ -77,7 +77,12 @@ def choose_tools(input: ToolChooserInput) -> Dict[str, Any]:
             details={'provider': provider},
         )
 
-    preset_id = input.get('preset') or DEFAULT_PRESET
+    # Default only when `preset` is absent. An explicit empty string is passed
+    # through to get_preset() so it raises PRESET_NOT_FOUND, matching Node/MCP
+    # fail-fast behavior. Using `or DEFAULT_PRESET` would silently treat
+    # `preset: ''` as legacy and hide misconfiguration.
+    preset_arg = input.get('preset')
+    preset_id = preset_arg if preset_arg is not None else DEFAULT_PRESET
     cache_requested = bool(input.get('cache'))
 
     preset = get_preset(preset_id)
