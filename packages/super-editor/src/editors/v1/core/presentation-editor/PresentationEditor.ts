@@ -1925,20 +1925,35 @@ export class PresentationEditor extends EventEmitter {
   /**
    * Alias for the visible host container so callers can attach listeners explicitly.
    *
-   * This is the main scrollable container that hosts the rendered pages.
-   * Use this element to attach scroll listeners, measure viewport bounds, or
-   * position floating UI elements relative to the editor.
+   * The painted host element that contains the rendered pages. This is
+   * NOT necessarily the scroll container — the scrollable element is
+   * often an ancestor. Use {@link scrollContainer} to attach scroll
+   * listeners or measure the scroll viewport; use the host to position
+   * floating UI relative to the painted content.
    *
    * @returns The visible host HTMLElement
    *
    * @example
    * ```typescript
    * const host = presentation.visibleHost;
-   * host.addEventListener('scroll', () => console.log('Scrolled!'));
+   * const rect = host.getBoundingClientRect();
    * ```
    */
   get visibleHost(): HTMLElement {
     return this.#visibleHost;
+  }
+
+  /**
+   * The resolved scroll container: the nearest ancestor of the visible
+   * host with `overflow: auto`/`scroll` (it may be the host itself). It
+   * can change after the first layout if a closer scrollable ancestor is
+   * detected. Returns `null` when the document/window scrolls instead of
+   * a dedicated element — callers should fall back to `window` then.
+   *
+   * @returns The scroll container element, or `null` when the window scrolls
+   */
+  get scrollContainer(): HTMLElement | null {
+    return this.#scrollContainer instanceof HTMLElement ? this.#scrollContainer : null;
   }
 
   /**

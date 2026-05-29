@@ -2213,6 +2213,11 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
       return editor?.presentationEditor?.visibleHost ?? null;
     },
 
+    getScrollContainer(): HTMLElement | null {
+      const editor = resolveHostEditor(superdoc);
+      return editor?.presentationEditor?.scrollContainer ?? null;
+    },
+
     positionAt(input: ViewportPositionAtInput): ViewportPositionHit | null {
       if (!input || typeof input.x !== 'number' || typeof input.y !== 'number') return null;
       const hostEditor = resolveHostEditor(superdoc);

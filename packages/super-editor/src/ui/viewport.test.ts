@@ -388,6 +388,42 @@ describe('ui.viewport.getHost', () => {
   });
 });
 
+describe('ui.viewport.getScrollContainer', () => {
+  it('returns the resolved scroll container when one is mounted', () => {
+    const { superdoc } = makeStubs();
+    const scroller = document.createElement('div');
+    document.body.appendChild(scroller);
+    (
+      superdoc.activeEditor as unknown as { presentationEditor: { scrollContainer: HTMLElement } }
+    ).presentationEditor.scrollContainer = scroller;
+
+    const ui = createSuperDocUI({ superdoc });
+    // Distinct from getHost(): the scroller is not the painted host.
+    expect(ui.viewport.getScrollContainer()).toBe(scroller);
+
+    scroller.remove();
+    ui.destroy();
+  });
+
+  it('returns null when the document/window scrolls (no element scroller)', () => {
+    const { superdoc } = makeStubs();
+    (
+      superdoc.activeEditor as unknown as { presentationEditor: { scrollContainer: HTMLElement | null } }
+    ).presentationEditor.scrollContainer = null;
+    const ui = createSuperDocUI({ superdoc });
+    expect(ui.viewport.getScrollContainer()).toBeNull();
+    ui.destroy();
+  });
+
+  it('returns null when no editor is mounted', () => {
+    const { superdoc } = makeStubs();
+    (superdoc.activeEditor as unknown as { presentationEditor: unknown }).presentationEditor = undefined;
+    const ui = createSuperDocUI({ superdoc });
+    expect(ui.viewport.getScrollContainer()).toBeNull();
+    ui.destroy();
+  });
+});
+
 describe('ui.viewport.positionAt — input validation', () => {
   it('returns null for invalid input (missing or non-numeric coordinates)', () => {
     const { superdoc } = makeStubs();
