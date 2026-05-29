@@ -53,7 +53,7 @@ The event tells you *what* is active; `getRect` tells you *where* to draw. `acti
 
 ## How the model works
 
-You build your UI *over* the control, not inside it. SuperDoc owns how the control's content is painted in the document; you turn off its built-in chrome and draw your own (chips, badges, panels) anchored with `getRect`, react with the events, and change content through `editor.doc.contentControls.*`. Custom field types are expressed as a `tag` (the `{ kind: 'smartField', key }` convention above), interpreted by your own UI - the underlying control stays a standard Word SDT so it round-trips to `.docx`.
+You build your UI *over* the control, not inside it. SuperDoc owns how the control's content is painted in the document; you turn off its built-in chrome and draw your own (chips, badges, panels) anchored with `getRect`, react with the events, and change content through `editor.doc.contentControls.*`. Custom field types are expressed as a `tag` - for example `{ kind: 'smartField', key: 'party_name' }`, interpreted by your own UI - the underlying control stays a standard Word SDT so it round-trips to `.docx`.
 
 ## See also
 

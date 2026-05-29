@@ -3924,6 +3924,12 @@ export class PresentationEditor extends EventEmitter {
     const pos = this.#resolveContentControlCaretPos(entityId);
     if (pos == null) return { success: false, reason: 'not-found' };
 
+    // Without setTextSelection the editor can't place the caret, so focus
+    // can't honor its "caret placed" contract — fail before scrolling.
+    if (typeof editor.commands?.setTextSelection !== 'function') {
+      return { success: false, reason: 'not-ready' };
+    }
+
     // Scroll first and honor the result. A focus that can't bring the control
     // into view must not report success (it would leave a caret on a page that
     // never mounted) — matches #scrollToBlockCandidate. Model-aware: mounts a
@@ -3934,10 +3940,13 @@ export class PresentationEditor extends EventEmitter {
     });
     if (!scrolled) return { success: false, reason: 'not-reachable' };
 
-    // Then place the caret inside the control. setTextSelection clamps and
+    // Place the caret inside the control and honor the result — report success
+    // only if the selection was actually placed. setTextSelection clamps and
     // focuses the (hidden) editor view with preventScroll, so keyboard input
     // goes to the control without re-jumping the viewport.
-    editor.commands?.setTextSelection?.({ from: pos, to: pos });
+    if (!editor.commands.setTextSelection({ from: pos, to: pos })) {
+      return { success: false, reason: 'not-reachable' };
+    }
     return { success: true };
   }
 
