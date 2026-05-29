@@ -1149,6 +1149,12 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
   };
   const onWindowScrollGeometry = () => scheduleGeometry('scroll');
   const onWindowResizeGeometry = () => scheduleGeometry('resize');
+  // The comments rail toggling shifts/reflows document geometry but does
+  // not reliably emit a layout repaint on its own, so cached rects would
+  // silently go stale. Bridge the explicit sidebar-toggle signal into a
+  // geometry invalidation. Reuses the 'layout' reason; consumers only
+  // re-query on it, so no new public reason is warranted.
+  const onGeometrySidebar = () => scheduleGeometry('layout');
   let domGeometryAttached = false;
   const attachDomGeometryListeners = () => {
     if (domGeometryAttached || typeof window === 'undefined') return;
@@ -1183,10 +1189,12 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     // from the slice recompute that SUPERDOC_EVENTS triggers.
     superdoc.on?.('zoomChange', onGeometryZoom);
     superdoc.on?.('fonts-changed', refreshFontOptionsAndNotify);
+    superdoc.on?.('sidebar-toggle', onGeometrySidebar);
     teardown.push(() => {
       SUPERDOC_EVENTS.forEach((name) => superdoc.off?.(name, scheduleNotify));
       superdoc.off?.('zoomChange', onGeometryZoom);
       superdoc.off?.('fonts-changed', refreshFontOptionsAndNotify);
+      superdoc.off?.('sidebar-toggle', onGeometrySidebar);
     });
   }
 

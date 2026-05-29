@@ -41,14 +41,17 @@ export interface Subscribable<T> {
  * a SuperDoc-like host. Differs from `HeadlessToolbarSuperdocHostEvent`
  * (which adds `formatting-marks-change` but not `viewport-change`); a
  * custom UI host stub only has to support the events the UI
- * controller actually consumes.
+ * controller actually consumes. `sidebar-toggle` feeds the
+ * `ui.viewport.observe` geometry signal when the comments rail shifts
+ * layout.
  */
 export type SuperDocUIHostEvent =
   | 'editorCreate'
   | 'document-mode-change'
   | 'zoomChange'
   | 'viewport-change'
-  | 'fonts-changed';
+  | 'fonts-changed'
+  | 'sidebar-toggle';
 
 /**
  * Structural typing for the SuperDoc instance. Keeps the UI controller

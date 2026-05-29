@@ -734,4 +734,19 @@ describe('ui.viewport.observe — repaint reason (SD-3311 regression)', () => {
     expect(events).toEqual([{ reason: 'layout' }]);
     ui.destroy();
   });
+
+  it('fires a geometry invalidation on sidebar-toggle (reason "layout")', async () => {
+    // The comments rail toggling shifts geometry without a guaranteed
+    // layout repaint; observe must still notify so cached rects re-query.
+    const { superdoc, emitSuperdoc } = makeGeometryStub();
+    const ui = createSuperDocUI({ superdoc });
+    const events: Array<{ reason: string }> = [];
+    ui.viewport.observe((e) => events.push(e));
+
+    emitSuperdoc('sidebar-toggle', true);
+    await nextFrame();
+
+    expect(events).toEqual([{ reason: 'layout' }]);
+    ui.destroy();
+  });
 });
