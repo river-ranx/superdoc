@@ -273,13 +273,62 @@ input:focus {
    exists under chrome-none, so there is nothing to style for it.
    ----------------------------------------------------------------------- */
 
-/* Inline smart fields: blue pill */
-.superdoc-cc-chrome-none .superdoc-structured-content-inline[data-sdt-tag*='smartField'] {
-  padding: 1px 4px;
-  border: 1px solid var(--demo-accent);
-  border-radius: 4px;
-  background-color: var(--demo-accent-soft);
+/* Smart-tag token look, shared by the in-editor inline SDT and the Smart-tags
+   palette chips so a sidebar tag and the field it inserts read as one object. */
+:root {
+  --tag-border: var(--demo-accent);
+  --tag-bg: var(--demo-accent-soft);
+  --tag-fg: var(--demo-accent);
+  --tag-radius: 6px;
 }
+/* Inline smart fields: token pill (painted SDT wrapper under chrome:'none'). */
+.superdoc-cc-chrome-none .superdoc-structured-content-inline[data-sdt-tag*='smartField'] {
+  padding: 1px 6px;
+  border: 1px solid var(--tag-border);
+  border-radius: var(--tag-radius);
+  background-color: var(--tag-bg);
+  color: var(--tag-fg);
+}
+
+/* Smart-tags palette (sidebar). Chips reuse the --tag-* token look above, so a
+   palette chip and the field it inserts are visually identical. */
+.smart-tags { margin-bottom: 14px; }
+.smart-tags-hint { margin: 0 0 8px; font-size: var(--sd-font-size-200, 12px); color: var(--demo-text-muted); }
+.smart-tags-search {
+  width: 100%;
+  height: 30px;
+  padding: 0 10px;
+  margin-bottom: 10px;
+  border: 1px solid var(--demo-border);
+  border-radius: var(--sd-radius-50, 4px);
+  background: var(--demo-bg);
+  color: var(--demo-text);
+}
+.smart-tags-group {
+  font-size: var(--sd-font-size-100, 11px);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--demo-text-muted);
+  margin-bottom: 6px;
+}
+.smart-tags-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.smart-tag {
+  font: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+  cursor: pointer;
+  padding: 4px 8px;
+  border: 1px solid var(--tag-border);
+  border-radius: var(--tag-radius);
+  background: var(--tag-bg);
+  color: var(--tag-fg);
+  white-space: nowrap;
+}
+.smart-tag:hover { filter: brightness(0.97); }
+.smart-tag.is-active { box-shadow: 0 0 0 2px var(--demo-accent); }
+.smart-tag:focus-visible { outline: 1px solid var(--demo-accent); outline-offset: 1px; }
 
 /* Block clauses: bordered card with soft background */
 .superdoc-cc-chrome-none .superdoc-structured-content-block[data-sdt-tag*='reusableSection'] {

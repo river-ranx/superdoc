@@ -46,6 +46,9 @@ import { attachFieldChip } from './field-chip.js';
 type NodeKind = 'block' | 'inline';
 type LockMode = 'unlocked' | 'sdtLocked' | 'contentLocked' | 'sdtContentLocked';
 type ContentControlTarget = { kind: NodeKind; nodeType: 'sdt'; nodeId: string };
+// Minimal shapes for inserting at the caret (see `editor.doc.create.contentControl`).
+type SelectionPoint = { kind: 'text'; blockId: string; offset: number };
+type SelectionTarget = { kind: 'selection'; start: SelectionPoint; end: SelectionPoint };
 
 type ContentControlInfo = {
   target: ContentControlTarget;
@@ -60,6 +63,16 @@ type MutationResult =
   | { success: false; failure: { code: string; message: string } };
 
 type DocumentApi = {
+  create: {
+    contentControl(input: {
+      kind: NodeKind;
+      controlType?: 'text' | 'richText';
+      at?: SelectionTarget;
+      content?: string;
+      tag?: string;
+      alias?: string;
+    }): MutationResult;
+  };
   contentControls: {
     list(input?: Record<string, unknown>): { items: ContentControlInfo[]; total: number };
     selectByTag(input: { tag: string }): { items: ContentControlInfo[]; total: number };
@@ -318,6 +331,37 @@ function applyField(key: FieldKey, value: string): void {
   }
 }
 
+/** The token text shown inside an unfilled field (e.g. `disclosingParty` -> `DISCLOSING_PARTY`). */
+const tokenFor = (key: FieldKey): string => key.replace(/([A-Z])/g, '_$1').toUpperCase();
+
+/**
+ * Insert a smart-tag field at the caret (authoring). Dogfoods the verified
+ * recipe: capture the caret as a TextTarget, bridge it to a collapsed
+ * SelectionTarget, then `create.contentControl` with the token as initial
+ * content. The new inline SDT paints with the same `.superdoc-structured-content-inline`
+ * wrapper the palette chips are styled to match. Then focus it so the user can type.
+ */
+function insertTagAtCursor(key: FieldKey, label: string): void {
+  const ui = state.ui;
+  const editor = state.editor;
+  if (!ui || !editor?.doc) return;
+  const seg = ui.selection.capture()?.target?.segments?.[0];
+  if (!seg) return; // no caret in the document
+  const point: SelectionPoint = { kind: 'text', blockId: seg.blockId, offset: seg.range.start };
+  const result = editor.doc.create.contentControl({
+    kind: 'inline',
+    controlType: 'text',
+    at: { kind: 'selection', start: point, end: point },
+    content: tokenFor(key),
+    tag: fieldTag(key),
+    alias: label,
+  });
+  if (result.success) {
+    state.values[key] = state.values[key] ?? '';
+    void ui.contentControls.focus({ id: result.contentControl.nodeId });
+  }
+}
+
 async function applyClauseVersion(clauseId: ClauseId, toVersion: string, body: string): Promise<void> {
   const doc = getDoc();
   const clause = CLAUSE_LIBRARY.find((c) => c.id === clauseId);
@@ -396,8 +440,47 @@ function renderPanels(): void {
   renderClausesPanel();
 }
 
+/**
+ * Smart-tags palette: a searchable list of variable chips. Clicking a chip
+ * inserts that field as an inline SDT at the caret (authoring). The chips use
+ * the same token look (.smart-tag / --tag-*) as the painted in-editor field, so
+ * the sidebar tag and the inserted field are visually identical.
+ */
+function renderSmartTagsPalette(): void {
+  const section = document.createElement('div');
+  section.className = 'smart-tags';
+  section.innerHTML = `
+    <p class="smart-tags-hint">Click a tag to insert it at the cursor.</p>
+    <input class="smart-tags-search" type="search" placeholder="Search tags…" aria-label="Search smart tags" />
+    <div class="smart-tags-group">Offer</div>
+    <div class="smart-tags-list">
+      ${FIELDS.map(
+        (f) =>
+          `<button class="smart-tag" type="button" data-tag-key="${escapeAttr(f.key)}" title="Insert ${escapeAttr(f.label)} at the cursor">${escapeHtml(tokenFor(f.key))}</button>`,
+      ).join('')}
+    </div>
+  `;
+  fieldsPanelEl.appendChild(section);
+
+  section.querySelectorAll<HTMLButtonElement>('.smart-tag').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const field = FIELDS.find((f) => f.key === (btn.dataset.tagKey as FieldKey));
+      if (field) insertTagAtCursor(field.key, field.label);
+    });
+  });
+
+  const search = section.querySelector<HTMLInputElement>('.smart-tags-search');
+  search?.addEventListener('input', () => {
+    const q = search.value.trim().toUpperCase();
+    section.querySelectorAll<HTMLButtonElement>('.smart-tag').forEach((btn) => {
+      btn.style.display = !q || (btn.textContent ?? '').includes(q) ? '' : 'none';
+    });
+  });
+}
+
 function renderFieldsPanel(): void {
   fieldsPanelEl.innerHTML = '';
+  renderSmartTagsPalette();
   for (const field of FIELDS) {
     // A <div> wrapper (not <label>): a <label> may not contain interactive
     // content, so the Locate <button> must be a sibling of the input, with a
