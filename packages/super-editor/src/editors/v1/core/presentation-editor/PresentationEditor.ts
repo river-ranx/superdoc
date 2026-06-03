@@ -503,6 +503,12 @@ export class PresentationEditor extends EventEmitter {
   #hiddenHostWrapper: HTMLElement;
   #layoutOptions: LayoutEngineOptions;
   #layoutState: LayoutState = { blocks: [], measures: [], layout: null, bookmarks: new Map() };
+  /**
+   * The font-mapping signature `#layoutState.measures` were produced with. Travels with the
+   * measures so the next render can tell incrementalLayout whether a mapping change since the
+   * prior pass invalidates previous-measure reuse (that reuse fast path bypasses the cache key).
+   */
+  #layoutFontSignature = '';
   #layoutLookupBlocks: FlowBlock[] = [];
   #layoutLookupMeasures: Measure[] = [];
   /** Cache for incremental toFlowBlocks conversion */
@@ -533,10 +539,12 @@ export class PresentationEditor extends EventEmitter {
   #fontGate: FontReadinessGate | null = null;
   /**
    * This document's logical->physical font resolver. Per-instance (per document) so two
-   * editors can map the same logical family differently without leaking. Planner, gate, and
-   * report resolve through THIS instance today; threading measure + paint (and folding the
-   * resolver signature into their cache/reuse keys) is the remaining step before runtime
-   * `fonts.map` is safe - until then measure/paint still use the global resolver.
+   * editors can map the same logical family differently without leaking. Planner, gate, report,
+   * and MEASURE (body, footnotes, header/footer, and per-rId header/footer) all resolve through
+   * THIS instance, and its signature keys every measure cache so two documents with different
+   * mappings cannot share a measure. PAINT is the remaining global path; folding the resolver
+   * into the paint render context + reuse signature is the last step before a runtime
+   * `fonts.map` is fully isolated.
    */
   readonly #fontResolver = createFontResolver();
   /** Layout blocks for the current render, stashed so the gate's planner reads the live set. */
@@ -6712,6 +6720,14 @@ export class PresentationEditor extends EventEmitter {
       const previousBlocks = this.#layoutState.blocks;
       const previousLayout = this.#layoutState.layout;
       const previousMeasures = this.#layoutState.measures;
+      // Per-document font context for this render: bind the resolver into the measure callback
+      // (so measurement uses THIS document's physical substitutes) and capture its signature for
+      // the measure-cache keys. previousFontSignature is the signature the prior measures were
+      // produced with - if it differs, incrementalLayout must not reuse them (the reuse fast
+      // path bypasses the cache key). PR1 has no public `fonts.map`, so the signature stays ''.
+      const resolvePhysical = (css: string): string => this.#fontResolver.resolvePhysicalFamily(css);
+      const fontSignature = this.#fontResolver.signature;
+      const previousFontSignature = this.#layoutFontSignature;
 
       let layout: Layout;
       let measures: Measure[];
@@ -6762,9 +6778,11 @@ export class PresentationEditor extends EventEmitter {
           previousLayout,
           blocksForLayout,
           layoutOptions,
-          (block: FlowBlock, constraints: { maxWidth: number; maxHeight: number }) => measureBlock(block, constraints),
+          (block: FlowBlock, constraints: { maxWidth: number; maxHeight: number }) =>
+            measureBlock(block, constraints, resolvePhysical),
           headerFooterInput ?? undefined,
           previousMeasures,
+          { fontSignature, previousFontSignature },
         );
         const incrementalLayoutEnd = perfNow();
         perfLog(`[Perf] incrementalLayout: ${(incrementalLayoutEnd - incrementalLayoutStart).toFixed(2)}ms`);
@@ -6832,6 +6850,9 @@ export class PresentationEditor extends EventEmitter {
       }
       const anchorMap = computeAnchorMapFromHelper(bookmarks, layout, blocksForLayout);
       this.#layoutState = { blocks: blocksForLayout, measures, layout, bookmarks, anchorMap };
+      // Record the signature these measures were produced with, so the next render can gate
+      // previous-measure reuse on whether the mapping changed (see #layoutFontSignature).
+      this.#layoutFontSignature = fontSignature;
       this.#layoutLookupBlocks = resolveBlocks;
       this.#layoutLookupMeasures = resolveMeasures;
 
@@ -8104,7 +8125,7 @@ export class PresentationEditor extends EventEmitter {
     sectionMetadata: SectionMetadata[],
   ): Promise<void> {
     if (this.#headerFooterSession) {
-      await this.#headerFooterSession.layoutPerRId(headerFooterInput, layout, sectionMetadata);
+      await this.#headerFooterSession.layoutPerRId(headerFooterInput, layout, sectionMetadata, this.#fontResolver);
     }
   }
 
