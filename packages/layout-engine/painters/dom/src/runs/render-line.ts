@@ -177,7 +177,18 @@ type UnderlineOverlaySpan = {
 
 const isTextRun = (run: Run): run is TextRun => (run.kind === 'text' || run.kind === undefined) && 'text' in run;
 
+// The overlay can only measure and cover text and tab runs - their widths come from line segments
+// or run.width. Atomic runs (field annotations, inline images, math) carry their width elsewhere
+// (run.size), so a line containing one would mis-advance the overlay cursor and could suppress an
+// atomic run's native underline without painting a replacement (SD-3330 review). Restrict the
+// overlay to lines built only from text / tab / line-break runs, with an overlay-eligible tab.
+const isOverlaySafeRunKind = (run: Run): boolean => {
+  const kind = run.kind ?? 'text';
+  return kind === 'text' || kind === 'tab' || kind === 'lineBreak' || kind === 'break';
+};
+
 const shouldUseLineUnderlineOverlay = (runsForLine: Run[]): boolean =>
+  runsForLine.every(isOverlaySafeRunKind) &&
   runsForLine.some((run) => run.kind === 'tab' && canPaintUnderlineOverlay(run));
 
 const cloneRunWithoutUnderline = <T extends Run>(run: T): T => ({ ...run, underline: undefined }) as T;
@@ -429,11 +440,29 @@ export const renderLine = ({
   // overlay owns the mark across text + preserved spaces + tabs, so the two never disagree
   // on the underline's y (SD-3330). The segment-positioned branch captures span geometry as
   // it renders; the inline branch builds it from segment/tab widths.
-  // RTL lines deliberately skip segment positioning (shouldUseSegmentPositioning returns false for
-  // RTL) and fall to inline flow so the browser's bidi algorithm places the tabs. The overlay builds
-  // LTR left-offsets from the line start, which would land on the wrong side there and (worse)
-  // suppress the natively-correct underlines. Keep native underlines for RTL; the overlay is LTR-only.
-  const useLineUnderlineOverlay = Boolean(line.segments) && !isRtl && shouldUseLineUnderlineOverlay(runsForLine);
+  // The inline-flow overlay builds left-origin offsets that only line up with the content when the
+  // content actually starts at the left. Several layouts shift it the overlay can't see:
+  //  - RTL: shouldUseSegmentPositioning returns false, so RTL falls to inline flow where the browser
+  //    bidi-places the tabs - the LTR overlay would land on the wrong side.
+  //  - center / right alignment: the browser shifts the in-flow content; the overlay does not.
+  //  - hanging or negative indent: renderParagraphContent's CSS clamps negative indent and treats
+  //    hanging continuation lines differently than the overlay's resolveLineIndentOffset, so the two
+  //    origins diverge.
+  // In all of these, keep native underlines (don't suppress) rather than paint a misplaced overlay.
+  // The segment-positioned branch is exempt: it captures spans at the same absolute x it positions
+  // runs at, so it stays correct under any alignment/indent.
+  const overlayAlignment = (block.attrs as ParagraphAttrs | undefined)?.alignment;
+  const overlayIndent = (block.attrs as ParagraphAttrs | undefined)?.indent;
+  const inlineOverlayOriginMatchesContent =
+    overlayAlignment !== 'center' &&
+    overlayAlignment !== 'right' &&
+    (overlayIndent?.hanging ?? 0) === 0 &&
+    (overlayIndent?.left ?? 0) >= 0;
+  const useLineUnderlineOverlay =
+    Boolean(line.segments) &&
+    !isRtl &&
+    shouldUseLineUnderlineOverlay(runsForLine) &&
+    (useSegmentPositioning || inlineOverlayOriginMatchesContent);
   const resolveLineIndentOffset = (): number => {
     if (indentOffsetOverride != null) {
       return indentOffsetOverride;

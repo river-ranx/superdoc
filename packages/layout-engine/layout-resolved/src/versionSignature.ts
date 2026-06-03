@@ -314,8 +314,11 @@ export const deriveBlockVersion = (block: FlowBlock): string => {
           // is derived from measured line metrics, so when a font loads/changes (resolved family
           // unchanged, only availability) a tab-only underlined line must repaint - a mixed
           // text+tab line is already busted by its text run, but a tab-only line has none.
-          // Without these a font-size/color/font-availability change can leave a stale tab
-          // underline until an unrelated edit forces a rebuild.
+          // bold/italic matter for the same reason: a tab-only line's metrics now come from the
+          // tab's font via getFontInfoFromRun, which feeds bold/italic into the measured ascent/
+          // descent (buildFontString), so the underline offset and line height depend on them.
+          // Without these a font/style/availability change can leave a stale tab underline until an
+          // unrelated edit forces a rebuild.
           return [
             run.text ?? '',
             'tab',
@@ -323,6 +326,8 @@ export const deriveBlockVersion = (block: FlowBlock): string => {
             run.underline?.color ?? '',
             run.fontSize ?? '',
             run.fontFamily ?? '',
+            (run as { bold?: boolean }).bold ? 1 : 0,
+            (run as { italic?: boolean }).italic ? 1 : 0,
             getFontConfigVersion(),
             (run as { color?: string }).color ?? '',
           ].join(',');

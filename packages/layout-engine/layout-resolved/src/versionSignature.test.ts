@@ -100,7 +100,7 @@ describe('deriveBlockVersion - tab underline', () => {
   // come from measured line metrics fed by fontFamily and the run color. Each must change the
   // block version, or a font-size/family/color edit leaves a stale tab underline cached.
   const makeStyledTabParagraph = (
-    overrides: Partial<{ fontSize: number; fontFamily: string; color: string }>,
+    overrides: Partial<{ fontSize: number; fontFamily: string; color: string; bold: boolean; italic: boolean }>,
   ): FlowBlock => ({
     kind: 'paragraph',
     id: 'p1',
@@ -133,6 +133,20 @@ describe('deriveBlockVersion - tab underline', () => {
     const black = deriveBlockVersion(makeStyledTabParagraph({ color: '#000000' }));
     const red = deriveBlockVersion(makeStyledTabParagraph({ color: '#FF0000' }));
     expect(red).not.toBe(black);
+  });
+
+  // SD-3330 review: tab-only line metrics now come from the tab's font via getFontInfoFromRun, which
+  // feeds bold/italic into the measured ascent/descent, so toggling them must change the version.
+  it('produces a different version when the tab bold changes', () => {
+    const plain = deriveBlockVersion(makeStyledTabParagraph({ bold: false }));
+    const bold = deriveBlockVersion(makeStyledTabParagraph({ bold: true }));
+    expect(bold).not.toBe(plain);
+  });
+
+  it('produces a different version when the tab italic changes', () => {
+    const plain = deriveBlockVersion(makeStyledTabParagraph({ italic: false }));
+    const italic = deriveBlockVersion(makeStyledTabParagraph({ italic: true }));
+    expect(italic).not.toBe(plain);
   });
 
   it('is stable when tab fontSize, fontFamily and color are identical', () => {

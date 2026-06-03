@@ -1,6 +1,7 @@
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
 import { createDomPainter, sanitizeUrl, linkMetrics, applyRunDataAttributes } from './index.js';
 import { DomPainter } from './renderer.js';
+import { underlineOffsetFromLineTop } from './runs/tab-run.js';
 import { resolveLayout } from '@superdoc/layout-resolved';
 import type { DomPainterOptions, DomPainterInput, PaintSnapshot } from './index.js';
 import { resolveListMarkerGeometry } from '../../../../../shared/common/list-marker-utils.js';
@@ -695,7 +696,8 @@ describe('DomPainter', () => {
     expect(overlay.style.left).toBe('0px');
     expect(overlay.style.width).toBe('528px');
     expect(overlay.style.borderTop).toContain('solid');
-    expect(parseFloat(overlay.style.top)).toBeGreaterThan(measure.lines[0].ascent);
+    // Pin the underline y to the computed offset - the whole point of SD-3330 - not just > ascent.
+    expect(parseFloat(overlay.style.top)).toBeCloseTo(underlineOffsetFromLineTop(measure.lines[0]), 5);
     expect(textRun.style.textDecorationLine).toBe('none');
     expect(tabRuns).toHaveLength(5);
     tabRuns.forEach((tab) => expect(tab.style.borderBottom).toBe(''));
@@ -764,6 +766,92 @@ describe('DomPainter', () => {
     expect(textRun.style.textDecorationLine).not.toBe('none');
     expect(tabRuns).toHaveLength(2);
     tabRuns.forEach((tab) => expect(tab.style.borderBottom).toContain('solid'));
+  });
+
+  // SD-3330 review: the inline overlay builds left-origin offsets, so it must stay off (native
+  // underlines preserved) whenever the content is horizontally shifted in a way it can't see, or
+  // when the line carries an atomic run the overlay can't measure.
+  const expectNoOverlayNativesKept = (blockAttrs: Record<string, unknown>, extraRuns: unknown[] = []) => {
+    const block = {
+      kind: 'paragraph',
+      id: 'overlay-origin-mismatch',
+      attrs: blockAttrs,
+      runs: [
+        { text: 'Name', fontFamily: 'Arial', fontSize: 16, underline: { style: 'single' } },
+        { kind: 'tab', text: '\t', width: 48, fontSize: 16, underline: { style: 'single' } },
+        ...extraRuns,
+      ],
+    } as unknown as FlowBlock;
+    const measure: Measure = {
+      kind: 'paragraph',
+      lines: [
+        {
+          fromRun: 0,
+          fromChar: 0,
+          toRun: 1 + extraRuns.length,
+          toChar: 1,
+          width: 120,
+          maxWidth: 624,
+          ascent: 14.640625,
+          descent: 3.5390625,
+          lineHeight: 21.313333333333333,
+          segments: [{ runIndex: 0, fromChar: 0, toChar: 4, width: 40 }],
+          spaceCount: 0,
+        },
+      ],
+      totalHeight: 21.313333333333333,
+    };
+    const layout: Layout = {
+      pageSize: { w: 816, h: 1056 },
+      pages: [
+        {
+          number: 1,
+          fragments: [
+            { kind: 'para', blockId: 'overlay-origin-mismatch', fromLine: 0, toLine: 1, x: 0, y: 0, width: 624 },
+          ],
+        },
+      ],
+    };
+    const painter = createTestPainter({ blocks: [block], measures: [measure] });
+    painter.paint(layout, mount);
+    const lineEl = mount.querySelector('.superdoc-line') as HTMLElement;
+    const textRun = lineEl.querySelector('span:not(.superdoc-tab):not(.superdoc-underline-overlay)') as HTMLElement;
+    const tabRuns = Array.from(lineEl.querySelectorAll('.superdoc-tab')) as HTMLElement[];
+    expect(lineEl.querySelector('.superdoc-underline-overlay')).toBeNull();
+    expect(textRun.style.textDecorationLine).not.toBe('none');
+    expect(tabRuns.length).toBeGreaterThan(0);
+    tabRuns.forEach((tab) => expect(tab.style.borderBottom).toContain('solid'));
+  };
+
+  it('keeps native underlines (no overlay) on center-aligned inline tab lines', () => {
+    expectNoOverlayNativesKept({ alignment: 'center' });
+  });
+
+  it('keeps native underlines (no overlay) on right-aligned inline tab lines', () => {
+    expectNoOverlayNativesKept({ alignment: 'right' });
+  });
+
+  it('keeps native underlines (no overlay) on hanging-indent inline tab lines', () => {
+    expectNoOverlayNativesKept({ indent: { left: 0, hanging: 360 } });
+  });
+
+  it('keeps native underlines (no overlay) when an underlined field annotation shares the line', () => {
+    // FieldAnnotationRun.underline is a boolean the overlay would treat as eligible and suppress, but
+    // it cannot measure the field's width (run.size, not run.width). An atomic run on the line keeps
+    // the overlay off so the field's underline is not silently dropped.
+    expectNoOverlayNativesKept({}, [
+      {
+        kind: 'fieldAnnotation',
+        variant: 'text',
+        displayLabel: 'Client',
+        fieldId: 'F1',
+        fieldType: 'text',
+        fieldColor: '#980043',
+        underline: true,
+        pmStart: 0,
+        pmEnd: 1,
+      },
+    ]);
   });
 
   it('paints one measured overlay for underlined text + tabs on the segment-positioned path', () => {
@@ -838,7 +926,7 @@ describe('DomPainter', () => {
     expect(overlays[0].style.left).toBe('0px');
     expect(overlays[0].style.width).toBe('232px');
     expect(overlays[0].style.borderTop).toContain('solid');
-    expect(parseFloat(overlays[0].style.top)).toBeGreaterThan(measure.lines[0].ascent);
+    expect(parseFloat(overlays[0].style.top)).toBeCloseTo(underlineOffsetFromLineTop(measure.lines[0]), 5);
     // Native underlines are suppressed where the overlay owns the mark.
     expect(textRuns.length).toBeGreaterThan(0);
     textRuns.forEach((t) => expect(t.style.textDecorationLine).toBe('none'));
