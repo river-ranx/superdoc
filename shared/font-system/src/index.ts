@@ -18,6 +18,7 @@ export type {
   FontFaceSource,
   FontFaceDescriptor,
   RegisteredFace,
+  RegisterFaceResult,
   FontLoadResult,
   FontLoadSummary,
   FontFaceRequest,

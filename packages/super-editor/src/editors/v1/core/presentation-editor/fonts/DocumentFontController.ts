@@ -39,16 +39,22 @@ export interface DocumentFontControllerDeps {
 }
 
 /**
- * The single writer for a document's font state.
- *
- * Both config-time (`new SuperDoc({ fonts })`) and runtime (`superdoc.fonts.*`) mutations route
- * through this controller so they share one orchestration path: mutate the resolver/registry,
- * then reflow ONCE - and only when something actually changed. Mapping changes are document-local
- * (the per-document resolver signature already busts this document's measure/paint caches), so a
- * reflow goes through {@link FontReadinessGate.notifyFontMappingChanged} and never bumps the
- * global font epoch or touches other editors on the page.
- *
- * `add`/`preload` (registry-backed) land once this owns the mapping transitions.
+ * Normalize a public font source (a plain URL like '/fonts/Gelasio.woff2') to the CSS `url(...)`
+ * source the FontFace constructor expects. An already-`url(...)` value is left unchanged.
+ */
+function toCssFontSource(url: string): string {
+  return /^\s*url\(/i.test(url) ? url : `url(${JSON.stringify(url)})`;
+}
+
+/**
+ * The single writer for a document's font state: `map`/`unmap` change the resolver, `add`
+ * registers customer faces through the registry, and `preload` loads them. Runtime
+ * `superdoc.fonts.*` routes through here (config-time `new SuperDoc({ fonts })` will use the same
+ * methods), so every mutation shares one orchestration path: mutate, then reflow ONCE - and only
+ * when something actually changed. Mapping changes are document-local (the per-document resolver
+ * signature already busts this document's measure/paint caches), so a reflow goes through
+ * {@link FontReadinessGate.notifyFontMappingChanged} and never bumps the global font epoch or
+ * touches other editors on the page.
  */
 export class DocumentFontController {
   readonly #resolver: FontResolver;
@@ -104,20 +110,21 @@ export class DocumentFontController {
   add(families: ManagedFontFamily[]): void {
     const registry = this.#getGate()?.resolveRegistry();
     if (!registry) throw new Error('[superdoc] fonts.add: the font registry is not ready yet');
-    let registered = 0;
+    let changed = false;
     for (const { family, faces } of families) {
       for (const face of faces) {
-        registry.register({
+        const result = registry.register({
           family,
-          source: face.source,
+          source: toCssFontSource(face.source),
           descriptors: { weight: face.weight == null ? undefined : String(face.weight), style: face.style },
         });
-        registered += 1;
+        if (result.changed) changed = true;
       }
     }
-    // Unlike map/unmap, registration does not change the resolver signature, so the reflow is
-    // unconditional whenever anything was registered (availability changed for this document).
-    if (registered > 0) this.#reflow();
+    // Registration does not change the resolver signature (unlike map/unmap), so reflow whenever a
+    // face was actually registered - but skip it (and the config-change event) for a fully
+    // idempotent re-add, where availability did not change.
+    if (changed) this.#reflow();
   }
 
   /**

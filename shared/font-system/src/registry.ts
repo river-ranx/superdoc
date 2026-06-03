@@ -5,6 +5,7 @@ import type {
   FontLoadResult,
   FontLoadStatus,
   RegisteredFace,
+  RegisterFaceResult,
   RequiredFace,
 } from './types';
 
@@ -161,7 +162,7 @@ export class FontRegistry {
    * constructor: the family is recorded as `unloaded` and will resolve to
    * `fallback_used` when awaited.
    */
-  register(descriptor: FontFaceDescriptor): RegisteredFace {
+  register(descriptor: FontFaceDescriptor): RegisterFaceResult {
     const { family, source, descriptors } = descriptor;
     // A face's identity is family|weight|style; a bare register (no descriptors) is 400/normal.
     const weight = normalizeWeight(descriptors?.weight as string | undefined);
@@ -174,7 +175,7 @@ export class FontRegistry {
     // have no comparable identity here and are not de-duped.
     if (typeof source === 'string') {
       const existingSource = this.#faceSources.get(key);
-      if (existingSource === source) return { family, status: this.getStatus(family) };
+      if (existingSource === source) return { family, status: this.getStatus(family), changed: false };
       if (existingSource !== undefined) {
         throw new Error(
           `[superdoc] font face "${key}" is already registered from a different source ` +
@@ -197,7 +198,7 @@ export class FontRegistry {
     this.#trackFace(family, key);
     if (!this.#faceStatus.has(key)) this.#faceStatus.set(key, 'unloaded');
     if (typeof source === 'string' && !this.#faceSources.has(key)) this.#faceSources.set(key, source);
-    return { family, status: this.getStatus(family) };
+    return { family, status: this.getStatus(family), changed: true };
   }
 
   /** Record a face key under its normalized family for the family-status rollup. */

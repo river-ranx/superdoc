@@ -80,14 +80,13 @@ export type {
 } from '@superdoc/super-editor';
 
 /**
- * Read-only font surface on a SuperDoc instance (`superdoc.fonts`). The authoritative,
- * substitution- and load-aware answer to "what fonts does this document use and did
- * SuperDoc render them faithfully", pulled on demand. The same report streams via the
- * `fonts-changed` event / `onFontsChanged`. All three reflect the active editor; they
- * return empty arrays when no editor is active. The write surface starts with {@link map}
- * (override font resolution per document); `add`/`preload` for registering and loading faces
- * follow. {@link getReport} and {@link getDocumentFonts} cover the document's DECLARED
- * fonts (font table + theme + defaults), not only fonts visible on screen.
+ * Font surface on a SuperDoc instance (`superdoc.fonts`). The substitution- and load-aware
+ * answer to "what fonts does this document use and did SuperDoc render them faithfully" -
+ * pulled on demand and streamed via the `fonts-changed` event - plus a per-document write
+ * surface: {@link map}/{@link unmap} override resolution, {@link add} registers custom faces,
+ * {@link preload} loads them. All reflect the ACTIVE editor: reads return empty arrays when no
+ * editor is active; writes throw. {@link getReport} and {@link getDocumentFonts} cover the
+ * document's DECLARED fonts (font table + theme + defaults), not only fonts visible on screen.
  */
 /** One physical font face to register: a URL source plus optional weight/style. */
 export interface SuperDocFontFace {
