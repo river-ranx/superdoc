@@ -6710,14 +6710,28 @@ export class PresentationEditor extends EventEmitter {
       let extraMeasures: Measure[] | undefined;
       let resolveBlocks: FlowBlock[] = blocksForLayout;
       let resolveMeasures: Measure[] = previousMeasures;
+      // Build the header/footer layout input BEFORE the gate so its faces are planned too:
+      // a font used only in a header/footer is still measured (via incrementalLayout below),
+      // so it must load before measure or it reflows on late load. Reused unchanged for the
+      // incrementalLayout call and the per-rId header/footer pass.
+      const headerFooterInput = this.#buildHeaderFooterInput();
       // Load-before-measure gate (T3): wait for the fonts this document needs so the first
       // measurement pass uses real metrics instead of a fallback that would reflow on load.
       // Bounded by a per-font timeout; resolves to the cached summary once fonts are stable;
       // never throws, so font readiness can never block layout.
       try {
-        // Stash the blocks this render will measure so the gate's planner extracts the
-        // exact used faces (footnote/endnote blocks are already part of blocksForLayout).
-        this.#fontPlanBlocks = blocksForLayout;
+        // Stash every text source this render measures so the gate's planner awaits the exact
+        // used faces: body + notes (blocksForLayout), header/footer blocks, and - in paginated
+        // mode - footnote blocks (measured via layoutOptions.footnotes, NOT in blocksForLayout;
+        // semantic mode already folds footnotes into blocksForLayout). One planner input;
+        // planRequiredFontFaces dedups, so any overlap is harmless.
+        this.#fontPlanBlocks = [
+          ...blocksForLayout,
+          ...(headerFooterInput ? this.#collectHeaderFooterFaceBlocks(headerFooterInput) : []),
+          ...(!isSemanticFlow && footnotesLayoutInput?.blocksById
+            ? [...footnotesLayoutInput.blocksById.values()].flat()
+            : []),
+        ];
         const fontSummary = (await this.#fontGate?.ensureReadyForMeasure()) ?? null;
         // Now that the gate has settled, the font report reflects real load status. Emit
         // the authoritative `fonts-changed` once the picture first resolves and whenever it
@@ -6727,7 +6741,6 @@ export class PresentationEditor extends EventEmitter {
         /* font readiness must never break layout */
       }
 
-      const headerFooterInput = this.#buildHeaderFooterInput();
       try {
         const incrementalLayoutStart = perfNow();
         const result = await incrementalLayout(
@@ -7898,6 +7911,27 @@ export class PresentationEditor extends EventEmitter {
       sectionMetadata,
       alternateHeaders,
     };
+  }
+
+  /**
+   * Flatten a header/footer layout input into the FlowBlocks it will measure, so the font
+   * planner can include header/footer faces. getBatch variants and getBlocksByRId can cover
+   * the same content; planRequiredFontFaces dedups by face, so the overlap is harmless.
+   */
+  #collectHeaderFooterFaceBlocks(input: {
+    headerBlocks?: Partial<Record<string, FlowBlock[]>>;
+    footerBlocks?: Partial<Record<string, FlowBlock[]>>;
+    headerBlocksByRId?: Map<string, FlowBlock[]>;
+    footerBlocksByRId?: Map<string, FlowBlock[]>;
+  }): FlowBlock[] {
+    const out: FlowBlock[] = [];
+    for (const batch of [input.headerBlocks, input.footerBlocks]) {
+      if (batch) for (const blocks of Object.values(batch)) if (blocks) out.push(...blocks);
+    }
+    for (const byRId of [input.headerBlocksByRId, input.footerBlocksByRId]) {
+      if (byRId) for (const blocks of byRId.values()) out.push(...blocks);
+    }
+    return out;
   }
 
   #buildHeaderFooterInput() {

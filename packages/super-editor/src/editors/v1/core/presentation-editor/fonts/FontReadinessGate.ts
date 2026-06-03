@@ -8,6 +8,7 @@ import {
   type FontFaceRequest,
   type FontFaceLoadResult,
   type FontLoadSummary,
+  type FontLoadStatus,
   type FontResolutionRecord,
 } from '@superdoc/font-system';
 
@@ -188,7 +189,11 @@ export class FontReadinessGate {
     try {
       required = getRequiredFaces();
     } catch {
-      return this.#lastSummary ?? emptySummary();
+      // Face planning is pure traversal, so a throw here is a bug - but if it ever does,
+      // degrade to the family path (which still awaits the resolved physical families,
+      // e.g. Calibri -> Carlito) rather than skipping load and letting fallback metrics
+      // reach measurement.
+      return this.#ensureFamiliesReady();
     }
 
     const keyed = required.map((r) => ({ request: r, key: faceKeyOf(r.family, r.weight, r.style) }));
@@ -416,15 +421,29 @@ function summarize(results: FontLoadResult[]): FontLoadSummary {
   return summary;
 }
 
-/** Summarize face results (counts are per-FACE; `results` keeps the physical family name). */
+// Status precedence for rolling per-face outcomes up to a family: a settled failure must
+// never be masked by a loaded sibling. Mirrors FontRegistry.getStatus's rollup order.
+const FACE_STATUS_PRIORITY: FontLoadStatus[] = ['failed', 'timed_out', 'fallback_used', 'loaded', 'loading', 'unloaded'];
+
 function summarizeFaces(results: FontFaceLoadResult[]): FontLoadSummary {
+  // FontLoadSummary's counts are documented as distinct physical FAMILIES and ride the
+  // public `fonts-changed` payload, but the face path awaits per face. Collapse faces to
+  // their family, taking the family's worst status, so a Calibri doc using regular+bold+
+  // italic reports one Carlito family (not three faces).
+  const worstByFamily = new Map<string, FontLoadStatus>();
+  for (const { request, status } of results) {
+    const prev = worstByFamily.get(request.family);
+    if (prev === undefined || FACE_STATUS_PRIORITY.indexOf(status) < FACE_STATUS_PRIORITY.indexOf(prev)) {
+      worstByFamily.set(request.family, status);
+    }
+  }
   const summary = emptySummary();
-  summary.results = results.map((r) => ({ family: r.request.family, status: r.status }));
-  for (const result of results) {
-    if (result.status === 'loaded') summary.loaded += 1;
-    else if (result.status === 'failed') summary.failed += 1;
-    else if (result.status === 'timed_out') summary.timedOut += 1;
-    else if (result.status === 'fallback_used') summary.fallbackUsed += 1;
+  for (const [family, status] of worstByFamily) {
+    summary.results.push({ family, status });
+    if (status === 'loaded') summary.loaded += 1;
+    else if (status === 'failed') summary.failed += 1;
+    else if (status === 'timed_out') summary.timedOut += 1;
+    else if (status === 'fallback_used') summary.fallbackUsed += 1;
   }
   return summary;
 }

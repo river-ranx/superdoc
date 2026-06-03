@@ -48,7 +48,16 @@ function collectRuns(out: Map<string, FontFaceRequest>, runs: Run[] | undefined)
   if (!runs) return;
   // Duck-typed on fontFamily so every font-bearing run kind is covered (text,
   // fieldAnnotation, dropCap, ...) - missing one would silently measure against fallback.
-  for (const run of runs) collect(out, run as unknown as FontBearing);
+  for (const run of runs) {
+    const bearing = run as unknown as FontBearing;
+    // A field annotation with no explicit font is measured against 'Arial' by the measurer
+    // (its buildFontString default), so plan that face rather than skip the fontless run.
+    if (run.kind === 'fieldAnnotation' && (typeof bearing.fontFamily !== 'string' || !bearing.fontFamily)) {
+      collect(out, { ...bearing, fontFamily: 'Arial' });
+    } else {
+      collect(out, bearing);
+    }
+  }
 }
 
 function collectParagraph(out: Map<string, FontFaceRequest>, paragraph: ParagraphBlock | undefined): void {
@@ -58,6 +67,9 @@ function collectParagraph(out: Map<string, FontFaceRequest>, paragraph: Paragrap
   // (attrs.wordLayout.marker.run, used by the measurer's buildFontString), which can be a
   // different family/weight/style than the item text - so it must be planned too.
   collect(out, paragraph.attrs?.wordLayout?.marker?.run as FontBearing | undefined);
+  // A drop cap is measured from attrs.dropCapDescriptor.run (measureDropCap) with its own,
+  // often distinct and large, font; the cap text is moved out of `runs`, so plan it here.
+  collect(out, paragraph.attrs?.dropCapDescriptor?.run as FontBearing | undefined);
 }
 
 function collectTable(out: Map<string, FontFaceRequest>, table: TableBlock): void {
@@ -98,9 +110,10 @@ function collectBlock(out: Map<string, FontFaceRequest>, block: FlowBlock): void
 }
 
 /**
- * The deduped physical face requests the given layout blocks actually render. Footnote and
- * endnote blocks are included by passing them in `blocks` (the caller appends them to the
- * layout block list before measurement, so they are ordinary paragraphs here).
+ * The deduped physical face requests the given layout blocks actually render. The caller
+ * passes every block this render measures - body, notes, header/footer, and (in paginated
+ * mode) footnotes - so each measured face is planned; this function only walks what it is
+ * given.
  */
 export function planRequiredFontFaces(blocks: readonly FlowBlock[] | null | undefined): FontFaceRequest[] {
   const out = new Map<string, FontFaceRequest>();
