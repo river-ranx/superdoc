@@ -307,11 +307,30 @@ export const deriveBlockVersion = (block: FlowBlock): string => {
         }
 
         if (run.kind === 'tab') {
-          // Include the underline (the only mark a tab paints, as a border) so toggling
-          // underline on a tab changes the block version and the painter repaints it.
-          // Without this, an underline applied to an already-rendered tab is not shown
-          // until an unrelated edit forces a rebuild (SD-3330).
-          return [run.text ?? '', 'tab', run.underline?.style ?? '', run.underline?.color ?? ''].join(',');
+          // Include every input the painter's tab underline depends on so the paint cache is
+          // not reused after a relevant change (SD-3330): underline style/color choose the
+          // mark; fontSize sets its thickness; fontFamily/color feed measured line metrics and
+          // the resolved underline color. The font epoch matters too: a tab's underline offset
+          // is derived from measured line metrics, so when a font loads/changes (resolved family
+          // unchanged, only availability) a tab-only underlined line must repaint - a mixed
+          // text+tab line is already busted by its text run, but a tab-only line has none.
+          // bold/italic matter for the same reason: a tab-only line's metrics now come from the
+          // tab's font via getFontInfoFromRun, which feeds bold/italic into the measured ascent/
+          // descent (buildFontString), so the underline offset and line height depend on them.
+          // Without these a font/style/availability change can leave a stale tab underline until an
+          // unrelated edit forces a rebuild.
+          return [
+            run.text ?? '',
+            'tab',
+            run.underline?.style ?? '',
+            run.underline?.color ?? '',
+            run.fontSize ?? '',
+            run.fontFamily ?? '',
+            (run as { bold?: boolean }).bold ? 1 : 0,
+            (run as { italic?: boolean }).italic ? 1 : 0,
+            getFontConfigVersion(),
+            (run as { color?: string }).color ?? '',
+          ].join(',');
         }
 
         if (run.kind === 'fieldAnnotation') {
