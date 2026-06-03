@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { getFontConfigVersion, __resetFontConfigVersion } from '@superdoc/font-system';
 import type {
   FontFaceLoadResult,
   FontFaceRequest,
@@ -248,24 +249,26 @@ describe('FontReadinessGate', () => {
     expect(requestReflow).not.toHaveBeenCalled();
   });
 
-  it('notifyFontConfigChanged bumps the epoch, invalidates, and reflows immediately (not batched)', () => {
+  it('notifyFontMappingChanged bumps the LOCAL version and reflows, without the global epoch', () => {
+    __resetFontConfigVersion();
     const gate = makeGate(['Calibri']);
 
-    gate.notifyFontConfigChanged();
+    gate.notifyFontMappingChanged();
 
-    expect(gate.fontConfigVersion).toBe(1);
-    expect(invalidateCaches).toHaveBeenCalledTimes(1);
+    expect(gate.fontConfigVersion).toBe(1); // local version bumped so fonts-changed re-emits
+    expect(getFontConfigVersion()).toBe(0); // a mapping is document-local: NO global epoch bump
+    expect(invalidateCaches).not.toHaveBeenCalled(); // the per-document signature busts the cache
     expect(requestReflow).toHaveBeenCalledTimes(1);
   });
 
-  it('notifyFontConfigChanged cancels a pending batched late-load (no double reflow)', async () => {
+  it('notifyFontMappingChanged cancels a pending batched late-load (no double reflow)', async () => {
     registry.statuses.set('Carlito', 'timed_out');
     const gate = makeGate(['Calibri']);
     await gate.ensureReadyForMeasure();
 
     registry.statuses.set('Carlito', 'loaded');
     fontSet.fire('loadingdone', { fontfaces: [{ family: 'Carlito' }] }); // schedules a batched reflow
-    gate.notifyFontConfigChanged(); // immediate reflow; must also cancel the pending batch
+    gate.notifyFontMappingChanged(); // immediate reflow; must also cancel the pending batch
     expect(requestReflow).toHaveBeenCalledTimes(1);
 
     clock.advance(300); // the cancelled quiet timer must NOT fire a second reflow

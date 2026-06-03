@@ -279,19 +279,34 @@ export class FontReadinessGate {
   }
 
   /**
-   * Signal that the font configuration changed at runtime (customer add/map, T7). Bumps
-   * the epoch, invalidates measurement caches, and reflows so the new mapping takes effect.
+   * Signal that this document's font MAPPING changed at runtime (`fonts.map`/`unmap`). This is
+   * document-local state: it changes the per-document resolver's signature, which the resolver
+   * context already threads through the measure caches, previous-measure reuse, and paint-reuse
+   * versions - so the new physical family produces fresh cache keys on its own. It therefore does
+   * NOT bump the global font epoch (that would needlessly repaint OTHER editors on the page) and
+   * does NOT invalidate the shared measurement caches; only an actual face-availability change (a
+   * face the shared FontFaceSet finished loading, handled in `#onLoadingDone`) is global. Bumps
+   * the gate's LOCAL version so `fonts-changed` re-emits, re-plans the required set, cancels any
+   * pending late-load reflow, and reflows THIS document.
    */
-  notifyFontConfigChanged(): void {
+  notifyFontMappingChanged(): void {
     this.#fontConfigVersion += 1;
-    bumpFontConfigVersion(); // bump the global epoch so measure/paint reuse signatures bust
     // Reset the required + seen sets so an in-flight `loadingdone` can't re-arm a reflow for a
     // face this immediate reflow already corrects; the next pass re-plans from scratch.
     this.#resetRequiredAndSeen();
     // Drop any pending batched late-load reflow: this immediate reflow supersedes it.
     this.#lateLoadScheduler.cancel();
-    this.#invalidateCaches();
     this.#requestReflow();
+  }
+
+  /**
+   * This document's FontRegistry, resolving the font environment on first call (and installing
+   * the bundled pack via `onRegistryResolved`). The document font controller uses it to register
+   * customer faces (`fonts.add`) and to load families (`fonts.preload`). The registry is scoped to
+   * this document's FontFaceSet, so registrations are shared per browser document, not per editor.
+   */
+  resolveRegistry(): FontRegistry {
+    return this.#resolveContext().registry;
   }
 
   /**
