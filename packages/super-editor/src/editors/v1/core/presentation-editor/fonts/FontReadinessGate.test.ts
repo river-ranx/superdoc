@@ -40,12 +40,17 @@ class FakeRegistry {
   // Face-level slice for the face path.
   readonly faceStatuses = new Map<string, FontLoadStatus>();
   readonly faceAwaitCalls: string[][] = [];
+  faceAwaitOptions: { timeoutMs?: number } | undefined;
   getFaceStatus(request: FontFaceRequest): FontLoadStatus {
     return this.faceStatuses.get(faceKey(request)) ?? 'unloaded';
   }
-  async awaitFaceRequests(requests: Iterable<FontFaceRequest>): Promise<FontFaceLoadResult[]> {
+  async awaitFaceRequests(
+    requests: Iterable<FontFaceRequest>,
+    options?: { timeoutMs?: number },
+  ): Promise<FontFaceLoadResult[]> {
     const unique = [...requests];
     this.faceAwaitCalls.push(unique.map(faceKey));
+    this.faceAwaitOptions = options;
     return unique.map((request) => ({ request, status: this.getFaceStatus(request) }));
   }
   asRegistry(): FontRegistry {
@@ -223,7 +228,31 @@ describe('FontReadinessGate', () => {
       const gate = makeFaceGate(() => [BOLD]);
       const summary = await gate.ensureReadyForMeasure();
       expect(registry.faceAwaitCalls).toEqual([['carlito|700|normal']]);
+      // The gate forwards its configured per-font budget, not the registry default.
+      expect(registry.faceAwaitOptions).toEqual({ timeoutMs: 1000 });
       expect(summary.loaded).toBe(1);
+    });
+
+    it('summarizes per family, not per face (counts distinct physical families)', async () => {
+      const REGULAR: FontFaceRequest = { family: 'Carlito', weight: '400', style: 'normal' };
+      registry.faceStatuses.set(faceKey(REGULAR), 'loaded');
+      registry.faceStatuses.set(faceKey(BOLD), 'loaded');
+      const gate = makeFaceGate(() => [REGULAR, BOLD]);
+      const summary = await gate.ensureReadyForMeasure();
+      // Two Carlito faces, one Carlito family on the public summary.
+      expect(summary.loaded).toBe(1);
+      expect(summary.results).toEqual([{ family: 'Carlito', status: 'loaded' }]);
+    });
+
+    it('rolls a family up to its worst face status (failed bold not masked by loaded regular)', async () => {
+      const REGULAR: FontFaceRequest = { family: 'Carlito', weight: '400', style: 'normal' };
+      registry.faceStatuses.set(faceKey(REGULAR), 'loaded');
+      registry.faceStatuses.set(faceKey(BOLD), 'failed');
+      const gate = makeFaceGate(() => [REGULAR, BOLD]);
+      const summary = await gate.ensureReadyForMeasure();
+      expect(summary.loaded).toBe(0);
+      expect(summary.failed).toBe(1);
+      expect(summary.results).toEqual([{ family: 'Carlito', status: 'failed' }]);
     });
 
     it('reflows once when the required bold face loads after a timed-out first paint', async () => {

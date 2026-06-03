@@ -99,6 +99,31 @@ describe('planRequiredFontFaces', () => {
     );
   });
 
+  it('collects the drop-cap descriptor run font (measured separately, distinct face)', () => {
+    // A paragraph with an Arial body and a Cambria(->Caladea) drop cap whose text lives in
+    // attrs.dropCapDescriptor.run, not in `runs`.
+    const block = {
+      kind: 'paragraph',
+      id: 'p',
+      runs: [text('Arial')],
+      attrs: { dropCapDescriptor: { run: { text: 'A', fontFamily: 'Cambria', fontSize: 117 }, lines: 3 } },
+    } as unknown as FlowBlock;
+    expect(keyset(planRequiredFontFaces([block]))).toEqual(
+      new Set(['Liberation Sans|400|normal', 'Caladea|400|normal']),
+    );
+  });
+
+  it('plans Arial for a field annotation with no explicit font (matches the measurer default)', () => {
+    // FieldAnnotationRun.fontFamily is optional; the measurer measures a fontless pill
+    // against 'Arial' (-> Liberation Sans), so the planner must await that face.
+    const block = {
+      kind: 'paragraph',
+      id: 'p',
+      runs: [{ kind: 'fieldAnnotation', text: 'x', fontSize: 12 }],
+    } as unknown as FlowBlock;
+    expect(keyset(planRequiredFontFaces([block]))).toEqual(new Set(['Liberation Sans|400|normal']));
+  });
+
   it('ignores runs with no fontFamily and empty input', () => {
     expect(planRequiredFontFaces([])).toEqual([]);
     expect(planRequiredFontFaces(null)).toEqual([]);

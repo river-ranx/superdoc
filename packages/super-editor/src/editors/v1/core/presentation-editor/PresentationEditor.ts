@@ -6720,12 +6720,18 @@ export class PresentationEditor extends EventEmitter {
       // Bounded by a per-font timeout; resolves to the cached summary once fonts are stable;
       // never throws, so font readiness can never block layout.
       try {
-        // Stash the blocks this render will measure so the gate's planner extracts the exact
-        // used faces: body + notes (blocksForLayout) plus the header/footer blocks. One
-        // planner input; planRequiredFontFaces dedups, so batch/by-rId overlap is harmless.
-        this.#fontPlanBlocks = headerFooterInput
-          ? [...blocksForLayout, ...this.#collectHeaderFooterFaceBlocks(headerFooterInput)]
-          : blocksForLayout;
+        // Stash every text source this render measures so the gate's planner awaits the exact
+        // used faces: body + notes (blocksForLayout), header/footer blocks, and - in paginated
+        // mode - footnote blocks (measured via layoutOptions.footnotes, NOT in blocksForLayout;
+        // semantic mode already folds footnotes into blocksForLayout). One planner input;
+        // planRequiredFontFaces dedups, so any overlap is harmless.
+        this.#fontPlanBlocks = [
+          ...blocksForLayout,
+          ...(headerFooterInput ? this.#collectHeaderFooterFaceBlocks(headerFooterInput) : []),
+          ...(!isSemanticFlow && footnotesLayoutInput?.blocksById
+            ? [...footnotesLayoutInput.blocksById.values()].flat()
+            : []),
+        ];
         const fontSummary = (await this.#fontGate?.ensureReadyForMeasure()) ?? null;
         // Now that the gate has settled, the font report reflects real load status. Emit
         // the authoritative `fonts-changed` once the picture first resolves and whenever it
