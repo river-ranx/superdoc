@@ -211,4 +211,76 @@ describe('DocumentFontController', () => {
 
     expect(registry.awaited).toEqual([[{ family: 'Gelasio', weight: '400', style: 'normal' }]]);
   });
+
+  it('still reflows for faces committed before a later conflicting face throws', () => {
+    const { controller, notifyDocumentFontConfigChanged, flushMicrotasks } = makeController();
+
+    // Two 400/normal faces for the same family with different sources: the first commits, the
+    // second is a conflicting source and throws. The committed face must still reflow.
+    expect(() =>
+      controller.add([{ family: 'Gelasio', faces: [{ source: '/a.woff2' }, { source: '/b.woff2' }] }]),
+    ).toThrow(/different source/);
+
+    flushMicrotasks();
+
+    expect(notifyDocumentFontConfigChanged).toHaveBeenCalledTimes(1);
+    expect(notifyDocumentFontConfigChanged).toHaveBeenCalledWith({ availabilityChanged: true });
+  });
+
+  it('rejects an add family with no faces with an actionable error', () => {
+    const { controller, notifyDocumentFontConfigChanged, flushMicrotasks } = makeController();
+
+    expect(() => controller.add([{ family: 'Gelasio' } as never])).toThrow(/needs at least one face/);
+
+    flushMicrotasks();
+    expect(notifyDocumentFontConfigChanged).not.toHaveBeenCalled();
+  });
+
+  it('rejects an add family with no name with an actionable error', () => {
+    const { controller } = makeController();
+
+    expect(() => controller.add([{ faces: [{ source: '/x.woff2' }] } as never])).toThrow(/non-empty "family"/);
+  });
+
+  it('rejects an add face with no source with an actionable error', () => {
+    const { controller } = makeController();
+
+    expect(() => controller.add([{ family: 'Gelasio', faces: [{} as never] }])).toThrow(/no "source"/);
+  });
+
+  it('rejects a non-array preload argument with an actionable error', async () => {
+    const { controller } = makeController();
+
+    await expect(controller.preload('Georgia' as never)).rejects.toThrow(/expects an array/);
+  });
+
+  it('does not reflow when mapping a family to the substitute it already resolves to', () => {
+    const { controller, resolver, notifyDocumentFontConfigChanged, flushMicrotasks } = makeController();
+
+    // Calibri already resolves to Carlito via the bundled map, so this map is a true no-op:
+    // it must not record an override (which would move the signature and de-opt cache sharing).
+    controller.map({ Calibri: 'Carlito' });
+    flushMicrotasks();
+
+    expect(resolver.resolvePrimaryPhysicalFamily('Calibri')).toBe('Carlito');
+    expect(resolver.signature).toBe('');
+    expect(notifyDocumentFontConfigChanged).not.toHaveBeenCalled();
+  });
+
+  it('mapping a previously-mapped family back to its default reflows once and restores shared cache', () => {
+    const { controller, resolver, notifyDocumentFontConfigChanged, flushMicrotasks } = makeController();
+
+    controller.map({ Calibri: 'Tinos' });
+    flushMicrotasks();
+    expect(resolver.signature).not.toBe('');
+    expect(notifyDocumentFontConfigChanged).toHaveBeenCalledTimes(1);
+
+    // Mapping back to the bundled default removes the override (resolution changes Tinos -> Carlito),
+    // so it reflows once more AND returns the signature to '' so this document re-shares caches.
+    controller.map({ Calibri: 'Carlito' });
+    flushMicrotasks();
+    expect(resolver.resolvePrimaryPhysicalFamily('Calibri')).toBe('Carlito');
+    expect(resolver.signature).toBe('');
+    expect(notifyDocumentFontConfigChanged).toHaveBeenCalledTimes(2);
+  });
 });

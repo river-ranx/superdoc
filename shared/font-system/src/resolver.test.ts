@@ -98,6 +98,29 @@ describe('FontResolver (per-document context)', () => {
     expect(resolver.resolvePrimaryPhysicalFamily('Georgia')).toBe('Georgia'); // reverted to identity
   });
 
+  it('mapping a family to its DEFAULT physical drops any override instead of recording a redundant one', () => {
+    const resolver = createFontResolver();
+
+    // Override away from the bundled default, then map back TO the bundled default.
+    resolver.map('Calibri', 'Tinos');
+    expect(resolver.version).toBe(1);
+    expect(resolver.signature).not.toBe('');
+    resolver.map('Calibri', 'Carlito'); // Carlito IS Calibri's bundled default
+    expect(resolver.resolvePrimaryPhysicalFamily('Calibri')).toBe('Carlito');
+    expect(resolver.version).toBe(2); // removing the override is a real change
+    expect(resolver.signature).toBe(''); // back to the shared default, not '[["calibri","Carlito"]]'
+
+    // Mapping to the default with no existing override is a pure no-op (no bump, no signature).
+    resolver.map('Cambria', 'Caladea'); // Caladea IS Cambria's bundled default
+    expect(resolver.version).toBe(2);
+    expect(resolver.signature).toBe('');
+
+    // Identity: mapping a non-substituted family to its own name is also a no-op.
+    resolver.map('Georgia', 'Georgia');
+    expect(resolver.version).toBe(2);
+    expect(resolver.signature).toBe('');
+  });
+
   it('isolates mappings per instance: two documents map the same logical family differently', () => {
     const docA = createFontResolver();
     const docB = createFontResolver();
@@ -153,6 +176,40 @@ describe('FontResolver (per-document context)', () => {
     const before = resolver.version;
     resolver.reset(); // already empty -> no-op, no version bump
     expect(resolver.version).toBe(before);
+  });
+
+  it('signature returns to empty after map()+unmap() and converges regardless of add/remove order', () => {
+    const resolver = createFontResolver();
+
+    // map then unmap the SAME family -> signature reverts to '' (the memoized signature MUST
+    // invalidate on unmap, not serve a stale non-empty value). Cross-render measure reuse depends
+    // on this reversibility.
+    resolver.map('Georgia', 'Gelasio');
+    expect(resolver.signature).not.toBe('');
+    resolver.unmap('Georgia');
+    expect(resolver.signature).toBe('');
+
+    // Two maps, unmapped in REVERSE order, fully revert to ''.
+    resolver.map('Calibri', 'Carlito');
+    resolver.map('Cambria', 'Caladea');
+    expect(resolver.signature).not.toBe('');
+    resolver.unmap('Cambria');
+    resolver.unmap('Calibri');
+    expect(resolver.signature).toBe('');
+
+    // Order-independent: reaching the same {Georgia, Calibri} mapping set via different add/remove
+    // paths converges to ONE signature, so two documents that arrived differently still share cache.
+    const viaForward = createFontResolver();
+    viaForward.map('Georgia', 'Gelasio');
+    viaForward.map('Calibri', 'Carlito');
+
+    const viaDetour = createFontResolver();
+    viaDetour.map('Calibri', 'WrongFont');
+    viaDetour.map('Georgia', 'Gelasio');
+    viaDetour.unmap('Calibri');
+    viaDetour.map('Calibri', 'Carlito');
+
+    expect(viaDetour.signature).toBe(viaForward.signature);
   });
 
   it('trims the physical family and ignores empty/whitespace mappings', () => {

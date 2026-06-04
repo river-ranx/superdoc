@@ -103,6 +103,8 @@ export class FontResolver {
   /** Normalized logical family -> physical family. Takes precedence over the bundled map. */
   readonly #overrides = new Map<string, string>();
   #version = 0;
+  /** Memoized {@link signature}; null = stale, recomputed on next read. Invalidated on every mutation. */
+  #cachedSignature: string | null = null;
 
   /**
    * Map a logical family to a physical render family for this document, overriding the
@@ -116,13 +118,31 @@ export class FontResolver {
     const physical = physicalFamily?.trim();
     if (!key || !physical) return;
     if (this.#overrides.get(key) === physical) return;
+    // Mapping a family to the physical it resolves to by DEFAULT - its bundled substitute, or its
+    // own name when there is none - is the ABSENCE of an override, not an override to record.
+    // Storing it would leave a non-empty signature that permanently de-opts this document's cache
+    // sharing (a non-empty signature never re-shares with default documents). So treat it as an
+    // unmap: drop any existing override (reverting to the default) and bump only if that removed
+    // one. This makes `map({ Calibri: 'Carlito' })` a true no-op whether Calibri was unmapped or
+    // previously pointed elsewhere (e.g. ->Tinos), restoring shared-cache eligibility either way.
+    if ((BUNDLED_SUBSTITUTES[key] ?? logicalFamily.trim()) === physical) {
+      if (this.#overrides.delete(key)) {
+        this.#version += 1;
+        this.#cachedSignature = null;
+      }
+      return;
+    }
     this.#overrides.set(key, physical);
     this.#version += 1;
+    this.#cachedSignature = null;
   }
 
   /** Remove a runtime mapping; the family reverts to its bundled default (or identity). */
   unmap(logicalFamily: string): void {
-    if (this.#overrides.delete(normalizeFamilyKey(logicalFamily))) this.#version += 1;
+    if (this.#overrides.delete(normalizeFamilyKey(logicalFamily))) {
+      this.#version += 1;
+      this.#cachedSignature = null;
+    }
   }
 
   /**
@@ -134,6 +154,7 @@ export class FontResolver {
     if (this.#overrides.size === 0) return;
     this.#overrides.clear();
     this.#version += 1;
+    this.#cachedSignature = null;
   }
 
   /** Monotonic version; bumps on every mapping change. A lightweight "did it change" signal. */
@@ -150,10 +171,16 @@ export class FontResolver {
    * default documents share cache safely because they resolve identically.
    */
   get signature(): string {
-    if (this.#overrides.size === 0) return '';
+    if (this.#cachedSignature !== null) return this.#cachedSignature;
     // JSON of sorted [logical, physical] pairs: deterministic and collision-safe even when a
     // font name contains punctuation (a delimited "logical=physical|..." form would not be).
-    return JSON.stringify([...this.#overrides.entries()].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
+    // Empty (no overrides) is '' so all default documents share cache. Memoized until the next
+    // mutation (map/unmap/reset clear the cache), since signature is read several times per render.
+    this.#cachedSignature =
+      this.#overrides.size === 0
+        ? ''
+        : JSON.stringify([...this.#overrides.entries()].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
+    return this.#cachedSignature;
   }
 
   /** The physical family + why, for a bare logical name. Overrides beat the bundled map. */
@@ -279,3 +306,45 @@ export function resolvePhysicalFamilies(families: Iterable<string>): string[] {
 export function resolveFace(logicalFamily: string, face: FaceKey, hasFace: HasFace): FontResolution {
   return defaultResolver.resolveFace(logicalFamily, face, hasFace);
 }
+
+/**
+ * Maps a logical CSS family to the physical render family for a SPECIFIC face (weight/style): a
+ * per-document `fonts.map` override or a bundled substitute, but only when that substitute provides
+ * the face (else the family passes through, never faux-styled). The one shared spelling for what was
+ * duplicated across the painter, measuring, and planner packages. Face-aware so a single-face clone
+ * (e.g. a Regular-only Gelasio) is never mapped onto a Bold/Italic run it cannot render.
+ */
+export type ResolvePhysicalFamily = (cssFontFamily: string, face: FaceKey) => string;
+
+/**
+ * The per-document font identity that every measure and paint path needs, carried as ONE value so
+ * the resolver and its signature cannot travel separately and drift:
+ * - `resolvePhysical` maps logical -> physical for the document (glyph widths, vertical metrics, paint).
+ * - `fontSignature` is the document's stable mapping identity; it keys every measure cache so two
+ *   documents (or two renders) with different `fonts.map` never reuse each other's measures.
+ *
+ * The contract: internal measure helpers take this as a REQUIRED argument and only outer
+ * compatibility entry points (e.g. the exported `measureBlock`) default to
+ * {@link DEFAULT_FONT_MEASURE_CONTEXT}. Bundling the resolver with its signature is what keeps an
+ * internal measure path from silently falling back to the global resolver or pairing a per-document
+ * signature with the wrong resolver, and lets every cache site derive its signature from the same
+ * context that supplied the resolver. (The required-argument property holds as helpers adopt the
+ * context; it is enforced, not assumed, by this pass.)
+ */
+export interface FontMeasureContext {
+  resolvePhysical: ResolvePhysicalFamily;
+  fontSignature: string;
+}
+
+/**
+ * The global-resolver / empty-signature context. The behavior-preserving default for outer entry
+ * points and non-document callers (tests, the global measure path). Frozen so a stray
+ * `DEFAULT_FONT_MEASURE_CONTEXT.resolvePhysical = ...` cannot pollute every default-path document.
+ */
+export const DEFAULT_FONT_MEASURE_CONTEXT: FontMeasureContext = Object.freeze({
+  // Family-level default: no document context means no face-availability oracle, so resolve the
+  // primary family and ignore the face axis (the global bundled map, behavior-preserving for
+  // non-document callers - tests, the global measure path).
+  resolvePhysical: (cssFontFamily: string, _face: FaceKey) => resolvePhysicalFamily(cssFontFamily),
+  fontSignature: '',
+});

@@ -29,7 +29,14 @@ export type {
 } from './types';
 export { SETTLED_STATUSES, isSettled } from './types';
 
-export type { FontResolution, FontResolutionReason, FaceKey, HasFace } from './resolver';
+export type {
+  FontResolution,
+  FontResolutionReason,
+  FaceKey,
+  HasFace,
+  FontMeasureContext,
+  ResolvePhysicalFamily,
+} from './resolver';
 export { FontResolver, createFontResolver } from './resolver';
 export {
   resolveFontFamily,
@@ -37,6 +44,7 @@ export {
   resolvePrimaryPhysicalFamily,
   resolvePhysicalFamilies,
   resolveFace,
+  DEFAULT_FONT_MEASURE_CONTEXT,
 } from './resolver';
 
 export { getFontConfigVersion, bumpFontConfigVersion, __resetFontConfigVersion } from './epoch';

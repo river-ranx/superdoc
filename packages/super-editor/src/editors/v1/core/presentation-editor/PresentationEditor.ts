@@ -131,6 +131,7 @@ import {
 import { DragDropManager } from './input/DragDropManager.js';
 import { processAndInsertImageFile } from '@extensions/image/imageHelpers/processAndInsertImageFile.js';
 import { HeaderFooterSessionManager } from './header-footer/HeaderFooterSessionManager.js';
+import type { HeaderFooterLayoutSnapshot } from '../header-footer/types.js';
 import { StoryPresentationSessionManager } from './story-session/StoryPresentationSessionManager.js';
 import type {
   StorySessionEditorFactoryInput,
@@ -177,7 +178,12 @@ import type {
 } from '@superdoc/layout-bridge';
 
 import { measureBlock } from '@superdoc/measuring-dom';
-import { createFontResolver, type FontResolutionRecord, type FontLoadSummary } from '@superdoc/font-system';
+import {
+  createFontResolver,
+  type FontResolutionRecord,
+  type FontLoadSummary,
+  type ResolvePhysicalFamily,
+} from '@superdoc/font-system';
 import { installBundledSubstitutes } from '@superdoc/font-system/bundled';
 import { FontReadinessGate } from './fonts/FontReadinessGate';
 import { DocumentFontController } from './fonts/DocumentFontController';
@@ -194,6 +200,7 @@ import type {
   SectionMetadata,
   TrackedChangesMode,
   Fragment,
+  DocumentBackground,
 } from '@superdoc/contracts';
 import { extractHeaderFooterSpace as _extractHeaderFooterSpace } from '@superdoc/contracts';
 // TrackChangesBasePluginKey is used by #syncTrackedChangesPreferences and getTrackChangesPluginState.
@@ -504,6 +511,7 @@ export class PresentationEditor extends EventEmitter {
   /** Scroll-isolating wrapper around #hiddenHost. Append/remove this from the DOM. */
   #hiddenHostWrapper: HTMLElement;
   #layoutOptions: LayoutEngineOptions;
+  #configuredDocumentBackground: DocumentBackground | undefined;
   #layoutState: LayoutState = { blocks: [], measures: [], layout: null, bookmarks: new Map() };
   /**
    * The font-mapping signature `#layoutState.measures` were produced with. Travels with the
@@ -542,15 +550,18 @@ export class PresentationEditor extends EventEmitter {
   /**
    * This document's logical->physical font resolver. Per-instance (per document) so two
    * editors can map the same logical family differently without leaking. Planner, gate, report,
-   * MEASURE (body, footnotes, header/footer, per-rId header/footer, and field-annotation pills),
-   * and PAINT all resolve through THIS instance, FACE-aware (per weight/style). Rendered-layout
-   * identity - measure caches and paint-reuse versions - is keyed on the stored render plan's
-   * `FontPlan.effectiveSignature`, which captures the actual per-face resolutions (so a `fonts.add()`
-   * that changes a face for an UNCHANGED family map still busts the cache); `resolver.signature` is
-   * used ONLY for map-change detection in the document font controller, never as a cache key.
-   * `superdoc.fonts.map` mutates this resolver at runtime through that controller (the only writer):
-   * the changed resolution re-measures and repaints THIS document while others are left untouched.
-   * Seeded with the bundled clean-clone map.
+   * MEASURE (body, footnotes, header/footer, per-rId header/footer, field-annotation pills, table
+   * AutoFit column widths, and line-height metrics) and document-content PAINT (text, field
+   * annotations, list markers, drop caps) resolve through THIS instance, FACE-aware (per weight/style)
+   * so a single-face clone is never mapped onto a face it lacks. Rendered-layout identity - measure
+   * caches and paint-reuse versions - is keyed on the stored render plan's `FontPlan.effectiveSignature`,
+   * which captures the actual per-face resolutions (so a `fonts.add()` that changes a face for an
+   * UNCHANGED family map still busts the cache); `resolver.signature` is used ONLY for map-change
+   * detection in the document font controller, never as a cache key. Two documents with different
+   * mappings do not share a measure or reuse each other's content paint. (Editor chrome such as
+   * formatting marks is not document content and is out of scope.) `superdoc.fonts.map` mutates this
+   * resolver at runtime through that controller (the only writer): the changed resolution re-measures
+   * and repaints THIS document while others are left untouched. Seeded with the bundled clean-clone map.
    */
   readonly #fontResolver = createFontResolver();
   /**
@@ -753,6 +764,9 @@ export class PresentationEditor extends EventEmitter {
 
     const requestedFlowMode = options.layoutEngineOptions?.flowMode === 'semantic' ? 'semantic' : 'paginated';
     const requestedLayoutMode = options.layoutEngineOptions?.layoutMode ?? 'vertical';
+    this.#configuredDocumentBackground = this.#coerceDocumentBackground(
+      options.layoutEngineOptions?.documentBackground,
+    );
     this.#layoutOptions = {
       pageSize: options.layoutEngineOptions?.pageSize ?? DEFAULT_PAGE_SIZE,
       margins: options.layoutEngineOptions?.margins ?? DEFAULT_MARGINS,
@@ -764,6 +778,7 @@ export class PresentationEditor extends EventEmitter {
             }
           : options.layoutEngineOptions?.virtualization,
       zoom: options.layoutEngineOptions?.zoom ?? 1,
+      ...(this.#configuredDocumentBackground ? { documentBackground: this.#configuredDocumentBackground } : {}),
       pageStyles: options.layoutEngineOptions?.pageStyles,
       debugLabel: options.layoutEngineOptions?.debugLabel,
       layoutMode: requestedFlowMode === 'semantic' ? 'vertical' : requestedLayoutMode,
@@ -1016,8 +1031,9 @@ export class PresentationEditor extends EventEmitter {
         getRequiredFaces: () => this.#fontPlan?.requiredFaces ?? [],
         getUsedFaces: () => this.#fontPlan?.usedFaces ?? [],
         // The document's resolver: the gate derives the family-path resolution from it and
-        // resolves its report through it (load + diagnostics). Measure and paint resolve through
-        // the same instance, so load, measure, paint, and diagnostics all agree.
+        // resolves its report through it (load + diagnostics). The document's measure and
+        // content-paint paths resolve through this same instance, so load, measure, paint, and
+        // diagnostics stay consistent.
         fontResolver: this.#fontResolver,
         // Register the bundled substitute pack (Carlito) into the document's registry the
         // first time it resolves, so the substitute is available with no manual setup.
@@ -2941,6 +2957,53 @@ export class PresentationEditor extends EventEmitter {
       measures: this.#layoutState.measures,
       sectionMetadata: this.#sectionMetadata,
     };
+  }
+
+  /**
+   * Return the live inputs that fed the most recent `resolveLayout` / paint pass.
+   *
+   * Unlike {@link getLayoutSnapshot}, whose `blocks` / `measures` are the
+   * body-only set used for pagination, this exposes the lookup blocks/measures
+   * the real paint path resolved against — including any extra blocks/measures
+   * v1 injected (e.g. footnote bodies and separators). Consumers that re-resolve
+   * the snapshot must use these so resolved geometry matches what was painted.
+   *
+   * Read-only: returns the last captured inputs and never triggers new layout
+   * work. Falls back to the body set when no extra lookup blocks were injected.
+   */
+  getLayoutResolveSnapshot(): {
+    layout: Layout | null;
+    blocks: FlowBlock[];
+    measures: Measure[];
+    sectionMetadata: SectionMetadata[];
+  } {
+    const blocks = this.#layoutLookupBlocks.length > 0 ? this.#layoutLookupBlocks : this.#layoutState.blocks;
+    const measures = this.#layoutLookupMeasures.length > 0 ? this.#layoutLookupMeasures : this.#layoutState.measures;
+    return {
+      layout: this.#layoutState.layout,
+      blocks,
+      measures,
+      sectionMetadata: this.#sectionMetadata,
+    };
+  }
+
+  /**
+   * Return the read-only header/footer story-part layout snapshot.
+   *
+   * Pass-through to {@link HeaderFooterSessionManager.getHeaderFooterLayoutSnapshot}:
+   * per-page header/footer bindings plus the raw and resolved layout for each
+   * distinct story, as deterministic JSON-safe data. Available after a normal
+   * layout pass even when the editor is not in header/footer edit mode. Returns a
+   * well-formed but empty snapshot when no header/footer session exists yet or the
+   * document has no headers/footers.
+   */
+  getHeaderFooterLayoutSnapshot(): HeaderFooterLayoutSnapshot {
+    return (
+      this.#headerFooterSession?.getHeaderFooterLayoutSnapshot() ?? {
+        pageBindings: [],
+        storyLayouts: { headers: [], footers: [] },
+      }
+    );
   }
 
   /**
@@ -5169,6 +5232,10 @@ export class PresentationEditor extends EventEmitter {
       // instance-level fonts config before the rerender.
       this.#fontGate?.resetForDocumentChange();
       this.#fontController.reset();
+      // Reset the layout signature too: the prior document's value must not gate the new document's
+      // previous-measure reuse. Benign if left stale (it only over-invalidates reuse), but resetting
+      // here states the intent and starts the swap from a clean signature.
+      this.#layoutFontSignature = '';
       this.#fontController.applyInitialConfig(this.#options.fontAssets);
       this.#resetFontReportStateForDocumentChange();
       this.#refreshHeaderFooterStructureThenRerender({ purgeCachedEditors: true });
@@ -5957,7 +6024,12 @@ export class PresentationEditor extends EventEmitter {
             availableWidth: editorContext.availableWidth,
             availableHeight: editorContext.availableHeight,
             currentPageNumber: editorContext.currentPageNumber,
+            currentPageNumberText: editorContext.currentPageNumberText,
+            currentPageDisplayNumber: editorContext.currentPageDisplayNumber,
+            currentPageChapterNumberText: editorContext.currentPageChapterNumberText,
+            currentPageChapterSeparator: editorContext.currentPageChapterSeparator,
             totalPageCount: editorContext.totalPageCount,
+            sectionPageCount: editorContext.sectionPageCount,
           }) ?? null)
         : null;
 
@@ -5988,7 +6060,12 @@ export class PresentationEditor extends EventEmitter {
       headless: false,
       element: hostElement,
       currentPageNumber: editorContext.currentPageNumber,
+      currentPageNumberText: editorContext.currentPageNumberText,
+      currentPageDisplayNumber: editorContext.currentPageDisplayNumber,
+      currentPageChapterNumberText: editorContext.currentPageChapterNumberText,
+      currentPageChapterSeparator: editorContext.currentPageChapterSeparator,
       totalPageCount: editorContext.totalPageCount,
+      sectionPageCount: editorContext.sectionPageCount,
       editorOptions: headerFooterRefId ? { headerFooterRefId } : undefined,
     });
 
@@ -6844,13 +6921,19 @@ export class PresentationEditor extends EventEmitter {
       // render plan's effectiveSignature (assigned below, after the plan is built) as the measure-cache
       // key. previousFontSignature is the signature the prior measures were produced with - if it
       // differs, incrementalLayout must not reuse them (the reuse fast path bypasses the cache key).
-      const resolvePhysical = (css: string, face: { weight: '400' | '700'; style: 'normal' | 'italic' }): string =>
+      const resolvePhysical: ResolvePhysicalFamily = (css, face) =>
         this.#fontResolver.resolvePhysicalFamilyForFace(css, face, this.#hasFace);
       // Cache identity is the render plan's effectiveSignature (face-aware), assigned once the plan is
       // built below - NOT resolver.signature (family map only), which would miss a fonts.add() that
-      // changes a face's resolution without changing the map.
+      // changes a face's resolution without changing the map. The single context object (resolver +
+      // signature) is built AFTER the plan so the measure callback and cache signature can never
+      // drift - both come from `fontMeasureContext`.
       let fontSignature = '';
       const previousFontSignature = this.#layoutFontSignature;
+      // Declared here (outer scope) so the incrementalLayout call below can see it; REBUILT after the
+      // plan with the face-aware effectiveSignature. Initialized with '' so it is always defined even
+      // if font planning throws (the readiness try/catch swallows errors and must not break layout).
+      let fontMeasureContext = { resolvePhysical, fontSignature };
 
       let layout: Layout;
       let measures: Measure[];
@@ -6890,6 +6973,10 @@ export class PresentationEditor extends EventEmitter {
         // Built before the gate runs so load, report, resolution, and cache identity all agree.
         this.#fontPlan = planFontFaces(this.#fontPlanBlocks, this.#fontResolver, this.#hasFace);
         fontSignature = this.#fontPlan.effectiveSignature;
+        // Rebuild with the face-aware effectiveSignature now the plan exists, so the measure callback
+        // and the cache signature can never drift: both the face-aware resolver and the fontSignature
+        // passed to incrementalLayout come from this one object.
+        fontMeasureContext = { resolvePhysical, fontSignature };
         const fontSummary = (await this.#fontGate?.ensureReadyForMeasure()) ?? null;
         // Now that the gate has settled, the font report reflects real load status. Emit
         // the authoritative `fonts-changed` once the picture first resolves and whenever it
@@ -6907,10 +6994,12 @@ export class PresentationEditor extends EventEmitter {
           blocksForLayout,
           layoutOptions,
           (block: FlowBlock, constraints: { maxWidth: number; maxHeight: number }) =>
-            measureBlock(block, constraints, resolvePhysical),
+            measureBlock(block, constraints, fontMeasureContext),
           headerFooterInput ?? undefined,
           previousMeasures,
-          { fontSignature, previousFontSignature },
+          // Same context object the measure callback uses, so the cache signature and the resolver
+          // cannot drift (the two-channel split is retired here).
+          { fontContext: fontMeasureContext, previousFontSignature },
         );
         const incrementalLayoutEnd = perfNow();
         perfLog(`[Perf] incrementalLayout: ${(incrementalLayoutEnd - incrementalLayoutStart).toFixed(2)}ms`);
@@ -8025,6 +8114,12 @@ export class PresentationEditor extends EventEmitter {
     this.#layoutOptions.pageSize = pageSize;
     this.#layoutOptions.margins = margins;
     const flowMode = this.#layoutOptions.flowMode ?? 'paginated';
+    const documentBackground = this.#resolveDocumentBackground();
+    if (documentBackground) {
+      this.#layoutOptions.documentBackground = documentBackground;
+    } else {
+      delete this.#layoutOptions.documentBackground;
+    }
 
     const resolvedMargins = {
       top: margins.top!,
@@ -8064,17 +8159,18 @@ export class PresentationEditor extends EventEmitter {
           marginBottom: semanticMargins.bottom,
         },
         sectionMetadata,
+        ...(documentBackground ? { documentBackground } : {}),
       };
     }
 
     this.#hiddenHost.style.width = `${pageSize.w}px`;
 
     const alternateHeaders = this.#resolveAlternateHeadersFlag();
-
     return {
       flowMode: 'paginated',
       pageSize,
       margins: resolvedMargins,
+      ...(documentBackground ? { documentBackground } : {}),
       ...(columns ? { columns } : {}),
       sectionMetadata,
       alternateHeaders,
@@ -8100,6 +8196,19 @@ export class PresentationEditor extends EventEmitter {
       if (byRId) for (const blocks of byRId.values()) out.push(...blocks);
     }
     return out;
+  }
+
+  #coerceDocumentBackground(candidate: unknown): DocumentBackground | undefined {
+    if (!candidate || typeof candidate !== 'object') return undefined;
+    const color = (candidate as { color?: unknown }).color;
+    return typeof color === 'string' && color.length > 0 ? { color } : undefined;
+  }
+
+  #resolveDocumentBackground(): DocumentBackground | undefined {
+    return (
+      this.#coerceDocumentBackground(this.#editor?.state?.doc?.attrs?.documentBackground) ??
+      (this.#configuredDocumentBackground ? { ...this.#configuredDocumentBackground } : undefined)
+    );
   }
 
   #buildHeaderFooterInput() {

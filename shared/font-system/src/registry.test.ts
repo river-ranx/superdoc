@@ -109,6 +109,19 @@ describe('FontRegistry skeleton contract', () => {
     expect(fontSet.added.filter((f) => f.family === 'Carlito')).toHaveLength(1); // not added twice
   });
 
+  it('treats url() quote variants of the same file as one source (idempotent, not a conflict)', () => {
+    // The bundled pack registers `url(/x.woff2)` (unquoted) while `fonts.add` quotes to
+    // `url("/x.woff2")`. They name the same file, so re-adding must be idempotent, not throw.
+    const { registry } = makeRegistry(fontSet);
+    registry.register({ family: 'Carlito', source: 'url(/fonts/Carlito.woff2)' });
+    const again = registry.register({ family: 'Carlito', source: 'url("/fonts/Carlito.woff2")' });
+    const singleQuoted = registry.register({ family: 'Carlito', source: "url('/fonts/Carlito.woff2')" });
+
+    expect(again.changed).toBe(false);
+    expect(singleQuoted.changed).toBe(false);
+    expect(fontSet.added.filter((f) => f.family === 'Carlito')).toHaveLength(1); // not added per-variant
+  });
+
   it('re-registering the same face with a DIFFERENT source throws (no silent overwrite)', () => {
     const { registry } = makeRegistry(fontSet);
     registry.register({ family: 'Carlito', source: 'url(carlito.woff2)' });
