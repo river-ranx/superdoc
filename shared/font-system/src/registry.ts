@@ -64,6 +64,24 @@ function quoteFamily(family: string): string {
   return `"${family.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
 }
 
+/**
+ * Canonicalize a CSS `url(...)` font source so callers that quote it differently register the
+ * SAME face once instead of as conflicting sources. The bundled pack emits `url(/x.woff2)` while
+ * the public `fonts.add` path JSON.stringify-quotes to `url("/x.woff2")`; both name the same file,
+ * so the registry must treat them as one source (otherwise re-adding a bundled face throws as a
+ * "different source"). Only a lone `url(...)` token is normalized; anything else (a bare string,
+ * `url(...) format(...)`, a `local(...)`) is returned unchanged so this stays conservative.
+ */
+function canonicalizeFontSource(source: string): string {
+  const match = /^\s*url\(\s*([\s\S]*?)\s*\)\s*$/i.exec(source);
+  if (!match) return source;
+  let inner = match[1].trim();
+  if ((inner.startsWith('"') && inner.endsWith('"')) || (inner.startsWith("'") && inner.endsWith("'"))) {
+    inner = inner.slice(1, -1);
+  }
+  return `url(${JSON.stringify(inner)})`;
+}
+
 /** Normalize a family name for keying: trim, strip surrounding quotes, lowercase. */
 function normalizeFamilyKey(family: string): string {
   return family
@@ -164,6 +182,11 @@ export class FontRegistry {
    */
   register(descriptor: FontFaceDescriptor): RegisterFaceResult {
     const { family, source, descriptors } = descriptor;
+    // Identity source for the duplicate-face guard: canonicalize url(...) quoting so the SAME file
+    // registered by the bundled pack (`url(/x)`) and by `fonts.add` (`url("/x")`) compares equal
+    // instead of throwing as a "different source". The raw source is still what we hand the
+    // FontFace and store in #sources, so served URLs and diagnostics are unchanged.
+    const identitySource = typeof source === 'string' ? canonicalizeFontSource(source) : source;
     // A face's identity is family|weight|style; a bare register (no descriptors) is 400/normal.
     const weight = normalizeWeight(descriptors?.weight as string | undefined);
     const style = normalizeStyle(descriptors?.style as string | undefined);
@@ -173,9 +196,9 @@ export class FontRegistry {
     // FontFace - but a DIFFERENT source for the same face is rejected. Silently overwriting a
     // user-provided font source would make rendering depend on registration order. Binary sources
     // have no comparable identity here and are not de-duped.
-    if (typeof source === 'string') {
+    if (typeof identitySource === 'string') {
       const existingSource = this.#faceSources.get(key);
-      if (existingSource === source) return { family, status: this.getStatus(family), changed: false };
+      if (existingSource === identitySource) return { family, status: this.getStatus(family), changed: false };
       if (existingSource !== undefined) {
         throw new Error(
           `[superdoc] font face "${key}" is already registered from a different source ` +
@@ -197,7 +220,7 @@ export class FontRegistry {
     // Seed face-level status so the gate can await this exact weight/style.
     this.#trackFace(family, key);
     if (!this.#faceStatus.has(key)) this.#faceStatus.set(key, 'unloaded');
-    if (typeof source === 'string' && !this.#faceSources.has(key)) this.#faceSources.set(key, source);
+    if (typeof identitySource === 'string' && !this.#faceSources.has(key)) this.#faceSources.set(key, identitySource);
     return { family, status: this.getStatus(family), changed: true };
   }
 

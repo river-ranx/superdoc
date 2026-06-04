@@ -98,6 +98,29 @@ describe('FontResolver (per-document context)', () => {
     expect(resolver.resolvePrimaryPhysicalFamily('Georgia')).toBe('Georgia'); // reverted to identity
   });
 
+  it('mapping a family to its DEFAULT physical drops any override instead of recording a redundant one', () => {
+    const resolver = createFontResolver();
+
+    // Override away from the bundled default, then map back TO the bundled default.
+    resolver.map('Calibri', 'Tinos');
+    expect(resolver.version).toBe(1);
+    expect(resolver.signature).not.toBe('');
+    resolver.map('Calibri', 'Carlito'); // Carlito IS Calibri's bundled default
+    expect(resolver.resolvePrimaryPhysicalFamily('Calibri')).toBe('Carlito');
+    expect(resolver.version).toBe(2); // removing the override is a real change
+    expect(resolver.signature).toBe(''); // back to the shared default, not '[["calibri","Carlito"]]'
+
+    // Mapping to the default with no existing override is a pure no-op (no bump, no signature).
+    resolver.map('Cambria', 'Caladea'); // Caladea IS Cambria's bundled default
+    expect(resolver.version).toBe(2);
+    expect(resolver.signature).toBe('');
+
+    // Identity: mapping a non-substituted family to its own name is also a no-op.
+    resolver.map('Georgia', 'Georgia');
+    expect(resolver.version).toBe(2);
+    expect(resolver.signature).toBe('');
+  });
+
   it('isolates mappings per instance: two documents map the same logical family differently', () => {
     const docA = createFontResolver();
     const docB = createFontResolver();

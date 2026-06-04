@@ -129,25 +129,50 @@ export class DocumentFontController {
    * fallback widths. Export is unaffected (mapping/render only).
    */
   add(families: FontFamilyConfig[]): void {
-    if (this.#registerFamilies(families)) {
-      this.#runtimeAvailabilityChanged = true;
-      this.#queueRuntimeReflow();
+    // Register face-by-face. A later face with a conflicting source throws, but faces already
+    // committed to the registry must still trigger the availability reflow - otherwise a
+    // now-loadable face the document uses keeps its stale fallback widths until an unrelated
+    // reflow. Track per-face commits so `finally` reflows for whatever landed, then re-throw.
+    let committed = false;
+    try {
+      this.#registerFamilies(families, () => {
+        committed = true;
+      });
+    } finally {
+      if (committed) {
+        this.#runtimeAvailabilityChanged = true;
+        this.#queueRuntimeReflow();
+      }
     }
   }
 
-  #registerFamilies(families: FontFamilyConfig[] | null | undefined): boolean {
+  #registerFamilies(families: FontFamilyConfig[] | null | undefined, onFaceRegistered?: () => void): boolean {
     if (!families?.length) return false;
     const registry = this.#getGate()?.resolveRegistry();
     if (!registry) throw new Error('[superdoc] fonts.add: the font registry is not ready yet');
     let changed = false;
-    for (const { family, faces } of families) {
+    for (const entry of families) {
+      const family = entry?.family;
+      const faces = entry?.faces;
+      if (typeof family !== 'string' || !family.trim()) {
+        throw new Error('[superdoc] fonts.add: each family needs a non-empty "family" name');
+      }
+      if (!Array.isArray(faces) || faces.length === 0) {
+        throw new Error(`[superdoc] fonts.add: family "${family}" needs at least one face in "faces"`);
+      }
       for (const face of faces) {
+        if (!face || typeof face.source !== 'string' || !face.source.trim()) {
+          throw new Error(`[superdoc] fonts.add: family "${family}" has a face with no "source" URL`);
+        }
         const result = registry.register({
           family,
           source: toCssFontSource(face.source),
           descriptors: { weight: face.weight == null ? undefined : String(face.weight), style: face.style },
         });
-        if (result.changed) changed = true;
+        if (result.changed) {
+          changed = true;
+          onFaceRegistered?.();
+        }
       }
     }
     return changed;
@@ -160,6 +185,9 @@ export class DocumentFontController {
    * design - loading is not hidden inside {@link map}. Weighted/italic variants load on demand.
    */
   async preload(families: string[]): Promise<void> {
+    if (!Array.isArray(families)) {
+      throw new Error('[superdoc] fonts.preload expects an array of logical family names, e.g. preload(["Georgia"])');
+    }
     const registry = this.#getGate()?.resolveRegistry();
     if (!registry) throw new Error('[superdoc] fonts.preload: the font registry is not ready yet');
     const requests: FontFaceRequest[] = families.map((logical) => ({

@@ -97,6 +97,20 @@ export class FontResolver {
     const physical = physicalFamily?.trim();
     if (!key || !physical) return;
     if (this.#overrides.get(key) === physical) return;
+    // Mapping a family to the physical it resolves to by DEFAULT - its bundled substitute, or its
+    // own name when there is none - is the ABSENCE of an override, not an override to record.
+    // Storing it would leave a non-empty signature that permanently de-opts this document's cache
+    // sharing (a non-empty signature never re-shares with default documents). So treat it as an
+    // unmap: drop any existing override (reverting to the default) and bump only if that removed
+    // one. This makes `map({ Calibri: 'Carlito' })` a true no-op whether Calibri was unmapped or
+    // previously pointed elsewhere (e.g. ->Tinos), restoring shared-cache eligibility either way.
+    if ((BUNDLED_SUBSTITUTES[key] ?? logicalFamily.trim()) === physical) {
+      if (this.#overrides.delete(key)) {
+        this.#version += 1;
+        this.#cachedSignature = null;
+      }
+      return;
+    }
     this.#overrides.set(key, physical);
     this.#version += 1;
     this.#cachedSignature = null;
