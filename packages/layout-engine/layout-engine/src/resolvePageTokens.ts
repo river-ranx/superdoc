@@ -1,7 +1,7 @@
 /**
  * Page Number Token Resolution Module
  *
- * Resolves dynamic page number tokens (pageNumber, totalPageCount) in layout fragments.
+ * Resolves dynamic page number tokens (pageNumber, totalPageCount, sectionPageCount) in layout fragments.
  * This module follows the same pattern as resolvePageRefs.ts for PAGEREF token resolution.
  *
  * Tokens are created during PM-to-FlowBlock conversion with placeholder text ('0'),
@@ -14,8 +14,16 @@
  * - Integrates with two-pass convergence loop in incrementalLayout
  */
 
-import type { Layout, FlowBlock, ParagraphBlock, Measure } from '@superdoc/contracts';
-import { formatPageNumberFieldValue, type DisplayPageInfo } from './pageNumbering';
+import {
+  formatChapterPageNumberText,
+  formatPageNumberFieldValue,
+  formatSectionPageNumberText,
+  type Layout,
+  type FlowBlock,
+  type ParagraphBlock,
+  type Measure,
+} from '@superdoc/contracts';
+import type { DisplayPageInfo } from './pageNumbering';
 
 /**
  * Numbering context for page token resolution.
@@ -118,6 +126,7 @@ export function resolvePageNumberTokens(
       continue;
     }
 
+    const sectionPageCount = displayPageInfo.sectionPageCount || numberingCtx.totalPages || 1;
     for (const fragment of page.fragments) {
       // Paragraph fragments — original behaviour.
       if (fragment.kind === 'para') {
@@ -140,7 +149,12 @@ export function resolvePageNumberTokens(
           displayPageInfo,
           totalPagesStr,
           numberingCtx.totalPages,
+          sectionPageCount,
         );
+        if (!clonedBlock) {
+          processedBlocks.add(blockId);
+          continue;
+        }
         updatedBlocks.set(blockId, clonedBlock);
         affectedBlockIds.add(blockId);
         processedBlocks.add(blockId);
@@ -174,11 +188,14 @@ export function resolvePageNumberTokens(
  * Checks if a paragraph block contains any page number tokens.
  *
  * @param block - Paragraph block to check
- * @returns True if block contains pageNumber or totalPageCount tokens
+ * @returns True if block contains pageNumber, totalPageCount, or sectionPageCount tokens
  */
 function hasPageTokens(block: ParagraphBlock): boolean {
   for (const run of block.runs) {
-    if ('token' in run && (run.token === 'pageNumber' || run.token === 'totalPageCount')) {
+    if (
+      'token' in run &&
+      (run.token === 'pageNumber' || run.token === 'totalPageCount' || run.token === 'sectionPageCount')
+    ) {
       return true;
     }
   }
@@ -189,7 +206,8 @@ function hasPageTokens(block: ParagraphBlock): boolean {
  * Clones a paragraph block and resolves all page number tokens in its runs.
  *
  * This creates a deep clone of the block's runs array and resolves any pageNumber
- * or totalPageCount tokens by replacing the text and clearing the token metadata.
+ * or totalPageCount tokens by replacing the text while preserving token metadata
+ * for later convergence passes.
  *
  * @param block - Original paragraph block (will not be mutated)
  * @param displayPageInfo - Section-aware page number data for this physical page
@@ -201,28 +219,51 @@ function cloneBlockWithResolvedTokens(
   displayPageInfo: DisplayPageInfo,
   totalPagesStr: string,
   totalPages: number,
-): ParagraphBlock {
+  sectionPageCount: number,
+): ParagraphBlock | undefined {
+  let changed = false;
   // Clone the runs array and resolve tokens
   const clonedRuns = block.runs.map((run) => {
     // Check if this run has a page token
     if ('token' in run && run.token) {
       if (run.token === 'pageNumber') {
-        // Clone the run and resolve the token
-        const { token: _token, pageNumberFieldFormat, ...runWithoutToken } = run;
+        const resolvedText =
+          run.pageNumberFieldFormat
+            ? formatChapterPageNumberText({
+                pageComponent: formatPageNumberFieldValue(displayPageInfo.displayNumber, run.pageNumberFieldFormat),
+                chapterNumberText: displayPageInfo.chapterNumberText,
+                chapterSeparator: displayPageInfo.chapterSeparator,
+              })
+            : displayPageInfo.chapterNumberText
+              ? formatSectionPageNumberText({
+                  displayNumber: displayPageInfo.displayNumber,
+                  pageFormat: displayPageInfo.pageFormat ?? 'decimal',
+                  chapterNumberText: displayPageInfo.chapterNumberText,
+                  chapterSeparator: displayPageInfo.chapterSeparator,
+                })
+              : displayPageInfo.displayText;
+        changed ||= run.text !== resolvedText;
         return {
-          ...runWithoutToken,
-          text: pageNumberFieldFormat
-            ? formatPageNumberFieldValue(displayPageInfo.displayNumber, pageNumberFieldFormat)
-            : displayPageInfo.displayText,
+          ...run,
+          text: resolvedText,
         };
       } else if (run.token === 'totalPageCount') {
-        // Clone the run and resolve the token
-        const { token: _token, ...runWithoutToken } = run;
+        const resolvedText = run.pageNumberFieldFormat
+          ? formatPageNumberFieldValue(totalPages, run.pageNumberFieldFormat)
+          : totalPagesStr;
+        changed ||= run.text !== resolvedText;
         return {
-          ...runWithoutToken,
-          text: run.pageNumberFieldFormat
-            ? formatPageNumberFieldValue(totalPages, run.pageNumberFieldFormat)
-            : totalPagesStr,
+          ...run,
+          text: resolvedText,
+        };
+      } else if (run.token === 'sectionPageCount') {
+        const resolvedText = run.pageNumberFieldFormat
+          ? formatPageNumberFieldValue(sectionPageCount, run.pageNumberFieldFormat)
+          : String(sectionPageCount);
+        changed ||= run.text !== resolvedText;
+        return {
+          ...run,
+          text: resolvedText,
         };
       }
     }
@@ -232,10 +273,12 @@ function cloneBlockWithResolvedTokens(
   });
 
   // Return cloned block with new runs
-  return {
-    ...block,
-    runs: clonedRuns,
-  };
+  return changed
+    ? {
+        ...block,
+        runs: clonedRuns,
+      }
+    : undefined;
 }
 
 /**

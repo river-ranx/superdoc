@@ -4,10 +4,13 @@ import type {
   ListBlock,
   Measure,
   PageNumberFieldFormat,
+  PageNumberChapterSeparator,
+  PageNumberFormat,
   ParagraphBlock,
   TableBlock,
   TextRun,
 } from '@superdoc/contracts';
+import { formatChapterPageNumberText } from '@superdoc/contracts';
 import { formatPageNumberFieldValue, layoutHeaderFooter, type HeaderFooterConstraints } from '@superdoc/layout-engine';
 import { MeasureCache } from './cache';
 import { resolveHeaderFooterTokens, cloneHeaderFooterBlocks } from './resolveHeaderFooterTokens';
@@ -35,6 +38,10 @@ export type PageResolver = (pageNumber: number) => {
   displayText: string;
   displayNumber?: number;
   totalPages: number;
+  sectionPageCount?: number;
+  pageFormat?: PageNumberFormat;
+  chapterNumberText?: string;
+  chapterSeparator?: PageNumberChapterSeparator;
 };
 
 /**
@@ -211,7 +218,11 @@ function canUseDigitBucketingForVariant(
     const renderedText =
       strategy.kind === 'fieldFormat'
         ? Number.isFinite(pageInfo.displayNumber)
-          ? formatPageNumberFieldValue(pageInfo.displayNumber ?? pageNumber, strategy.fieldFormat)
+          ? formatChapterPageNumberText({
+              pageComponent: formatPageNumberFieldValue(pageInfo.displayNumber ?? pageNumber, strategy.fieldFormat),
+              chapterNumberText: pageInfo.chapterNumberText,
+              chapterSeparator: pageInfo.chapterSeparator,
+            })
           : null
         : pageInfo.displayText;
     return renderedText ? getBucketForRenderedPageNumberText(renderedText) : null;
@@ -251,11 +262,32 @@ function canUseDigitBucketingForVariant(
  * for header/footer variants that don't contain page tokens.
  *
  * @param blocks - FlowBlocks to check for tokens
- * @returns True if any block contains pageNumber or totalPageCount tokens
+ * @returns True if any block contains pageNumber, totalPageCount, or sectionPageCount tokens
  */
 function paragraphHasPageToken(para: ParagraphBlock): boolean {
   for (const run of para.runs) {
-    if ('token' in run && (run.token === 'pageNumber' || run.token === 'totalPageCount')) {
+    if (
+      'token' in run &&
+      (run.token === 'pageNumber' || run.token === 'totalPageCount' || run.token === 'sectionPageCount')
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function paragraphHasSectionPageCountToken(para: ParagraphBlock): boolean {
+  for (const run of para.runs) {
+    if ('token' in run && run.token === 'sectionPageCount') {
+      return true;
+    }
+  }
+  return false;
+}
+
+function paragraphHasPageNumberToken(para: ParagraphBlock): boolean {
+  for (const run of para.runs) {
+    if ('token' in run && run.token === 'pageNumber') {
       return true;
     }
   }
@@ -310,6 +342,57 @@ function hasPageTokens(blocks: FlowBlock[]): boolean {
   return false;
 }
 
+function hasSectionPageCountTokens(blocks: FlowBlock[]): boolean {
+  for (const block of blocks) {
+    if (block.kind === 'paragraph') {
+      if (paragraphHasSectionPageCountToken(block as ParagraphBlock)) return true;
+    } else if (block.kind === 'list') {
+      const list = block as ListBlock;
+      for (const item of list.items ?? []) {
+        if (paragraphHasSectionPageCountToken(item.paragraph)) return true;
+      }
+    } else if (block.kind === 'table') {
+      const table = block as TableBlock;
+      for (const row of table.rows ?? []) {
+        for (const cell of row.cells ?? []) {
+          const cellBlocks: FlowBlock[] = cell.blocks
+            ? (cell.blocks as FlowBlock[])
+            : cell.paragraph
+              ? [cell.paragraph]
+              : [];
+          if (hasSectionPageCountTokens(cellBlocks)) return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
+function hasPageNumberTokens(blocks: FlowBlock[]): boolean {
+  for (const block of blocks) {
+    if (block.kind === 'paragraph') {
+      if (paragraphHasPageNumberToken(block as ParagraphBlock)) return true;
+    } else if (block.kind === 'list') {
+      const list = block as ListBlock;
+      for (const item of list.items ?? []) {
+        if (paragraphHasPageNumberToken(item.paragraph)) return true;
+      }
+    } else if (block.kind === 'table') {
+      const table = block as TableBlock;
+      for (const row of table.rows ?? []) {
+        for (const cell of row.cells ?? []) {
+          const cellBlocks: FlowBlock[] = cell.blocks
+            ? (cell.blocks as FlowBlock[])
+            : cell.paragraph
+              ? [cell.paragraph]
+              : [];
+          if (hasPageNumberTokens(cellBlocks)) return true;
+        }
+      }
+    }
+  }
+  return false;
+}
 function hasPageNumberTokensRequiringPerPageLayout(blocks: FlowBlock[]): boolean {
   for (const block of blocks) {
     if (block.kind === 'paragraph') {
@@ -456,14 +539,17 @@ export async function layoutHeaderFooterWithCache(
 
     // Determine which pages to create layouts for
     let pagesToLayout: number[];
+    const hasPageNumberToken = hasPageNumberTokens(blocks);
 
     const useBucketingForVariant =
       useBucketing &&
       !hasPageNumberTokensRequiringPerPageLayout(blocks) &&
-      canUseDigitBucketingForVariant(blocks, docTotalPages, pageResolver);
+      !hasSectionPageCountTokens(blocks) &&
+      (!hasPageNumberToken || canUseDigitBucketingForVariant(blocks, docTotalPages, pageResolver));
 
     if (!useBucketingForVariant) {
-      // Per-page layout: small docs, disabled bucketing, or non-digit-bucket-compatible PAGE formats.
+      // Per-page layout: small docs, disabled bucketing, SECTIONPAGES, or PAGE variants
+      // whose rendered digit buckets diverge within one physical-page bucket.
       pagesToLayout = Array.from({ length: docTotalPages }, (_, i) => i + 1);
       HeaderFooterCacheLogger.logBucketingDecision(docTotalPages, false);
     } else {
@@ -486,7 +572,11 @@ export async function layoutHeaderFooterWithCache(
       blocks: FlowBlock[];
       measures: Measure[];
       fragments: HeaderFooterLayout['pages'][0]['fragments'];
+      layout: HeaderFooterLayout;
       numberText?: string;
+      pageNumberFormat?: PageNumberFormat;
+      pageNumberChapterText?: string;
+      pageNumberChapterSeparator?: PageNumberChapterSeparator;
     }> = [];
 
     for (const pageNum of pagesToLayout) {
@@ -494,9 +584,27 @@ export async function layoutHeaderFooterWithCache(
       const clonedBlocks = cloneHeaderFooterBlocks(blocks);
 
       // Resolve page number tokens for this specific page
-      const { displayText, displayNumber, totalPages: totalPagesForPage } = pageResolver(pageNum);
+      const {
+        displayText,
+        displayNumber,
+        totalPages: totalPagesForPage,
+        sectionPageCount,
+        pageFormat,
+        chapterNumberText,
+        chapterSeparator,
+      } = pageResolver(pageNum);
 
-      resolveHeaderFooterTokens(clonedBlocks, pageNum, totalPagesForPage, displayText, displayNumber);
+      resolveHeaderFooterTokens(
+        clonedBlocks,
+        pageNum,
+        totalPagesForPage,
+        displayText,
+        displayNumber,
+        sectionPageCount,
+        pageFormat,
+        chapterNumberText,
+        chapterSeparator,
+      );
 
       // Measure and layout
       const measures = await cache.measureBlocks(clonedBlocks, constraints, measureBlock);
@@ -527,26 +635,39 @@ export async function layoutHeaderFooterWithCache(
         blocks: clonedBlocks,
         measures,
         fragments: fragmentsWithLines,
+        layout: pageLayout,
         numberText: displayText,
+        // Mirrored from body page metadata for layout contract parity. Paint
+        // reads chapter fields from the body page context; measurement above
+        // has already resolved these tokens into page-local HF blocks.
+        pageNumberFormat: pageFormat,
+        pageNumberChapterText: chapterNumberText,
+        pageNumberChapterSeparator: chapterSeparator,
       });
     }
 
     // Construct final HeaderFooterLayout with all pages
-    // Use the first page's measurements for overall dimensions
-    const firstPageLayout = pages[0]
-      ? layoutHeaderFooter(pages[0].blocks, pages[0].measures, constraints, kind)
-      : { height: 0, pages: [] };
+    // Use the widest visual/measurement bounds from the page-specific layouts.
+    const pageLayouts = pages.map((page) => page.layout);
+    const minYValues = pageLayouts.map((layout) => layout.minY).filter((value): value is number => value !== undefined);
+    const maxYValues = pageLayouts.map((layout) => layout.maxY).filter((value): value is number => value !== undefined);
+    const minY = minYValues.length > 0 ? Math.min(...minYValues) : undefined;
+    const maxY = maxYValues.length > 0 ? Math.max(...maxYValues) : undefined;
+    const renderHeight = minY !== undefined && maxY !== undefined ? maxY - minY : undefined;
 
     const finalLayout: HeaderFooterLayout = {
-      height: firstPageLayout.height,
-      minY: firstPageLayout.minY,
-      maxY: firstPageLayout.maxY,
-      renderHeight: firstPageLayout.renderHeight,
+      height: pageLayouts.reduce((maxHeight, layout) => Math.max(maxHeight, layout.height), 0),
+      minY,
+      maxY,
+      renderHeight,
       pages: pages.map((p) => ({
         number: p.number,
         displayNumber: p.displayNumber,
         fragments: p.fragments,
         numberText: p.numberText,
+        pageNumberFormat: p.pageNumberFormat,
+        pageNumberChapterText: p.pageNumberChapterText,
+        pageNumberChapterSeparator: p.pageNumberChapterSeparator,
         blocks: p.blocks,
         measures: p.measures,
       })),

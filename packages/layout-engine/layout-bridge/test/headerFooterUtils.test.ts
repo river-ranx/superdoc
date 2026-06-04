@@ -134,7 +134,6 @@ describe('headerFooterUtils', () => {
       contentId: 'rIdEven',
     });
   });
-
   it('uses default only for odd pages when alternating slots are missing', () => {
     const identifier = extractIdentifierFromConverter({
       headerIds: { default: 'rId1' },

@@ -85,6 +85,29 @@ describe('resolveHeaderFooterTokens', () => {
     expect((block.runs[0] as TextRun).token).toBe('pageNumber');
   });
 
+  it('should preserve chapter prefix when run-local pageNumberFieldFormat is applied', () => {
+    const blocks: FlowBlock[] = [
+      {
+        kind: 'paragraph',
+        id: 'header-chapter-local-format',
+        runs: [
+          {
+            text: '0',
+            token: 'pageNumber',
+            pageNumberFieldFormat: { format: 'upperRoman' },
+            fontFamily: 'Arial',
+            fontSize: 12,
+          } as TextRun,
+        ],
+      } as ParagraphBlock,
+    ];
+
+    resolveHeaderFooterTokens(blocks, 1, 10, '3:5', 5, 10, 'decimal', '3', 'colon');
+
+    const block = blocks[0] as ParagraphBlock;
+    expect(block.runs[0].text).toBe('3:V');
+    expect((block.runs[0] as TextRun).token).toBe('pageNumber');
+  });
   it('should resolve totalPageCount token in footer blocks', () => {
     const blocks: FlowBlock[] = [
       {
@@ -138,6 +161,34 @@ describe('resolveHeaderFooterTokens', () => {
     expect((block.runs[0] as TextRun).token).toBe('totalPageCount');
   });
 
+  it('should resolve formatted sectionPageCount token from section context', () => {
+    const blocks: FlowBlock[] = [
+      {
+        kind: 'paragraph',
+        id: 'footer-section-pages',
+        runs: [
+          {
+            text: 'Section pages: ',
+            fontFamily: 'Arial',
+            fontSize: 12,
+          },
+          {
+            text: '0',
+            token: 'sectionPageCount',
+            pageNumberFieldFormat: { format: 'upperRoman' },
+            fontFamily: 'Arial',
+            fontSize: 12,
+          } as TextRun,
+        ],
+      } as ParagraphBlock,
+    ];
+
+    resolveHeaderFooterTokens(blocks, 1, 99, '1', 1, 4);
+
+    const block = blocks[0] as ParagraphBlock;
+    expect(block.runs[1].text).toBe('IV');
+    expect((block.runs[1] as TextRun).token).toBe('sectionPageCount');
+  });
   it('should resolve both tokens in the same block', () => {
     const blocks: FlowBlock[] = [
       {
