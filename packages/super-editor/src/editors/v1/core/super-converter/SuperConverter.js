@@ -12,6 +12,7 @@ import { normalizeDuplicateBlockIdentitiesInContent } from './v2/importer/normal
 import { preProcessPageFieldsOnly } from './field-references/preProcessPageFieldsOnly.js';
 import { carbonCopy } from '../utilities/carbonCopy.js';
 import { deobfuscateFont, getArrayBufferFromUrl, computeCrc32Hex } from './helpers.js';
+import { parseEmbeddingPolicy } from '@superdoc/font-system';
 import { baseNumbering } from './v2/exporter/helpers/base-list.definitions.js';
 import { DEFAULT_CUSTOM_XML, DEFAULT_DOCX_DEFS } from './exporter-docx-defs.js';
 import {
@@ -1044,6 +1045,82 @@ class SuperConverter {
       styleString,
       fontsImported,
     };
+  }
+
+  /**
+   * Extract the document's embedded fonts as structured, deobfuscated faces for first-class registry
+   * registration (the architecturally correct replacement for the legacy `@font-face` CSS injection in
+   * {@link getFontFaceImportString}). The converter only extracts + deobfuscates + classifies; it does
+   * NOT create object URLs, inject `<style>`, or decide what to register. Each face carries the
+   * deobfuscated bytes, its OS/2-derived weight/style + raw `fsType` licensing, and the `fontTable`
+   * relationship id. The document font controller decides which to register, skipping faces that are
+   * not embeddable (Restricted-License) or whose OS/2 table was unreadable (conservative: no license
+   * proof -> fall through to the bundled substitute).
+   *
+   * @returns {Array<{ family: string, source: Uint8Array, weight: '400'|'700', style: 'normal'|'italic', fsType: number|null, embeddable: boolean, relationshipId: string }>}
+   */
+  getEmbeddedFontFaces() {
+    const fontTable = this.convertedXml['word/fontTable.xml'];
+    if (!fontTable || !Object.keys(this.fonts).length) return [];
+
+    const wFonts = fontTable.elements?.find((el) => el.name === 'w:fonts');
+    const embeddedEntries =
+      wFonts?.elements?.filter((el) =>
+        el.elements?.some((nested) => nested?.attributes?.['r:id'] && nested?.attributes?.['w:fontKey']),
+      ) ?? [];
+    const embedElements = embeddedEntries.flatMap((entry) =>
+      (entry.elements ?? [])
+        .filter((el) => el.name?.startsWith('w:embed'))
+        .map((el) => ({ embed: el, family: entry.attributes?.['w:name'] })),
+    );
+
+    const rels = this.convertedXml['word/_rels/fontTable.xml.rels'];
+    const relElements = rels?.elements?.find((el) => el.name === 'Relationships')?.elements ?? [];
+
+    // Weight/style fallback from the w:embed* element name (w:embedRegular/Bold/Italic/BoldItalic),
+    // used only when the OS/2 table is unreadable.
+    const faceFromEmbedName = (name = '') => ({
+      weight: /bold/i.test(name) ? '700' : '400',
+      style: /italic/i.test(name) ? 'italic' : 'normal',
+    });
+
+    const faces = [];
+    for (const { embed, family } of embedElements) {
+      const relationshipId = embed.attributes?.['r:id'];
+      const fontKey = embed.attributes?.['w:fontKey'];
+      // Skip a malformed embed rather than aborting the whole extraction (one bad font must not drop
+      // every other embedded face).
+      if (!family || !relationshipId || !fontKey) continue;
+      const filePath = relElements.find((el) => el.attributes?.Id === relationshipId)?.attributes?.Target;
+      if (!filePath) continue;
+      const fontUint8Array = this.fonts[`word/${filePath}`];
+      if (!fontUint8Array?.buffer) continue;
+      // Slice the EXACT view bytes into a fresh buffer. fontUint8Array may be a view into a larger
+      // (pooled) buffer, and deobfuscateFont XORs its input IN PLACE and returns the whole buffer -
+      // so passing `.buffer` would deobfuscate the wrong bytes and corrupt the shared `this.fonts`
+      // data. The fresh copy is also the independent buffer the registry will own.
+      const sourceBytes = fontUint8Array.buffer.slice(
+        fontUint8Array.byteOffset,
+        fontUint8Array.byteOffset + fontUint8Array.byteLength,
+      );
+      const ttf = deobfuscateFont(sourceBytes, fontKey);
+      if (!ttf) continue;
+
+      const policy = parseEmbeddingPolicy(ttf);
+      const fallback = faceFromEmbedName(embed.name);
+      faces.push({
+        family,
+        source: ttf,
+        weight: policy?.face.weight ?? fallback.weight,
+        style: policy?.face.style ?? fallback.style,
+        fsType: policy?.fsType ?? null,
+        // Conservative: an unreadable OS/2 table (null policy) is NOT embeddable - we cannot prove the
+        // license permits embedding, so the controller skips it and the bundled substitute renders.
+        embeddable: policy ? policy.embeddable : false,
+        relationshipId,
+      });
+    }
+    return faces;
   }
 
   getDocumentInternalId() {
