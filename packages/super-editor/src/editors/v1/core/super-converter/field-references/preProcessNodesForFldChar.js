@@ -3,6 +3,7 @@
  */
 import { getInstructionPreProcessor } from './fld-preprocessors';
 import { resolveHyperlinkAttributes } from './fld-preprocessors/hyperlink-preprocessor.js';
+import { extractFieldKeyword } from './field-keyword.js';
 import { carbonCopy } from '@core/utilities/carbonCopy.js';
 import { isTrackChangeElement, isConstructiveTrackChangeElement } from '../v2/importer/trackChangeElements.js';
 
@@ -138,10 +139,9 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
     if (node.name === 'w:fldSimple') {
       const instr = node.attributes?.['w:instr'];
       if (typeof instr === 'string') {
-        const instructionType = instr.trim().split(' ')[0];
-        const instructionPreProcessor = getInstructionPreProcessor(instructionType);
+        const instructionPreProcessor = getInstructionPreProcessor(instr);
         if (instructionPreProcessor) {
-          const processed = instructionPreProcessor(node.elements ?? [], instr, docx, null);
+          const processed = instructionPreProcessor(node.elements ?? [], instr, { docx });
           if (collecting) {
             collectedNodesStack[collectedNodesStack.length - 1].push(...processed);
             rawCollectedNodesStack[rawCollectedNodesStack.length - 1].push(...processed);
@@ -178,7 +178,13 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
           currentField.instructionTokens.push(...instructionTokens);
           const instrTextValue = instrTextEl?.elements?.[0]?.text;
           if (instrTextValue != null) {
-            currentField.instrText += `${instrTextValue} `;
+            // SD-3066: join instrText fragments verbatim. Word preserves the
+            // literal spaces inside each run, so an instruction split across
+            // runs (e.g. ' XE "' + 'Building Standard' + '" ') already carries
+            // its own separators. Injecting a space per fragment corrupted the
+            // entry text to 'XE " Building Standard "'. The leading/trailing
+            // whitespace is trimmed by finalizeField via `instrText.trim()`.
+            currentField.instrText += `${instrTextValue}`;
           }
           if (instructionTokens.some((token) => token.type === 'tab')) {
             currentField.instrText += '\t';
@@ -318,11 +324,10 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
  * @returns {{ nodes: OpenXmlNode[], handled: boolean }} The processed nodes and whether a preprocessor handled them.
  */
 const _processCombinedNodesForFldChar = (nodesToCombine = [], instrText, docx, instructionTokens, fieldRunRPr) => {
-  const instructionType = instrText.trim().split(' ')[0];
-  const instructionPreProcessor = getInstructionPreProcessor(instructionType);
+  const instructionPreProcessor = getInstructionPreProcessor(instrText);
   if (instructionPreProcessor) {
     return {
-      nodes: instructionPreProcessor(nodesToCombine, instrText, docx, instructionTokens, fieldRunRPr),
+      nodes: instructionPreProcessor(nodesToCombine, instrText, { docx, instructionTokens, fieldRunRPr }),
       handled: true,
     };
   }
@@ -343,7 +348,7 @@ const _processCombinedNodesForFldChar = (nodesToCombine = [], instrText, docx, i
  * @param {ParsedDocx} docx
  */
 const applyConstructiveFieldInterpretation = (rawNodes, instrText, docx) => {
-  const instructionType = instrText.split(' ')[0];
+  const instructionType = extractFieldKeyword(instrText);
   if (instructionType !== 'HYPERLINK') return;
 
   const linkAttributes = resolveHyperlinkAttributes(instrText, docx);

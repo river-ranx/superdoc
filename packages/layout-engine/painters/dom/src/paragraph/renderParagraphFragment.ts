@@ -8,6 +8,7 @@ import type {
 } from '@superdoc/contracts';
 import { isMinimalWordLayout as isMinimalWordLayoutShared } from '@superdoc/common/list-marker-utils';
 import type { MinimalWordLayout } from '@superdoc/common/list-marker-utils';
+import { resolvePhysicalFamily, type ResolvePhysicalFamily } from '@superdoc/font-system';
 import { CLASS_NAMES, fragmentStyles } from '../styles.js';
 import { shouldRenderSdtContainerChrome, type SdtBoundaryOptions } from '../sdt/container.js';
 import type { BetweenBorderInfo } from './borders/index.js';
@@ -32,6 +33,13 @@ type RenderParagraphFragmentParams = {
     options?: { sourceAnchor?: ResolvedFragmentItem['sourceAnchor']; wrapperEl?: HTMLElement },
   ) => void;
   createErrorPlaceholder: (blockId: string, error: unknown) => HTMLElement;
+  contentControlsChrome?: 'default' | 'none';
+  /**
+   * Per-document logical->physical font resolver for the drop cap and list markers. Threaded from
+   * the renderer's per-document resolver so they paint the same physical family they were measured
+   * in. Undefined falls back to the global resolver, matching text runs and field annotations.
+   */
+  resolvePhysical?: ResolvePhysicalFamily;
 };
 
 const isMinimalWordLayout = (value: unknown): value is MinimalWordLayout => isMinimalWordLayoutShared(value);
@@ -51,6 +59,8 @@ export const renderParagraphFragment = (params: RenderParagraphFragmentParams): 
     renderLine,
     captureLineSnapshot,
     createErrorPlaceholder,
+    contentControlsChrome,
+    resolvePhysical = (css) => resolvePhysicalFamily(css),
   } = params;
 
   try {
@@ -123,7 +133,8 @@ export const renderParagraphFragment = (params: RenderParagraphFragmentParams): 
       sdtBoundary,
       applySdtDataset,
       applyContainerSdtDataset,
-      renderDropCap: (descriptor, dropCapMeasure) => renderDropCap(doc, descriptor, dropCapMeasure),
+      resolvePhysical,
+      renderDropCap: (descriptor, dropCapMeasure) => renderDropCap(doc, descriptor, dropCapMeasure, resolvePhysical),
       renderLine,
       captureLineSnapshot: (lineEl, options) => {
         captureLineSnapshot(lineEl, {
@@ -132,6 +143,7 @@ export const renderParagraphFragment = (params: RenderParagraphFragmentParams): 
         });
       },
       sourceAnchor: resolvedItem?.sourceAnchor,
+      contentControlsChrome,
     });
 
     return fragmentEl;
@@ -145,6 +157,7 @@ const renderDropCap = (
   doc: Document,
   descriptor: DropCapDescriptor,
   measure: ParagraphMeasure['dropCap'],
+  resolvePhysical: ResolvePhysicalFamily = (css) => resolvePhysicalFamily(css),
 ): HTMLElement => {
   const { run, mode } = descriptor;
 
@@ -152,7 +165,14 @@ const renderDropCap = (
   dropCapEl.classList.add('superdoc-drop-cap');
   dropCapEl.textContent = run.text;
 
-  dropCapEl.style.fontFamily = run.fontFamily;
+  // Paint the physical render family (a per-document fonts.map or the bundled substitute) - the
+  // same family the drop cap was measured in, so its box matches the laid-out geometry. Resolve for
+  // the drop cap's ACTUAL face so a single-face substitute is not mis-mapped. Defaults to the global
+  // resolver when no per-document resolver is present (e.g. tests).
+  dropCapEl.style.fontFamily = resolvePhysical(run.fontFamily, {
+    weight: run.bold ? '700' : '400',
+    style: run.italic ? 'italic' : 'normal',
+  });
   dropCapEl.style.fontSize = `${run.fontSize}px`;
   if (run.bold) {
     dropCapEl.style.fontWeight = 'bold';

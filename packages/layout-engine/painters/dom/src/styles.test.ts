@@ -40,16 +40,21 @@ describe('ensureSdtContainerStyles', () => {
 
     expect(blockRule).not.toContain('padding:');
     expect(blockRule).not.toContain('border:');
+    expect(blockRule).toContain('background-color: transparent;');
     expect(blockRule).toContain('--sd-sdt-chrome-left: 0px;');
     expect(blockRule).toContain('--sd-sdt-chrome-width: 100%;');
     expect(blockRule).toContain('--sd-sdt-chrome-bottom-extension: 0px;');
+    expect(blockRule).toContain('z-index: 0;');
     expect(backgroundRule).toContain('width: var(--sd-sdt-chrome-width, 100%);');
     expect(backgroundRule).toContain('bottom: calc(0px - var(--sd-sdt-chrome-bottom-extension, 0px));');
+    expect(backgroundRule).toContain('background-color: var(--sd-content-controls-block-bg, transparent);');
+    expect(backgroundRule).toContain('z-index: -1;');
     expect(hoverRule).toContain('background-color: var(--sd-content-controls-block-hover-bg, #f2f2f2);');
     expect(chromeRule).toContain('position: absolute;');
     expect(chromeRule).toContain('width: var(--sd-sdt-chrome-width, 100%);');
     expect(chromeRule).toContain('bottom: calc(0px - var(--sd-sdt-chrome-bottom-extension, 0px));');
     expect(chromeRule).toContain('border: 1px solid transparent;');
+    expect(chromeRule).toContain('z-index: 1;');
     expect(chromeRule).toContain('pointer-events: none;');
   });
 
@@ -81,6 +86,22 @@ describe('ensureSdtContainerStyles', () => {
     expect(cssText).toContain('border-color: var(--sd-content-controls-inline-border, #629be7);');
     expect(emptyRule).not.toContain('display: inline-block');
     expect(emptyRule).not.toContain('vertical-align');
+  });
+
+  it('promotes only image-bearing inline SDT wrappers to inline-block geometry', () => {
+    ensureSdtContainerStyles(document);
+
+    const styleEl = document.querySelector('[data-superdoc-sdt-container-styles="true"]');
+    const cssText = styleEl?.textContent ?? '';
+    const baseInlineRule = cssText.match(/\.superdoc-structured-content-inline\s*\{([^}]*)\}/)?.[1] ?? '';
+    const imageInlineRule =
+      cssText.match(
+        /\.superdoc-structured-content-inline\[data-contains-inline-image='true'\]:not\(\[data-appearance='hidden'\]\)\s*\{([^}]*)\}/,
+      )?.[1] ?? '';
+
+    expect(baseInlineRule).toContain('display: inline;');
+    expect(imageInlineRule).toContain('display: inline-block;');
+    expect(imageInlineRule).toContain('vertical-align: top;');
   });
 
   it('uses the same label box model for block and inline SDTs', () => {
@@ -223,6 +244,23 @@ describe('ensureSdtContainerStyles', () => {
     expect(beforeRule).toContain('background: none;');
   });
 
+  it('suppresses block SDT resting background paint in viewing and print modes', () => {
+    ensureSdtContainerStyles(document);
+
+    const styleEl = document.querySelector('[data-superdoc-sdt-container-styles="true"]');
+    const cssText = styleEl?.textContent ?? '';
+    const viewingBeforeRule =
+      cssText.match(
+        /\.presentation-editor--viewing \.superdoc-structured-content-block::before,[\s\S]*?\{([^}]*)\}/,
+      )?.[1] ?? '';
+    const printBeforeRule =
+      cssText.match(/@media print\s*\{[\s\S]*?\.superdoc-structured-content-block::before\s*\{([^}]*)\}/)?.[1] ?? '';
+
+    expect(cssText).toContain('.presentation-editor--viewing .superdoc-structured-content-block::before,');
+    expect(viewingBeforeRule).toContain('background: none;');
+    expect(printBeforeRule).toContain('background: none;');
+  });
+
   it('keeps hidden-appearance inline SDTs transparent at rest', () => {
     ensureSdtContainerStyles(document);
     const styleEl = document.querySelector('[data-superdoc-sdt-container-styles="true"]');
@@ -230,6 +268,113 @@ describe('ensureSdtContainerStyles', () => {
 
     expect(cssText).toContain(".superdoc-structured-content-inline[data-appearance='hidden'] {");
     expect(cssText).toContain('background-color: transparent;');
+  });
+
+  it('includes global content-controls chrome-none suppression selectors', () => {
+    ensureSdtContainerStyles(document);
+    const styleEl = document.querySelector('[data-superdoc-sdt-container-styles="true"]');
+    const cssText = styleEl?.textContent ?? '';
+
+    expect(cssText).toContain('.superdoc-cc-chrome-none .superdoc-structured-content-inline');
+    expect(cssText).toContain('.superdoc-cc-chrome-none .superdoc-structured-content-block');
+    expect(cssText).toContain('.superdoc-cc-chrome-none .superdoc-structured-content-block.sdt-group-hover');
+  });
+
+  it('suppresses block SDT pseudo-element chrome (::before/::after) under chrome-none', () => {
+    // Block chrome is painted through ::before (background) and ::after
+    // (border) pseudo-elements, so element-level rules cannot reach it. These
+    // selectors must exist or block chrome leaks under contentControlsChrome=none.
+    ensureSdtContainerStyles(document);
+    const styleEl = document.querySelector('[data-superdoc-sdt-container-styles="true"]');
+    const cssText = styleEl?.textContent ?? '';
+
+    // Selected-node blue border (the case viewing mode has no equivalent for).
+    expect(cssText).toContain(
+      '.superdoc-cc-chrome-none .superdoc-structured-content-block.ProseMirror-selectednode::after',
+    );
+    // Direct hover (single-fragment) border and background.
+    expect(cssText).toContain('.superdoc-cc-chrome-none .superdoc-structured-content-block:hover::after');
+    expect(cssText).toContain('.superdoc-cc-chrome-none .superdoc-structured-content-block:hover::before');
+    // Group hover (multi-fragment, JS-coordinated) border and background.
+    expect(cssText).toContain('.superdoc-cc-chrome-none .superdoc-structured-content-block.sdt-group-hover::after');
+    expect(cssText).toContain('.superdoc-cc-chrome-none .superdoc-structured-content-block.sdt-group-hover::before');
+    // Lock-hover background lives on ::before; must be suppressed too.
+    expect(cssText).toContain(
+      '.superdoc-cc-chrome-none .superdoc-structured-content-block[data-lock-mode].sdt-group-hover::before',
+    );
+  });
+
+  it('declares chrome-none block pseudo suppression after the chrome-showing rules', () => {
+    // The hover/group-hover suppression selectors are the same specificity as
+    // the rules they override, so source order is load-bearing: the chrome-none
+    // block must come after the last chrome-showing block pseudo rule (the
+    // lock-hover ::before background) or hover chrome leaks under chrome-none.
+    ensureSdtContainerStyles(document);
+    const styleEl = document.querySelector('[data-superdoc-sdt-container-styles="true"]');
+    const cssText = styleEl?.textContent ?? '';
+
+    const lastChromeShowing = cssText.indexOf(
+      '.superdoc-structured-content-block[data-lock-mode].sdt-group-hover:not(.ProseMirror-selectednode)::before',
+    );
+    const chromeNoneSuppression = cssText.indexOf(
+      '.superdoc-cc-chrome-none .superdoc-structured-content-block.sdt-group-hover::before',
+    );
+    expect(lastChromeShowing).toBeGreaterThan(-1);
+    expect(chromeNoneSuppression).toBeGreaterThan(lastChromeShowing);
+  });
+
+  it('exposes a --sd-content-controls-custom-* styling surface under chrome-none (SD-3322)', () => {
+    ensureSdtContainerStyles(document);
+    const styleEl = document.querySelector('[data-superdoc-sdt-container-styles="true"]');
+    const cssText = styleEl?.textContent ?? '';
+
+    // Inline rest reads the custom vars; the default-preserving fallbacks
+    // (0-width transparent border, no background/radius/padding) keep
+    // chrome-none visually empty when no variable is set.
+    expect(cssText).toContain('background: var(--sd-content-controls-custom-inline-bg, none);');
+    expect(cssText).toContain('border: var(--sd-content-controls-custom-inline-border, 0 solid transparent);');
+    expect(cssText).toContain('padding: var(--sd-content-controls-custom-inline-padding, 0);');
+    expect(cssText).toContain('border-radius: var(--sd-content-controls-custom-inline-radius, 0);');
+
+    // Hover and selected re-assert the SAME border var (constant box, no jitter)
+    // and read the background vars, which cascade from the rest background.
+    expect(cssText).toContain(
+      'background: var(--sd-content-controls-custom-inline-hover-bg, var(--sd-content-controls-custom-inline-bg, none));',
+    );
+    expect(cssText).toContain(
+      'background: var(--sd-content-controls-custom-inline-selected-bg, var(--sd-content-controls-custom-inline-hover-bg, var(--sd-content-controls-custom-inline-bg, none)));',
+    );
+
+    // Block exposes the same set plus an accent rail (-border-left) that falls
+    // back to the regular border.
+    expect(cssText).toContain('background: var(--sd-content-controls-custom-block-bg, none);');
+    expect(cssText).toContain(
+      'border-left: var(--sd-content-controls-custom-block-border-left, var(--sd-content-controls-custom-block-border, 0 solid transparent));',
+    );
+  });
+
+  it('locked-hover under chrome-none follows the custom hover background, not the built-in lock-hover (SD-3322)', () => {
+    ensureSdtContainerStyles(document);
+    const styleEl = document.querySelector('[data-superdoc-sdt-container-styles="true"]');
+    const cssText = styleEl?.textContent ?? '';
+
+    // The base lock-hover rules (built-in tint on inline, transparent on block)
+    // come first and have equal specificity to the plain custom hover rules, so
+    // they would otherwise win for locked controls.
+    const baseInlineLockHover = cssText.indexOf('background-color: var(--sd-content-controls-lock-hover-bg');
+    const baseBlockLockHover = cssText.indexOf(
+      '.superdoc-structured-content-block[data-lock-mode].sdt-group-hover:not(.ProseMirror-selectednode) {',
+    );
+    expect(baseInlineLockHover).toBeGreaterThan(-1);
+    expect(baseBlockLockHover).toBeGreaterThan(-1);
+
+    // The chrome-none lock-hover reset re-asserts the custom hover background
+    // AFTER them (extra .superdoc-cc-chrome-none class + later source order wins),
+    // so a locked control under chrome:'none' uses the custom variable.
+    const customInlineHoverReassert = cssText.lastIndexOf('--sd-content-controls-custom-inline-hover-bg');
+    const customBlockHoverReassert = cssText.lastIndexOf('--sd-content-controls-custom-block-hover-bg');
+    expect(customInlineHoverReassert).toBeGreaterThan(baseInlineLockHover);
+    expect(customBlockHoverReassert).toBeGreaterThan(baseBlockLockHover);
   });
 });
 

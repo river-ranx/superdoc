@@ -1,5 +1,9 @@
 import { NodeSelection, Plugin, PluginKey, TextSelection } from 'prosemirror-state';
 import { ySyncPluginKey } from 'y-prosemirror';
+import {
+  findFirstContentCursorPosInNode,
+  findLastContentCursorPosInNode,
+} from '@core/commands/helpers/textPositions.js';
 import { BLOCK_NODE_METADATA_UPDATE_META } from '../block-node/block-node.js';
 
 export const STRUCTURED_CONTENT_LOCK_KEY = new PluginKey('structuredContentLock');
@@ -27,6 +31,7 @@ function collectSDTNodes(doc) {
     if (node.type.name === 'structuredContent' || node.type.name === 'structuredContentBlock') {
       sdtNodes.push({
         type: node.type.name,
+        node,
         lockMode: node.attrs.lockMode,
         pos,
         end: pos + node.nodeSize,
@@ -67,6 +72,38 @@ function checkLockViolation(sdtNodes, from, to) {
     }
   }
   return { blocked: false };
+}
+
+function isAtBlockSdtWrapperDeletePosition(state, sdt, pos) {
+  if (sdt.type !== 'structuredContentBlock') return false;
+
+  const $pos = state.doc.resolve(pos);
+  let sdtDepth = null;
+  for (let depth = $pos.depth; depth > 0; depth -= 1) {
+    if ($pos.node(depth).type.name === 'structuredContentBlock' && $pos.before(depth) === sdt.pos) {
+      sdtDepth = depth;
+      break;
+    }
+  }
+  if (sdtDepth == null) return false;
+
+  const textblockDepth = sdtDepth + 1;
+  if ($pos.depth < textblockDepth) return false;
+  if (!$pos.node(textblockDepth).isTextblock) return false;
+  if ($pos.node(textblockDepth).type.name !== 'paragraph') return false;
+  if ($pos.pos !== $pos.start(textblockDepth)) return false;
+
+  return $pos.before(textblockDepth) === $pos.start(sdtDepth);
+}
+
+function selectionCoversSdtContent(sdt, from, to) {
+  if (from === sdt.pos + 1 && to === sdt.end - 1) return true;
+
+  if (sdt.type !== 'structuredContentBlock') return false;
+
+  const contentStart = findFirstContentCursorPosInNode(sdt.node, sdt.pos);
+  const contentEnd = findLastContentCursorPosInNode(sdt.node, sdt.pos);
+  return contentStart != null && contentEnd != null && from === contentStart && to === contentEnd;
 }
 
 export function createStructuredContentLockPlugin() {
@@ -116,7 +153,7 @@ export function createStructuredContentLockPlugin() {
         // modes, let the normal command chain delete the selected content while
         // preserving the SDT wrapper.
         if (from !== to && !(selection instanceof NodeSelection)) {
-          const exactContentSDT = sdtNodes.find((s) => from === s.pos + 1 && to === s.end - 1);
+          const exactContentSDT = sdtNodes.find((s) => selectionCoversSdtContent(s, from, to));
           if (exactContentSDT) {
             const isContentLocked =
               exactContentSDT.lockMode === 'contentLocked' || exactContentSDT.lockMode === 'sdtContentLocked';
@@ -164,6 +201,13 @@ export function createStructuredContentLockPlugin() {
               view.dispatch(state.tr.delete(emptyInlineSDT.pos, emptyInlineSDT.end));
             }
             return true;
+          }
+
+          const blockSdtAtWrapperDeletePosition = sdtNodes.find((s) =>
+            isAtBlockSdtWrapperDeletePosition(state, s, from),
+          );
+          if ((isBackspace || isDelete) && blockSdtAtWrapperDeletePosition) {
+            return false;
           }
 
           const inlineSdtAncestor = sdtNodes.find(

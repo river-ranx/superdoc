@@ -19,6 +19,19 @@ describe('preProcessNodesForFldChar', () => {
     },
   };
 
+  function complexFieldNodes(instruction, cachedText = '1') {
+    return [
+      { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'begin' } }] },
+      {
+        name: 'w:r',
+        elements: [{ name: 'w:instrText', elements: [{ type: 'text', text: instruction }] }],
+      },
+      { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'separate' } }] },
+      { name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: cachedText }] }] },
+      { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'end' } }] },
+    ];
+  }
+
   it('should process a simple hyperlink field', () => {
     const nodes = [
       { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'begin' } }] },
@@ -51,6 +64,94 @@ describe('preProcessNodesForFldChar', () => {
         },
       },
     ]);
+  });
+
+  it.each(['page \\* arabic', 'Page', 'PAGE'])(
+    'should process PAGE field instructions case-insensitively: %s',
+    (instruction) => {
+      const { processedNodes } = preProcessNodesForFldChar(complexFieldNodes(instruction), mockDocx);
+
+      expect(processedNodes).toHaveLength(1);
+      expect(processedNodes[0].name).toBe('sd:autoPageNumber');
+    },
+  );
+
+  it.each(['numpages', 'NumPages', 'NUMPAGES'])(
+    'should process NUMPAGES field instructions case-insensitively: %s',
+    (instruction) => {
+      const { processedNodes } = preProcessNodesForFldChar(complexFieldNodes(instruction, '5'), mockDocx);
+
+      expect(processedNodes).toHaveLength(1);
+      expect(processedNodes[0].name).toBe('sd:totalPageNumber');
+    },
+  );
+
+  it('preserves SECTIONPAGES field run properties when cached result has no run properties', () => {
+    const fieldRunRPr = { name: 'w:rPr', elements: [{ name: 'w:i' }] };
+    const { processedNodes } = preProcessNodesForFldChar(
+      [
+        { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'begin' } }] },
+        {
+          name: 'w:r',
+          elements: [fieldRunRPr, { name: 'w:instrText', elements: [{ type: 'text', text: 'SECTIONPAGES' }] }],
+        },
+        { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'separate' } }] },
+        { name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: '4' }] }] },
+        { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'end' } }] },
+      ],
+      mockDocx,
+    );
+
+    expect(processedNodes).toHaveLength(1);
+    expect(processedNodes[0]).toMatchObject({
+      name: 'sd:sectionPageCount',
+      attributes: { importedCachedText: '4' },
+      elements: [fieldRunRPr],
+    });
+  });
+  it('should process non-page field instructions case-insensitively', () => {
+    const docx = {
+      'word/_rels/document.xml.rels': {
+        elements: [{ name: 'Relationships', elements: [] }],
+      },
+    };
+
+    const { processedNodes } = preProcessNodesForFldChar(
+      complexFieldNodes('hyperlink "http://example.com"', 'link text'),
+      docx,
+    );
+
+    expect(processedNodes).toHaveLength(1);
+    expect(processedNodes[0]).toEqual({
+      name: 'w:hyperlink',
+      type: 'element',
+      attributes: { 'r:id': 'rIdabc12345' },
+      elements: [{ name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'link text' }] }] }],
+    });
+    expect(processedNodes[0].elements[0].elements[0].elements[0].text).toBe('link text');
+    expect(docx['word/_rels/document.xml.rels'].elements[0].elements).toEqual([
+      {
+        type: 'element',
+        name: 'Relationship',
+        attributes: {
+          Id: 'rIdabc12345',
+          Type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink',
+          Target: 'http://example.com',
+          TargetMode: 'External',
+        },
+      },
+    ]);
+  });
+
+  it('should preserve cached visible result runs for lowercase seq fields', () => {
+    const { processedNodes } = preProcessNodesForFldChar(complexFieldNodes('seq level2 \\*arabic', '1'), mockDocx);
+
+    expect(processedNodes).toHaveLength(5);
+    expect(processedNodes.some((node) => node.name === 'sd:sequenceField')).toBe(false);
+    expect(processedNodes[3]).toEqual({
+      name: 'w:r',
+      elements: [{ name: 'w:t', elements: [{ type: 'text', text: '1' }] }],
+    });
   });
 
   it('should handle nested fields (PAGEREF within HYPERLINK)', () => {
@@ -117,6 +218,30 @@ describe('preProcessNodesForFldChar', () => {
       { type: 'tab' },
       { type: 'text', text: '"' },
     ]);
+  });
+
+  it('processes PAGE field switches when instruction whitespace is not a literal space', () => {
+    const nodes = [
+      { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'begin' } }] },
+      {
+        name: 'w:r',
+        elements: [{ name: 'w:instrText', elements: [{ type: 'text', text: 'PAGE\t\\* Arabic' }] }],
+      },
+      { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'separate' } }] },
+      { name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: '1' }] }] },
+      { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'end' } }] },
+    ];
+
+    const { processedNodes } = preProcessNodesForFldChar(nodes, mockDocx);
+
+    expect(processedNodes).toHaveLength(1);
+    expect(processedNodes[0]).toMatchObject({
+      name: 'sd:autoPageNumber',
+      attributes: {
+        instruction: 'PAGE \\* Arabic',
+        pageNumberFormat: 'decimal',
+      },
+    });
   });
 
   it('processes TOC fields when begin, instrText, separate, and end share a single run', () => {
@@ -683,7 +808,11 @@ describe('preProcessNodesForFldChar', () => {
       {
         nodes: [{ name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'link text' }] }] }],
         fieldInfo: {
-          instrText: 'HYPERLINK "http://example.com"   ',
+          // SD-3066: verbatim concatenation of the two instrText runs
+          // ('HYPERLINK "http://example.com"' + ' ') is a single trailing
+          // space. The previous expectation of three spaces reflected the
+          // old per-fragment injected separator, not the literal source text.
+          instrText: 'HYPERLINK "http://example.com" ',
           instructionTokens: [
             { type: 'text', text: 'HYPERLINK "http://example.com"' },
             { type: 'text', text: ' ' },
@@ -744,6 +873,63 @@ describe('preProcessNodesForFldChar', () => {
     expect(processedNodes).toHaveLength(1);
     expect(processedNodes[0].name).toBe('sd:indexEntry');
     expect(processedNodes[0].attributes.instruction).toBe('XE "Term"');
+  });
+
+  it('processes fldSimple INDEX fields, wrapping loose result runs in a paragraph (SD-3066)', () => {
+    // The ticket flags w:fldSimple as a primary INDEX signal. A fldSimple INDEX
+    // carries its generated entries as loose runs; the index PM node requires
+    // `paragraph+`, so the preprocessor must wrap them (normalizeFieldContentToParagraphs,
+    // the SD-3005 fix). This guards both the fldSimple dispatch and that wrapping.
+    const nodes = [
+      {
+        name: 'w:fldSimple',
+        attributes: { 'w:instr': 'INDEX \\c 2' },
+        elements: [
+          { name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'apple, 3' }] }] },
+          { name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'banana, 5' }] }] },
+        ],
+      },
+    ];
+
+    const { processedNodes } = preProcessNodesForFldChar(nodes, mockDocx);
+    expect(processedNodes).toHaveLength(1);
+    expect(processedNodes[0].name).toBe('sd:index');
+    expect(processedNodes[0].attributes.instruction).toBe('INDEX \\c 2');
+    // Loose runs wrapped into a single paragraph so the PM `paragraph+` schema holds.
+    expect(processedNodes[0].elements).toHaveLength(1);
+    expect(processedNodes[0].elements[0].name).toBe('w:p');
+    expect(processedNodes[0].elements[0].elements).toHaveLength(2);
+  });
+
+  it('joins instruction text split across multiple instrText runs verbatim (SD-3066)', () => {
+    // Word commonly splits an XE instruction across runs, with the literal
+    // spaces preserved inside each run: ' XE "' + 'Building Standard' + '" '.
+    // The aggregated instruction must reconstruct the literal string, not
+    // inject a separator space per fragment (which produced
+    // 'XE " Building Standard "' with spurious internal spaces).
+    const nodes = [
+      { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'begin' } }] },
+      {
+        name: 'w:r',
+        elements: [
+          { name: 'w:instrText', attributes: { 'xml:space': 'preserve' }, elements: [{ type: 'text', text: ' XE "' }] },
+        ],
+      },
+      { name: 'w:r', elements: [{ name: 'w:instrText', elements: [{ type: 'text', text: 'Building Standard' }] }] },
+      {
+        name: 'w:r',
+        elements: [
+          { name: 'w:instrText', attributes: { 'xml:space': 'preserve' }, elements: [{ type: 'text', text: '" ' }] },
+        ],
+      },
+      { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'separate' } }] },
+      { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'end' } }] },
+    ];
+
+    const { processedNodes } = preProcessNodesForFldChar(nodes, mockDocx);
+    expect(processedNodes).toHaveLength(1);
+    expect(processedNodes[0].name).toBe('sd:indexEntry');
+    expect(processedNodes[0].attributes.instruction).toBe('XE "Building Standard"');
   });
 
   it('passes field-sequence rPr into body NUMWORDS fields when cached-result runs have no styling', () => {
