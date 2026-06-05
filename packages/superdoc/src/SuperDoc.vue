@@ -1335,6 +1335,7 @@ useViewportFit({
   viewportMetrics,
   showCommentsSidebar,
   superdocRoot,
+  documents,
 });
 
 /**

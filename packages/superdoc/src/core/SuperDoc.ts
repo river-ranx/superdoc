@@ -2024,7 +2024,9 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
    * document to the available container width (clamped by
    * `config.zoom.fitWidth`); `manual` holds the current value.
    * Switching to `fit-width` applies the fit immediately when
-   * viewport metrics are available.
+   * viewport metrics are available. Emits `zoomChange` (with the
+   * current value) so zoom UIs observe mode-only transitions; a
+   * same-mode call is a no-op.
    * @param mode - The zoom mode: `'manual'` or `'fit-width'`
    * @example
    * superdoc.setZoomMode('fit-width'); // start fitting to the container
@@ -2035,9 +2037,11 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
       console.warn("[SuperDoc] setZoomMode expects 'manual' or 'fit-width'");
       return;
     }
+    if (this.superdocStore?.zoomMode === mode) return;
     if (this.superdocStore) {
       this.superdocStore.zoomMode = mode;
     }
+    this.emit('zoomChange', { zoom: this.getZoom(), mode });
   }
 
   /**

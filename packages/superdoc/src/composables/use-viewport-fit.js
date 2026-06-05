@@ -1,7 +1,9 @@
 import { onBeforeUnmount, nextTick, watch } from 'vue';
+import { DOCX } from '@superdoc/common';
 
 const CSS_PX_PER_INCH = 96;
 const SIDEBAR_SELECTOR = '.superdoc__right-sidebar';
+const PDF_PAGE_SELECTOR = '.sd-pdf-viewer-page';
 
 export const FIT_WIDTH_DEFAULTS = Object.freeze({
   min: 10,
@@ -56,10 +58,13 @@ export const computeAppliedFitZoom = (availableWidth, documentWidth, options) =>
  * for `config.zoom.fitWidth` padding and clamping.
  *
  * The base page width is re-resolved on every evaluation (never latched)
- * and comes from the page styles first, which are zoom-independent: a zoom
- * applied before the first measurement (`zoom.initial`, `setZoom()` in
- * `onReady`) cannot corrupt the ratio. DOM measurement, normalized by the
- * active zoom, is the fallback when page styles are unavailable.
+ * and is the widest measurable page across all loaded documents: DOCX
+ * widths come from page styles (zoom-independent, so a zoom applied
+ * before the first measurement cannot corrupt the ratio), PDF widths from
+ * rendered pages normalized by their actual scale factor. HTML documents
+ * reflow and contribute nothing; an HTML-only instance reports no
+ * metrics. A zoom-normalized DOM measurement is the last-resort fallback
+ * for a DOCX editor without page styles.
  *
  * The fit application writes the zoom state directly instead of calling
  * `setZoom()`, which by contract switches the mode to `manual`.
@@ -76,17 +81,15 @@ export function useViewportFit({
   viewportMetrics,
   showCommentsSidebar,
   superdocRoot,
+  documents,
 }) {
-  const resolveBaseDocumentWidth = () => {
-    const superdoc = getSuperdoc();
-    // Without an editor there is no document to measure: the document
-    // element before editor mount is shell scaffolding whose width is
-    // container-derived, which would produce a garbage base.
-    if (!superdoc?.activeEditor) return null;
-
+  // Page width in CSS px at 100% zoom for one DOCX editor, from its page
+  // styles (zoom-independent), or null when unavailable.
+  const resolveEditorPageWidth = (editor) => {
+    if (!editor) return null;
     let pageStyles = null;
     try {
-      pageStyles = superdoc.activeEditor.getPageStyles?.() ?? null;
+      pageStyles = editor.getPageStyles?.() ?? null;
     } catch {
       pageStyles = null;
     }
@@ -94,14 +97,80 @@ export function useViewportFit({
     if (typeof pageWidthInches === 'number' && Number.isFinite(pageWidthInches) && pageWidthInches > 0) {
       return pageWidthInches * CSS_PX_PER_INCH;
     }
+    return null;
+  };
 
-    const docEl = superdocRoot.value?.querySelector?.('.superdoc__document');
-    const measured = Number(docEl?.clientWidth) || Number(docEl?.getBoundingClientRect?.().width) || 0;
-    if (measured > 0) {
-      // The measured element scales with zoom; divide it back out so the
-      // returned width is the document's natural size.
-      const zoomFactor = (activeZoom.value ?? 100) / 100;
-      return zoomFactor > 0 ? measured / zoomFactor : measured;
+  // Widest rendered PDF page in CSS px at 100% zoom. PDF pages size via
+  // `calc(var(--scale-factor) * <pt>px)` where the scale factor is the
+  // viewer zoom times the pt-to-CSS-px conversion (96/72). Dividing the
+  // measured width by the page's actual rendered scale factor yields PDF
+  // points regardless of zoom-sync state; multiplying by 96/72 converts
+  // back to the CSS width at 100% zoom (verified: a 612pt letter page
+  // renders 816 CSS px at 100%).
+  const resolvePdfPageWidth = () => {
+    const root = superdocRoot.value;
+    if (!root?.querySelectorAll) return null;
+    const PDF_POINTS_TO_CSS_PX = 96 / 72;
+    let widest = 0;
+    for (const page of root.querySelectorAll(PDF_PAGE_SELECTOR)) {
+      const measured = Number(page.clientWidth) || Number(page.getBoundingClientRect?.().width) || 0;
+      if (!(measured > 0)) continue;
+      let scaleFactor = NaN;
+      if (typeof window !== 'undefined' && typeof window.getComputedStyle === 'function') {
+        scaleFactor = Number.parseFloat(window.getComputedStyle(page).getPropertyValue('--scale-factor'));
+      }
+      let normalized;
+      if (Number.isFinite(scaleFactor) && scaleFactor > 0) {
+        normalized = (measured / scaleFactor) * PDF_POINTS_TO_CSS_PX;
+      } else {
+        // No scale-factor var: assume the viewer is synced to the global
+        // zoom and divide that out instead.
+        const zoomFactor = (activeZoom.value ?? 100) / 100;
+        normalized = zoomFactor > 0 ? measured / zoomFactor : measured;
+      }
+      if (normalized > widest) widest = normalized;
+    }
+    return widest > 0 ? widest : null;
+  };
+
+  // Widest measurable document width at 100% zoom across all loaded
+  // documents. Zoom is global, so the fit must target the widest page:
+  // otherwise one landscape or PDF document overflows while another fits.
+  // HTML documents reflow to the container and contribute no fixed width.
+  const resolveBaseDocumentWidth = () => {
+    const superdoc = getSuperdoc();
+    if (!superdoc) return null;
+    const widths = [];
+
+    const docs = documents?.value ?? [];
+    for (const doc of docs) {
+      if (doc?.type !== DOCX) continue;
+      const width = resolveEditorPageWidth(doc.getEditor?.());
+      if (width !== null) widths.push(width);
+    }
+    // Store shims in tests (and transitional states) may not expose
+    // per-document editors; fall back to the active editor's page styles.
+    if (widths.length === 0) {
+      const width = resolveEditorPageWidth(superdoc.activeEditor);
+      if (width !== null) widths.push(width);
+    }
+
+    const pdfWidth = resolvePdfPageWidth();
+    if (pdfWidth !== null) widths.push(pdfWidth);
+
+    if (widths.length > 0) return Math.max(...widths);
+
+    // Last resort for a DOCX editor without page styles: the rendered
+    // document element, normalized by zoom. Gated on an editor existing;
+    // before editor mount the element is shell scaffolding whose width is
+    // container-derived, which would produce a garbage base.
+    if (superdoc.activeEditor) {
+      const docEl = superdocRoot.value?.querySelector?.('.superdoc__document');
+      const measured = Number(docEl?.clientWidth) || Number(docEl?.getBoundingClientRect?.().width) || 0;
+      if (measured > 0) {
+        const zoomFactor = (activeZoom.value ?? 100) / 100;
+        return zoomFactor > 0 ? measured / zoomFactor : measured;
+      }
     }
 
     return null;
@@ -196,13 +265,18 @@ export function useViewportFit({
   const handlePaginationUpdate = () => {
     evaluateViewport();
   };
+  const handlePdfDocumentReady = () => {
+    nextTick(() => evaluateViewport());
+  };
 
   const superdocAtSetup = getSuperdoc();
   superdocAtSetup?.on?.('editorCreate', handleEditorCreate);
   superdocAtSetup?.on?.('pagination-update', handlePaginationUpdate);
+  superdocAtSetup?.on?.('pdf:document-ready', handlePdfDocumentReady);
   onBeforeUnmount(() => {
     superdocAtSetup?.off?.('editorCreate', handleEditorCreate);
     superdocAtSetup?.off?.('pagination-update', handlePaginationUpdate);
+    superdocAtSetup?.off?.('pdf:document-ready', handlePdfDocumentReady);
   });
 
   return { evaluateViewport };

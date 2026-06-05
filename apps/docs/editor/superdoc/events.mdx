@@ -420,8 +420,10 @@ superdoc.on('zoomChange', ({ zoom, mode }) => {
 When the width available to the document or the document's base page width changes (container resize, comments sidebar toggle, page orientation, document swap). The payload carries pure measurements; `zoom.fitWidth` policy options never affect them:
 
 - `availableWidth` - container width in pixels, minus the comments sidebar when visible
-- `documentWidth` - document base page width in pixels at 100% zoom (zoom-independent)
+- `documentWidth` - the widest document's base page width in pixels at 100% zoom (zoom-independent; DOCX from page styles, PDF from rendered pages)
 - `fitZoom` - the unclamped zoom percentage that fits the page into the available width
+
+HTML documents reflow to the container, so an HTML-only instance reports no metrics.
 
 The same values are readable at any time via `getViewportMetrics()`. For the common case, prefer [`zoom.mode: 'fit-width'`](/editor/superdoc/configuration#param-zoom), which clamps and applies the fit automatically. Subscribe to this event (or pass the `onViewportChange` config callback, which is registered before the first emit) only when you want to decide the zoom yourself.
 

@@ -571,7 +571,7 @@ const superdoc = new SuperDoc({
 
 ### `setZoomMode`
 
-Switch the zoom mode. `'fit-width'` continuously re-fits the document to the available container width, clamped by [`zoom.fitWidth`](/editor/superdoc/configuration#param-zoom); `'manual'` holds the current value. Switching to `'fit-width'` applies the fit immediately when viewport metrics are available.
+Switch the zoom mode. `'fit-width'` continuously re-fits the document to the available container width, clamped by [`zoom.fitWidth`](/editor/superdoc/configuration#param-zoom); `'manual'` holds the current value. Switching to `'fit-width'` applies the fit immediately when viewport metrics are available. Emits `zoomChange` (with the current value) so zoom UIs observe mode-only transitions; calling with the current mode is a no-op. Works for DOCX and PDF documents.
 
 <ParamField path="mode" type="'manual' | 'fit-width'" required>
   The zoom mode to switch to.

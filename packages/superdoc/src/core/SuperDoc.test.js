@@ -2199,6 +2199,32 @@ describe('SuperDoc core', () => {
       warn.mockRestore();
     });
 
+    it('setZoomMode emits zoomChange for mode-only transitions and no-ops on the same mode', async () => {
+      createAppHarness();
+
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+      });
+      await flushMicrotasks();
+
+      const zoomChangeSpy = vi.fn();
+      instance.on('zoomChange', zoomChangeSpy);
+
+      // Mode change with an unchanged value is observable.
+      instance.setZoomMode('fit-width');
+      expect(zoomChangeSpy).toHaveBeenCalledWith({ zoom: 100, mode: 'fit-width' });
+      expect(zoomChangeSpy).toHaveBeenCalledTimes(1);
+
+      // Same-mode call is a no-op: no state churn, no event.
+      instance.setZoomMode('fit-width');
+      expect(zoomChangeSpy).toHaveBeenCalledTimes(1);
+
+      instance.setZoomMode('manual');
+      expect(zoomChangeSpy).toHaveBeenCalledWith({ zoom: 100, mode: 'manual' });
+      expect(zoomChangeSpy).toHaveBeenCalledTimes(2);
+    });
+
     it('getZoomState reports mode, value, fitZoom, and effective bounds', async () => {
       const { superdocStore } = createAppHarness();
 
