@@ -6,7 +6,7 @@
 
 import type { PMNode } from '../types.js';
 import type { ParagraphProperties, SectionVerticalAlign } from './types.js';
-import type { ColumnLayout } from '@superdoc/contracts';
+import type { ColumnLayout, PageNumberChapterSeparator } from '@superdoc/contracts';
 
 const TWIPS_PER_INCH = 1440;
 const PX_PER_INCH = 96;
@@ -52,10 +52,26 @@ export function parseColumnSeparator(rawValue: string | number | undefined): boo
   return rawValue === '1' || rawValue === 'true' || rawValue === 'on' || rawValue === 1;
 }
 
+function parsePositiveInteger(rawValue: unknown): number | undefined {
+  const value = Number(rawValue);
+  return Number.isInteger(value) && value > 0 ? value : undefined;
+}
+
+function isKnownChapterSeparator(value: unknown): value is PageNumberChapterSeparator {
+  return typeof value === 'string' && (CHAPTER_SEPARATOR_VALUES as readonly string[]).includes(value);
+}
+
 type SectionType = 'continuous' | 'nextPage' | 'evenPage' | 'oddPage';
 type Orientation = 'portrait' | 'landscape';
 type HeaderRefType = Partial<Record<'default' | 'first' | 'even' | 'odd', string>>;
 type NumberingFormat = 'decimal' | 'lowerLetter' | 'upperLetter' | 'lowerRoman' | 'upperRoman' | 'numberInDash';
+const CHAPTER_SEPARATOR_VALUES: readonly PageNumberChapterSeparator[] = [
+  'hyphen',
+  'period',
+  'colon',
+  'emDash',
+  'enDash',
+] as const;
 
 interface SectionElement {
   name: string;
@@ -210,6 +226,8 @@ function extractPageNumbering(elements: SectionElement[]):
   | {
       format?: NumberingFormat;
       start?: number;
+      chapterStyle?: number;
+      chapterSeparator?: PageNumberChapterSeparator;
     }
   | undefined {
   const pgNumType = elements.find((el) => el?.name === 'w:pgNumType');
@@ -228,13 +246,23 @@ function extractPageNumbering(elements: SectionElement[]):
 
   const startRaw = pgNumType.attributes['w:start'];
   const startNum = startRaw != null ? Number(startRaw) : undefined;
+  const hasStart = Number.isFinite(startNum);
+  const chapterStyle = parsePositiveInteger(pgNumType.attributes['w:chapStyle']);
+  const chapterSeparatorRaw = pgNumType.attributes['w:chapSep'];
+  const chapterSeparator = isKnownChapterSeparator(chapterSeparatorRaw) ? chapterSeparatorRaw : undefined;
 
   // Per OOXML spec, when w:start restarts numbering without w:fmt, default to decimal (Arabic numerals)
-  const effectiveFormat = fmt ?? (Number.isFinite(startNum) ? 'decimal' : undefined);
+  const effectiveFormat = fmt ?? (hasStart ? 'decimal' : undefined);
+
+  if (effectiveFormat === undefined && !hasStart && chapterStyle === undefined && chapterSeparator === undefined) {
+    return undefined;
+  }
 
   return {
     format: effectiveFormat,
-    ...(Number.isFinite(startNum) ? { start: Number(startNum) } : {}),
+    ...(hasStart ? { start: Number(startNum) } : {}),
+    ...(chapterStyle !== undefined ? { chapterStyle } : {}),
+    ...(chapterSeparator !== undefined ? { chapterSeparator } : {}),
   };
 }
 
@@ -245,7 +273,7 @@ function extractColumns(elements: SectionElement[]): ColumnLayout | undefined {
   const cols = elements.find((el) => el?.name === 'w:cols');
   if (!cols?.attributes) return undefined;
 
-  const count = parseColumnCount(cols.attributes['w:num'] as string | number | undefined);
+  let count = parseColumnCount(cols.attributes['w:num'] as string | number | undefined);
   const withSeparator = parseColumnSeparator(cols.attributes['w:sep'] as string | number | undefined);
   const equalWidthRaw = cols.attributes['w:equalWidth'];
   const equalWidth =
@@ -255,20 +283,63 @@ function extractColumns(elements: SectionElement[]): ColumnLayout | undefined {
         ? true
         : undefined;
   const columnChildren = Array.isArray(cols.elements) ? cols.elements.filter((child) => child?.name === 'w:col') : [];
-  const gapTwips =
-    cols.attributes['w:space'] ??
-    columnChildren.find((child) => child?.attributes?.['w:space'] != null)?.attributes?.['w:space'];
-  const gapInches = parseColumnGap(gapTwips as string | number | undefined);
-  const widths = columnChildren
-    .map((child) => Number(child.attributes?.['w:w']))
-    .filter((widthTwips) => Number.isFinite(widthTwips) && widthTwips > 0)
-    .map((widthTwips) => (widthTwips / 1440) * PX_PER_INCH);
+  // ECMA-376 §17.6.4 column mode, validated against Word (MS Word 16 oracle):
+  //   Explicit mode (`w:equalWidth="0"`): widths and inter-column spacing come from the child
+  //   `<w:col>` elements (`w:w` + `w:space`, default 0); the section `w:cols/@w:space` is
+  //   ignored. Per-column distinct spacing is emitted as `gaps` (length count-1; the last
+  //   column's space is never a gap). The scalar `gap` stays the first-gap fallback for
+  //   consumers not yet reading geometry. (SD-2629)
+  //   Equal mode (`w:equalWidth="1"` or omitted): Word ignores all child `<w:col>` data. The
+  //   gap comes from `w:cols/@w:space` (default 720); a child `w:space` is NOT consulted, and
+  //   child widths are dropped so the columns divide evenly. Count comes from `w:num`
+  //   (default 1) in equal mode, and is capped to the valid child-width count in explicit
+  //   mode (Word renders min(num, count of <w:col> with a usable w:w)). (SD-2324)
+  const isExplicit = equalWidth === false;
+  const toPx = (twips: number) => (twips / TWIPS_PER_INCH) * PX_PER_INCH;
+
+  // Build valid <w:col> records, preserving the (width, space) pairing so a dropped/zero-width
+  // column never desyncs the per-column spacing from its column. "Valid" = usable w:w (finite,
+  // > 0), matching the Word count rule min(num, valid-width count). w:col/@space is the space
+  // AFTER a column and defaults to 0 (ECMA-376 §17.6.3); it must NOT borrow parseColumnGap's
+  // section-gap default. (SD-2629)
+  const columnRecords = columnChildren
+    .map((child) => {
+      const widthTwips = Number(child.attributes?.['w:w']);
+      const spaceTwips = Number(child.attributes?.['w:space']);
+      return { widthTwips, spaceTwips: Number.isFinite(spaceTwips) && spaceTwips > 0 ? spaceTwips : 0 };
+    })
+    .filter((record) => Number.isFinite(record.widthTwips) && record.widthTwips > 0);
+
+  // Explicit mode: cap w:num to the valid-width count (Word renders min(num, that count); e.g.
+  // w:num="4" with two <w:col> => 2 columns, verified vs Word). This is the authoritative count
+  // both the fill loop and width math read; the matching clamp in normalizeColumnLayout is a
+  // defensive net for any other producer. (SD-2324 F8)
+  if (isExplicit && columnRecords.length > 0) {
+    count = Math.min(count, columnRecords.length);
+  }
+
+  // Slice to the resolved count: widths[i] for i < count; gaps[i] = space after column i for
+  // i < count-1, so gaps.length === count-1 (the last column has no following gap). Slicing the
+  // VALID records (not raw children) keeps gaps capped at count-1, never the raw child count.
+  const widths = columnRecords.slice(0, count).map((record) => toPx(record.widthTwips));
+  const gaps = columnRecords.slice(0, Math.max(0, count - 1)).map((record) => toPx(record.spaceTwips));
+
+  // Scalar gap is the single-gap fallback for consumers not yet reading geometry: in explicit mode
+  // the first VALID column's own space (=== gaps[0]), NOT the first raw child that declares a
+  // w:space; a dropped or zero-width column must never contribute a gap. Equal mode uses the
+  // section w:cols/@w:space (default 720). The flip to per-column geometry is step 4. (SD-2629)
+  const gapPx = isExplicit
+    ? toPx(columnRecords[0]?.spaceTwips ?? 0)
+    : parseColumnGap(cols.attributes['w:space'] as string | number | undefined) * PX_PER_INCH;
 
   const result: ColumnLayout = {
     count,
-    gap: gapInches * PX_PER_INCH,
+    gap: gapPx,
     withSeparator,
-    ...(widths.length > 0 ? { widths } : {}),
+    // Only explicit columns carry per-column widths/gaps; equal mode divides evenly (Word ignores
+    // child `w:w`/`w:space` when equalWidth is "1" or omitted).
+    ...(isExplicit && widths.length > 0 ? { widths } : {}),
+    ...(isExplicit && gaps.length > 0 ? { gaps } : {}),
     ...(equalWidth !== undefined ? { equalWidth } : {}),
   };
 
@@ -346,7 +417,12 @@ export function extractSectionData(para: PMNode): {
   titlePg?: boolean;
   headerRefs?: HeaderRefType;
   footerRefs?: HeaderRefType;
-  numbering?: { format?: NumberingFormat; start?: number };
+  numbering?: {
+    format?: NumberingFormat;
+    start?: number;
+    chapterStyle?: number;
+    chapterSeparator?: PageNumberChapterSeparator;
+  };
   vAlign?: SectionVerticalAlign;
 } | null {
   const attrs = (para.attrs ?? {}) as Record<string, unknown>;

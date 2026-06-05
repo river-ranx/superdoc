@@ -18,7 +18,7 @@ import { Z_ORDER_RELATIVE_HEIGHT_MAX, Z_ORDER_RELATIVE_HEIGHT_MIN } from '../ima
 
 type JsonSchema = Record<string, unknown>;
 
-const trackChangeTypeValues = ['insert', 'delete', 'replacement', 'format'] as const;
+const trackChangeTypeValues = ['insert', 'delete', 'replacement', 'format', 'structural'] as const;
 
 /** JSON Schema descriptors for a single operation's input, output, and result variants. */
 export interface OperationSchemaSet {
@@ -1281,6 +1281,8 @@ const sectionLineNumberingSchema = objectSchema(
 const sectionPageNumberingSchema = objectSchema({
   start: { type: 'integer', minimum: 1 },
   format: sectionPageNumberFormatSchema,
+  chapterStyle: { type: 'integer', minimum: 1 },
+  chapterSeparator: { type: 'string', enum: ['hyphen', 'period', 'colon', 'emDash', 'enDash'] },
 });
 
 const sectionHeaderFooterRefsSchema = objectSchema({
@@ -1560,6 +1562,10 @@ const trackChangeInfoSchema = objectSchema(
     address: trackedChangeAddressSchema,
     id: { type: 'string' },
     type: { enum: [...trackChangeTypeValues] },
+    subtype: {
+      enum: ['table-insert', 'table-delete'],
+      description: "Finer classification for structural changes (type === 'structural').",
+    },
     grouping: { enum: ['standalone', 'replacement-pair', 'unknown'] },
     pairedWithChangeId: { type: ['string', 'null'] },
     wordRevisionIds: trackChangeWordRevisionIdsSchema,
@@ -1578,6 +1584,10 @@ const trackChangeDomainItemSchema = discoveryItemSchema(
   {
     address: trackedChangeAddressSchema,
     type: { enum: [...trackChangeTypeValues] },
+    subtype: {
+      enum: ['table-insert', 'table-delete'],
+      description: "Finer classification for structural changes (type === 'structural').",
+    },
     grouping: { enum: ['standalone', 'replacement-pair', 'unknown'] },
     pairedWithChangeId: { type: ['string', 'null'] },
     wordRevisionIds: trackChangeWordRevisionIdsSchema,
@@ -3787,6 +3797,134 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       failure: stylesFailureSchema,
     };
   })(),
+  'templates.apply': (() => {
+    const templatesReceiptFailureCodes = [...COMMAND_CATALOG['templates.apply'].possibleFailureCodes];
+    const pathSourceSchema = objectSchema({ kind: { const: 'path' }, path: { type: 'string' } }, ['kind', 'path']);
+    const base64SourceSchema = objectSchema(
+      { kind: { const: 'base64' }, data: { type: 'string' }, filename: { type: 'string' } },
+      ['kind', 'data'],
+    );
+    const inputSchema = objectSchema(
+      {
+        source: { oneOf: [pathSourceSchema, base64SourceSchema] },
+        bodyPolicy: { const: 'preserve' },
+      },
+      ['source'],
+    );
+
+    const scopeEnum = {
+      enum: [
+        'styles',
+        'numbering',
+        'settings',
+        'theme',
+        'fontTable',
+        'webSettings',
+        'headersFooters',
+        'sectionDefaults',
+      ],
+    };
+    const scopeReportSchema = objectSchema({ scope: scopeEnum, part: { type: 'string' }, detail: { type: 'string' } }, [
+      'scope',
+      'part',
+    ]);
+    const scopeSkipSchema = objectSchema(
+      {
+        scope: { type: 'string' },
+        part: { type: 'string' },
+        reason: { enum: ['NOT_PRESENT_IN_SOURCE', 'OUT_OF_SCOPE', 'NO_CHANGE', 'CAPABILITY_UNAVAILABLE'] },
+        message: { type: 'string' },
+      },
+      ['scope', 'reason', 'message'],
+    );
+    const unsupportedItemSchema = objectSchema(
+      { part: { type: 'string' }, category: { type: 'string' }, reason: { type: 'string' } },
+      ['part', 'category', 'reason'],
+    );
+    const changedPartSchema = objectSchema(
+      {
+        part: { type: 'string' },
+        scope: {
+          enum: [
+            'styles',
+            'numbering',
+            'settings',
+            'theme',
+            'fontTable',
+            'webSettings',
+            'headersFooters',
+            'sectionDefaults',
+            'package',
+          ],
+        },
+        change: { enum: ['created', 'replaced', 'merged', 'imported'] },
+      },
+      ['part', 'scope', 'change'],
+    );
+    const idMappingSchema = objectSchema(
+      { kind: { enum: ['style', 'numbering', 'relationship'] }, from: { type: 'string' }, to: { type: 'string' } },
+      ['kind', 'from', 'to'],
+    );
+    const sourceInfoSchema = objectSchema(
+      { kind: { enum: ['path', 'base64'] }, fingerprint: { type: 'string' }, partCount: { type: 'integer' } },
+      ['kind', 'fingerprint', 'partCount'],
+    );
+    const warningSchema = objectSchema({ code: { type: 'string' }, message: { type: 'string' } }, ['code', 'message']);
+
+    const templatesSuccessSchema = objectSchema(
+      {
+        success: { const: true },
+        changed: { type: 'boolean' },
+        dryRun: { type: 'boolean' },
+        bodyPolicy: { const: 'preserve' },
+        source: sourceInfoSchema,
+        detectedScopes: arraySchema(scopeReportSchema),
+        appliedScopes: arraySchema(scopeReportSchema),
+        skippedScopes: arraySchema(scopeSkipSchema),
+        unsupportedItems: arraySchema(unsupportedItemSchema),
+        changedParts: arraySchema(changedPartSchema),
+        idMappings: objectSchema({
+          styles: arraySchema(idMappingSchema),
+          numbering: arraySchema(idMappingSchema),
+          relationships: arraySchema(idMappingSchema),
+        }),
+        warnings: arraySchema(warningSchema),
+      },
+      [
+        'success',
+        'changed',
+        'dryRun',
+        'bodyPolicy',
+        'source',
+        'detectedScopes',
+        'appliedScopes',
+        'skippedScopes',
+        'unsupportedItems',
+        'changedParts',
+        'idMappings',
+        'warnings',
+      ],
+    );
+    const templatesFailureSchema = objectSchema(
+      {
+        success: { const: false },
+        failure: objectSchema(
+          {
+            code: { enum: templatesReceiptFailureCodes },
+            message: { type: 'string' },
+          },
+          ['code', 'message'],
+        ),
+      },
+      ['success', 'failure'],
+    );
+    return {
+      input: inputSchema,
+      output: { oneOf: [templatesSuccessSchema, templatesFailureSchema] },
+      success: templatesSuccessSchema,
+      failure: templatesFailureSchema,
+    };
+  })(),
   'create.paragraph': {
     input: objectSchema({
       in: storyLocatorSchema,
@@ -4018,10 +4156,17 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
           target: sectionAddressSchema,
           start: { type: 'integer', minimum: 1 },
           format: sectionPageNumberFormatSchema,
+          chapterStyle: { type: 'integer', minimum: 1 },
+          chapterSeparator: { type: 'string', enum: ['hyphen', 'period', 'colon', 'emDash', 'enDash'] },
         },
         ['target'],
       ),
-      oneOf: [{ required: ['target', 'start'] }, { required: ['target', 'format'] }],
+      anyOf: [
+        { required: ['target', 'start'] },
+        { required: ['target', 'format'] },
+        { required: ['target', 'chapterStyle'] },
+        { required: ['target', 'chapterSeparator'] },
+      ],
     },
     output: sectionMutationResultSchemaFor('sections.setPageNumbering'),
     success: sectionMutationSuccessSchema,
@@ -5028,7 +5173,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       offset: { type: 'integer', description: 'Number of tracked changes to skip for pagination.' },
       type: {
         enum: [...trackChangeTypeValues],
-        description: "Filter by change type: 'insert', 'delete', 'replacement', or 'format'.",
+        description: "Filter by change type: 'insert', 'delete', 'replacement', 'format', or 'structural'.",
       },
       in: {
         oneOf: [storyLocatorSchema, { const: 'all' }],
@@ -5049,7 +5194,22 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
         decision: { enum: ['accept', 'reject'] },
         target: {
           oneOf: [
-            objectSchema({ id: { type: 'string' }, story: storyLocatorSchema }, ['id']),
+            objectSchema(
+              {
+                id: { type: 'string' },
+                story: storyLocatorSchema,
+                // A partial-range qualifier on an entity (id) target. Accepted by
+                // the schema so the executor can fail closed with INVALID_INPUT
+                // on indivisible (e.g. structural whole-object) revisions rather
+                // than the runtime rejecting it as a malformed target.
+                range: {
+                  type: 'object',
+                  description:
+                    'Partial-range qualifier on an id target. Rejected with INVALID_INPUT for indivisible (e.g. structural) revisions.',
+                },
+              },
+              ['id'],
+            ),
             objectSchema(
               {
                 kind: { const: 'range' },

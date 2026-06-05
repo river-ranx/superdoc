@@ -1,4 +1,5 @@
 import type { TabStop } from './engines/tabs.js';
+import type { PageNumberChapterSeparator, PageNumberFieldFormat, PageNumberFormat } from './page-number-formatting.js';
 export { computeTabStops, layoutWithTabs, calculateTabWidth } from './engines/tabs.js';
 
 // Re-export TabStop for external consumers
@@ -33,6 +34,18 @@ export {
 } from './engines/tables.js';
 
 export { effectiveTableCellSpacing } from './table-cell-spacing.js';
+
+export {
+  selectHeaderFooterVariantForPage,
+  resolveEffectiveHeaderFooterRef,
+  type HeaderFooterKind,
+  type HeaderFooterVariant,
+  type HeaderFooterSectionRefs,
+  type HeaderFooterResolutionSection,
+  type HeaderFooterVariantSelectionInput,
+  type HeaderFooterEffectiveRefInput,
+  type HeaderFooterEffectiveRefResult,
+} from './header-footer-resolution.js';
 
 // Table column rescaling (moved from layout-engine for cross-stage use)
 export { rescaleColumnWidths } from './table-column-rescale.js';
@@ -79,6 +92,13 @@ export {
 
 export { computeFragmentPmRange, computeLinePmRange, type LinePmRange } from './pm-range.js';
 
+export {
+  resolveAnchoredGraphicY,
+  resolveAnchoredGraphicX,
+  type ColumnLayoutForAnchor,
+  type ResolveAnchoredGraphicYInput,
+} from './graphic-placement.js';
+
 // Editor-neutral layout identity primitives (prep-001).
 // Additive only — `pmStart`/`pmEnd` and PM-shaped fields remain available
 // alongside these on every fragment/run.
@@ -99,13 +119,28 @@ export type {
   LayoutStoryLocator,
 } from './layout-identity.js';
 import type { LayoutSourceIdentity } from './layout-identity.js';
-export { cloneColumnLayout, normalizeColumnLayout, widthsEqual } from './column-layout.js';
-export type { NormalizedColumnLayout } from './column-layout.js';
 export {
+  cloneColumnLayout,
+  columnLayoutsEqual,
+  columnRenderLayoutsEqual,
+  getColumnAtX,
+  getColumnGapAfter,
+  getColumnGeometry,
+  getColumnSeparatorPositions,
+  getColumnWidth,
+  getColumnX,
+  normalizeColumnLayout,
+  resolveColumnCount,
+  resolveColumnLayout,
+  resolveColumnMode,
+  widthsEqual,
+} from './column-layout.js';
+export type { ColumnGeometry, NormalizedColumnLayout } from './column-layout.js';
+export {
+  authorFromTrackedChangeMeta,
+  authorIdentityKey,
   composeAuthorColorResolver,
   fallbackAuthorColor,
-  authorIdentityKey,
-  authorFromTrackedChangeMeta,
   stampTrackedChangeColors,
 } from './author-colors.js';
 export type { AuthorColorsConfig, TrackChangeAuthorColorResolver } from './author-colors.js';
@@ -116,6 +151,26 @@ export {
   hasExplicitSdtContainerKey,
   isSdtContainerMetadata,
 } from './sdt-container.js';
+export {
+  resolveInheritedHeaderFooterRef,
+  resolveInheritedHeaderFooterRefWithType,
+  type HeaderFooterRefIdentifier,
+  type HeaderFooterRefMap,
+  type ResolvedInheritedHeaderFooterRef,
+  type ResolveInheritedHeaderFooterRefInput,
+} from './header-footer-inheritance.js';
+export {
+  formatChapterPageNumberText,
+  formatIntegerWithNumericPicture,
+  formatPageNumber,
+  formatPageNumberFieldValue,
+  formatSectionPageNumberText,
+  type PageNumberFieldFormat,
+  type PageNumberChapterSeparator,
+  type PageNumberFormat,
+} from './page-number-formatting.js';
+
+export { buildPageRefAnchorMap } from './page-ref-anchor.js';
 /** Inline field annotation metadata extracted from w:sdt nodes. */
 export type FieldAnnotationMetadata = {
   type: 'fieldAnnotation';
@@ -214,7 +269,7 @@ export type SdtMetadata =
   | DocumentSectionMetadata
   | DocPartMetadata;
 
-export const CONTRACTS_VERSION = '1.0.0';
+export const CONTRACTS_VERSION = '1.1.0';
 
 /** Unique identifier for a block in the document. Format: `${pos}-${type}`. */
 export type BlockId = string;
@@ -333,7 +388,6 @@ export type FlowRunLink = {
 export const EMPTY_SDT_PLACEHOLDER_TEXT = 'Click or tap here to enter text';
 
 export type SdtVisualPlaceholder = 'emptyInlineSdt' | 'emptyBlockSdt';
-
 /**
  * Common formatting marks that can be applied to any run type.
  * Used by TextRun, TabRun, and other run types that support inline formatting.
@@ -369,6 +423,26 @@ export type RunMarks = {
   baselineShift?: number;
 };
 
+export type PageReferenceRelativePositionText = 'above' | 'below';
+
+export type FieldResultFormat = 'charformat' | 'mergeformat';
+
+export type NumericPictureFormat = {
+  /** Raw argument after the \# switch, without surrounding quotes. */
+  picture: string;
+};
+
+export interface PageRefLocation {
+  physicalPage: number;
+  displayNumber: number;
+  displayText: string;
+  pageFormat?: PageNumberFormat;
+  chapterNumberText?: string;
+  chapterSeparator?: PageNumberChapterSeparator;
+  sectionIndex?: number;
+  pmPosition?: number;
+}
+
 export type TextRun = RunMarks & {
   kind?: 'text';
   text: string;
@@ -390,7 +464,9 @@ export type TextRun = RunMarks & {
   visualPlaceholder?: SdtVisualPlaceholder;
   link?: FlowRunLink;
   /** Token annotations for dynamic content (page numbers, etc.). */
-  token?: 'pageNumber' | 'totalPageCount' | 'pageReference';
+  token?: 'pageNumber' | 'totalPageCount' | 'pageReference' | 'sectionPageCount' | 'seq';
+  /** Explicit formatting requested by PAGE/NUMPAGES/SECTIONPAGES field switches. */
+  pageNumberFieldFormat?: PageNumberFieldFormat;
   /** Absolute ProseMirror position (inclusive) of first character in this run. */
   pmStart?: number;
   /** Absolute ProseMirror position (exclusive) after the last character. */
@@ -399,6 +475,29 @@ export type TextRun = RunMarks & {
   pageRefMetadata?: {
     bookmarkId: string;
     instruction: string;
+    /** True when the instruction has \p. */
+    relativePosition?: boolean;
+    /** General numeric formatting switch for the PAGEREF page value. */
+    pageNumberFieldFormat?: PageNumberFieldFormat;
+    /** Raw numeric picture from \#. */
+    numericPictureFormat?: NumericPictureFormat;
+    /** CHARFORMAT / MERGEFORMAT, if present. */
+    fieldResultFormat?: FieldResultFormat;
+  };
+  /** Metadata for SEQ tokens (resolved by super-editor before layout measurement). */
+  seqMetadata?: {
+    identifier: string;
+    instruction?: string;
+    fieldArgument?: string;
+    sequenceMode?: 'next' | 'current';
+    hideResult?: boolean;
+    restartNumber?: number | null;
+    restartLevel?: number | null;
+    format?: string;
+    hasGeneralFormat?: boolean;
+    pageNumberFieldFormat?: PageNumberFieldFormat | null;
+    numericPictureFormat?: NumericPictureFormat | null;
+    cachedText?: string;
   };
   /** Tracked-change metadata from ProseMirror marks. */
   trackedChange?: TrackedChangeMeta;
@@ -422,6 +521,13 @@ export type TextRun = RunMarks & {
 export type TabRun = RunMarks & {
   kind: 'tab';
   text: '\t';
+  /**
+   * Font of the tab, inherited from the paragraph's resolved run properties. A tab has
+   * no glyphs, but its font drives the line height (so a tab-only line matches a text
+   * line) and the underline weight. Optional: not every producer sets it.
+   */
+  fontFamily?: string;
+  fontSize?: number;
   /** Width in pixels (assigned by measurer/resolver). */
   width?: number;
   tabStops?: TabStop[];
@@ -760,6 +866,23 @@ export type TableRowAttrs = {
     value: number;
     rule?: 'auto' | 'atLeast' | 'exact' | string;
   };
+  /**
+   * Structural tracked change on the whole row (inserted/deleted row), imported
+   * from `<w:ins>`/`<w:del>` inside `<w:trPr>`. Reuses the same shared
+   * {@link TrackedChangeMeta} shape that inline runs carry, so one painter +
+   * color-stamping system handles both inline and structural tracked changes.
+   * `kind` is `'insert'` for an inserted row and `'delete'` for a deleted row.
+   * `color` is stamped downstream by {@link stampTrackedChangeColors}.
+   */
+  trackedChange?: TrackedChangeMeta;
+  /**
+   * Row-level border override from OOXML `w:tblPrEx/w:tblBorders` (§17.4.61).
+   * Table property exceptions override the table-level borders for this row
+   * only. Rows without a `tblPrEx` border block leave this undefined and fall
+   * through to the table's borders. Resolved (eighth-points → px) by the v1
+   * layout-adapter; the painter merges it over the table borders per edge.
+   */
+  borders?: TableBorders;
 };
 
 export type TableRow = {
@@ -798,6 +921,11 @@ export type PageMargins = {
   header?: number;
   footer?: number;
   gutter?: number;
+};
+
+export type DocumentBackground = {
+  /** Solid page background color as a CSS hex value. */
+  color: string;
 };
 
 export type ImageBlockAttrs = {
@@ -921,8 +1049,10 @@ export type TextFormatting = {
 export type TextPart = {
   text: string;
   formatting?: TextFormatting;
-  /** Optional field token (e.g., PAGE/NUMPAGES) resolved at render time. */
-  fieldType?: 'PAGE' | 'NUMPAGES';
+  /** Optional field token (e.g., PAGE/NUMPAGES/SECTIONPAGES) resolved at render time. */
+  fieldType?: 'PAGE' | 'NUMPAGES' | 'SECTIONPAGES';
+  /** PAGE/SECTIONPAGES field-local value formatting override. */
+  pageNumberFormat?: PageNumberFormat;
   /** Indicates this part represents a line break between paragraphs. */
   isLineBreak?: boolean;
   /** Indicates this line break follows an empty paragraph (creates extra spacing). */
@@ -1180,10 +1310,7 @@ export type SectionBreakBlock = {
     /** Left page margin */
     left?: number;
   };
-  numbering?: {
-    format?: 'decimal' | 'lowerLetter' | 'upperLetter' | 'lowerRoman' | 'upperRoman' | 'numberInDash';
-    start?: number;
-  };
+  numbering?: SectionNumbering;
   headerRefs?: {
     default?: string;
     first?: string;
@@ -1222,8 +1349,10 @@ export type SectionRefs = {
 };
 
 export type SectionNumbering = {
-  format?: 'decimal' | 'lowerLetter' | 'upperLetter' | 'lowerRoman' | 'upperRoman' | 'numberInDash';
+  format?: PageNumberFormat;
   start?: number;
+  chapterStyle?: number;
+  chapterSeparator?: PageNumberChapterSeparator;
 };
 
 export type SectionMetadata = {
@@ -1605,6 +1734,10 @@ export type ParagraphAttrs = {
   dropCapDescriptor?: DropCapDescriptor;
   frame?: ParagraphFrame;
   numberingProperties?: { ilvl?: number; numId?: number } | null;
+  /** Built-in heading level resolved from style metadata, where 1 means Heading 1. */
+  headingLevel?: number;
+  /** Current list level ordinal from structured numbering metadata. */
+  listLevelOrdinal?: number;
   borders?: ParagraphBorders;
   shading?: ParagraphShading;
   tabs?: TabStop[];
@@ -1714,6 +1847,12 @@ export type ColumnLayout = {
   withSeparator?: boolean;
   widths?: number[];
   equalWidth?: boolean;
+  /**
+   * Per-column inter-column gaps in px, length `count - 1`: the gap after each column except the
+   * last. Explicit mode (`equalWidth === false`) only, derived from each `<w:col w:space>`; equal
+   * mode uses the scalar `gap`. When absent, consumers fall back to the uniform `gap`. (SD-2629)
+   */
+  gaps?: number[];
 };
 
 /**
@@ -2001,7 +2140,17 @@ export type Page = {
    * (in later phases) by body pagination itself.
    */
   footnoteLedger?: FootnotePageLedger;
+  /** Numeric page number after section numbering restart/offset. Used for OOXML odd/even parity. */
+  displayNumber?: number;
   numberText?: string;
+  /** Numeric page number after section page numbering settings are applied. */
+  effectivePageNumber?: number;
+  /** Section PAGE number format before any run-local PAGE switch is applied. */
+  pageNumberFormat?: PageNumberFormat;
+  /** MVP chapter prefix text derived from the nearest numbered Heading N marker. */
+  pageNumberChapterText?: string;
+  /** Separator between chapter prefix and page number component. */
+  pageNumberChapterSeparator?: PageNumberChapterSeparator;
   size?: { w: number; h: number };
   orientation?: 'portrait' | 'landscape';
   sectionRefs?: {
@@ -2229,6 +2378,14 @@ export type HeaderFooterPage = {
   number: number;
   fragments: Fragment[];
   numberText?: string;
+  /** Section-aware numeric page value before formatting. */
+  displayNumber?: number;
+  /** Section PAGE number format before any run-local PAGE switch is applied. */
+  pageNumberFormat?: PageNumberFormat;
+  /** MVP chapter prefix text derived from the nearest numbered Heading N marker. */
+  pageNumberChapterText?: string;
+  /** Separator between chapter prefix and page number component. */
+  pageNumberChapterSeparator?: PageNumberChapterSeparator;
   /**
    * Optional page-local block clones backing this page's resolved fragments.
    * Present when header/footer tokens were laid out per page or per bucket.
@@ -2257,6 +2414,8 @@ export type HeaderFooterLayout = {
 export type Layout = {
   pageSize: { w: number; h: number };
   pages: Page[];
+  /** Optional document-level page background from OOXML w:background. */
+  documentBackground?: DocumentBackground;
   columns?: ColumnLayout;
   headerFooter?: Partial<Record<HeaderFooterType, HeaderFooterLayout>>;
   /**

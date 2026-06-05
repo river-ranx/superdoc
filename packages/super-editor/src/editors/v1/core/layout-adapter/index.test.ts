@@ -678,6 +678,31 @@ describe('toFlowBlocks', () => {
       });
     });
 
+    it('preserves PAGE field-local page number format on token runs', () => {
+      const pmDoc = {
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            content: [
+              {
+                type: 'page-number',
+                attrs: { pageNumberFormat: 'upperRoman' },
+              },
+            ],
+          },
+        ],
+      };
+
+      const {
+        blocks: [block],
+      } = toFlowBlocks(pmDoc);
+      expect(block.runs[0]).toMatchObject({
+        token: 'pageNumber',
+        pageNumberFieldFormat: { format: 'upperRoman' },
+      });
+    });
+
     it('preserves bold formatting on page number token', () => {
       const pmDoc = {
         type: 'doc',
@@ -905,6 +930,7 @@ describe('toFlowBlocks', () => {
         gap: 101.53333333333333,
         withSeparator: false,
         widths: [72, 497.26666666666665],
+        gaps: [101.53333333333333],
         equalWidth: false,
       });
     });
@@ -2559,6 +2585,47 @@ describe('toFlowBlocks', () => {
         pageRefMetadata: {
           bookmarkId: '_Toc987654321',
           instruction: 'PAGEREF "_Toc987654321" \\h',
+        },
+      });
+    });
+
+    it('uses typed pageReference attrs before reparsing raw instruction', () => {
+      const pmDoc = {
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            content: [
+              {
+                type: 'pageReference',
+                attrs: {
+                  instruction: 'PAGEREF legacy',
+                  bookmarkId: '_TypedTarget',
+                  hasHyperlinkSwitch: true,
+                  hasRelativePositionSwitch: true,
+                  pageNumberFieldFormat: { format: 'upperRoman' },
+                  numericPictureFormat: { picture: '00' },
+                  fieldResultFormat: 'mergeformat',
+                },
+                content: [{ type: 'text', text: '7' }],
+              },
+            ],
+          },
+        ],
+      };
+
+      const { blocks } = toFlowBlocks(pmDoc);
+
+      expect(blocks[0].runs[0]).toMatchObject({
+        token: 'pageReference',
+        link: { anchor: '_TypedTarget' },
+        pageRefMetadata: {
+          bookmarkId: '_TypedTarget',
+          instruction: 'PAGEREF legacy',
+          relativePosition: true,
+          pageNumberFieldFormat: { format: 'upperRoman' },
+          numericPictureFormat: { picture: '00' },
+          fieldResultFormat: 'mergeformat',
         },
       });
     });
