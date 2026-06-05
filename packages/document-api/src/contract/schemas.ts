@@ -3816,10 +3816,10 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
         'sectionDefaults',
       ],
     };
-    const scopeReportSchema = objectSchema(
-      { scope: scopeEnum, part: { type: 'string' }, detail: { type: 'string' } },
-      ['scope', 'part'],
-    );
+    const scopeReportSchema = objectSchema({ scope: scopeEnum, part: { type: 'string' }, detail: { type: 'string' } }, [
+      'scope',
+      'part',
+    ]);
     const scopeSkipSchema = objectSchema(
       {
         scope: { type: 'string' },
