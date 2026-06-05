@@ -89,6 +89,12 @@ describe('computeAppliedFitZoom', () => {
   it('returns null when padding consumes the available width', () => {
     expect(computeAppliedFitZoom(90, 816, { ...options, padding: 96 })).toBeNull();
   });
+
+  it('never rounds the applied fit to zero (engine rejects non-positive zoom)', () => {
+    // Fractional factor-style min plus a degenerate container: clamp lifts
+    // the raw fit to 0.4, which must floor to 1, not round to 0.
+    expect(computeAppliedFitZoom(3, 816, { min: 0.4, max: 100, padding: 0 })).toBe(1);
+  });
 });
 
 describe('normalizePdfPageMeasurement', () => {

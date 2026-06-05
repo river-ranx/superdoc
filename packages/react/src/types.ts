@@ -175,10 +175,10 @@ export interface CallbackProps {
   /** Callback when an exception is thrown */
   onException?: (event: SuperDocExceptionEvent) => void;
 
-  /** Callback when the zoom level changes (setZoom, toolbar, or fit-to-container) */
+  /** Callback when the zoom level changes (setZoom, toolbar, or fit-width mode) */
   onZoomChange?: (event: SuperDocZoomChangeEvent) => void;
 
-  /** Callback when the width available to the document or its base page width changes */
+  /** Callback when the implied fit changes (rounded fit zoom or base page width); see the core viewport-change event */
   onViewportChange?: (event: SuperDocViewportChangeEvent) => void;
 }
 

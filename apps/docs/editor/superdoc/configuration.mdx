@@ -757,7 +757,7 @@ All handlers are optional functions in the configuration:
 </ParamField>
 
 <ParamField path="onViewportChange" type="function">
-  Called when the width available to the document or its base page width changes. Registered before the first emit, so the initial measurement is never missed. See the [`viewport-change`](/editor/superdoc/events#viewport-change) event.
+  Called when the implied fit changes (rounded fit zoom or base page width); pixel-level width jitter is deduped and `getViewportMetrics()` always reads latest. Registered before the first emit, so the initial measurement is never missed. See the [`viewport-change`](/editor/superdoc/events#viewport-change) event.
 
   ```javascript
   onViewportChange: ({ availableWidth, documentWidth, fitZoom }) => {

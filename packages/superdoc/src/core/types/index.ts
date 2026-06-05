@@ -1727,11 +1727,13 @@ export interface SuperDocZoomPayload {
 
 /**
  * Payload emitted with the `viewport-change` event and passed to
- * `Config.onViewportChange`. Fires when the width available to the
- * document or the document's base page width changes. These are pure
- * measurements: `zoom.fitWidth` policy options (`min`, `max`,
- * `padding`) do not affect them. Useful for implementing custom
- * fit behavior; for the common case, prefer `zoom.mode: 'fit-width'`,
+ * `Config.onViewportChange`. The event fires when the implied fit
+ * changes: the rounded `fitZoom` or the rounded base page width.
+ * Pixel-level `availableWidth` movement that cannot change any fit
+ * decision does not emit; read `getViewportMetrics()` for the
+ * always-latest measurements. These are pure measurements:
+ * `zoom.fitWidth` policy options (`min`, `max`, `padding`) do not
+ * affect them. For the common case, prefer `zoom.mode: 'fit-width'`,
  * which applies a clamped fit automatically.
  */
 export interface SuperDocViewportChangePayload {
@@ -1740,7 +1742,7 @@ export interface SuperDocViewportChangePayload {
    * width minus the comments sidebar when it is visible.
    */
   availableWidth: number;
-  /** Document base page width in pixels at 100% zoom (zoom-independent). */
+  /** Widest document page width in pixels at 100% zoom (zoom-independent; DOCX from laid-out pages with page-styles fallback, PDF from rendered pages). */
   documentWidth: number;
   /** Zoom percentage that fits the document in the available width (unclamped, padding-free). Clamp before applying. */
   fitZoom: number;
@@ -1749,8 +1751,9 @@ export interface SuperDocViewportChangePayload {
 /**
  * Latest viewport measurements, readable at any time via
  * `superdoc.getViewportMetrics()`. Same shape as the
- * `viewport-change` payload; `null` until the first measurement
- * (editors still mounting).
+ * `viewport-change` payload and refreshed on every measurement
+ * (including pixel-level changes the deduped event skips); `null`
+ * until the first measurement (editors still mounting).
  */
 export type SuperDocViewportMetrics = SuperDocViewportChangePayload;
 
@@ -1962,10 +1965,11 @@ export interface Config {
    */
   onZoomChange?: (params: SuperDocZoomPayload) => void;
   /**
-   * Callback when the width available to the document or the
-   * document's base page width changes. Registered before the first
-   * emit, so the initial viewport measurement is never missed (unlike
-   * subscribing inside `onReady`).
+   * Callback when the implied fit changes (rounded fit zoom or base
+   * page width); pixel-level width jitter does not fire it, and
+   * `getViewportMetrics()` always reads latest. Registered before the
+   * first emit, so the initial viewport measurement is never missed
+   * (unlike subscribing inside `onReady`).
    */
   onViewportChange?: (params: SuperDocViewportChangePayload) => void;
   /** The format of the document (docx, pdf, html). */

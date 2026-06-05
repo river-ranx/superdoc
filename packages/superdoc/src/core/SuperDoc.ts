@@ -8,6 +8,7 @@ import { HocuspocusProviderWebsocket } from '@hocuspocus/provider';
 import { DOCX, PDF, HTML, getActorIdentityKey, normalizeActorEmail } from '@superdoc/common';
 import { SuperToolbar, createZip, seedEditorStateToYDoc, onCollaborationProviderSynced } from '@superdoc/super-editor';
 import { SuperComments } from '../components/CommentsLayer/commentsList/super-comments-list.js';
+import { resolveFitWidthOptions } from '../composables/use-viewport-fit.js';
 import { createSuperdocVueApp } from './create-app.js';
 import { shuffleArray } from '@superdoc/common/collaboration/awareness';
 import { createDownload, cleanName } from './helpers/export.js';
@@ -2387,13 +2388,18 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
       console.warn('[SuperDoc] setZoom expects a positive number representing percentage');
       return;
     }
+    // Before async init attaches the store there is nothing to write, and
+    // emitting anyway would tell listeners about a zoom that never
+    // happened. Use config.zoom.initial for pre-init zoom instead.
+    if (!this.superdocStore) {
+      console.warn('[SuperDoc] setZoom called before initialization; use config.zoom.initial for the starting zoom');
+      return;
+    }
 
     // Update store — SuperDoc.vue's activeZoom watcher propagates the zoom
     // to all PresentationEditor instances via PresentationEditor.setGlobalZoom().
-    if (this.superdocStore) {
-      this.superdocStore.activeZoom = percent;
-      this.superdocStore.zoomMode = 'manual';
-    }
+    this.superdocStore.activeZoom = percent;
+    this.superdocStore.zoomMode = 'manual';
 
     this.emit('zoomChange', { zoom: percent, mode: 'manual' });
   }
@@ -2416,10 +2422,15 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
       console.warn("[SuperDoc] setZoomMode expects 'manual' or 'fit-width'");
       return;
     }
-    if (this.superdocStore?.zoomMode === mode) return;
-    if (this.superdocStore) {
-      this.superdocStore.zoomMode = mode;
+    // Before async init attaches the store the mode cannot persist, and
+    // emitting anyway would advertise a mode change that never happened.
+    // Use config.zoom.mode for the starting mode instead.
+    if (!this.superdocStore) {
+      console.warn('[SuperDoc] setZoomMode called before initialization; use config.zoom.mode for the starting mode');
+      return;
     }
+    if (this.superdocStore.zoomMode === mode) return;
+    this.superdocStore.zoomMode = mode;
     this.emit('zoomChange', { zoom: this.getZoom(), mode });
   }
 
@@ -2432,17 +2443,15 @@ export class SuperDoc extends EventEmitter<SuperDocEventMap> {
    * const { mode, value, fitZoom } = superdoc.getZoomState();
    */
   getZoomState(): SuperDocZoomState {
-    const fitWidth = this.config.zoom?.fitWidth;
-    const positiveOr = (value: unknown, fallback: number) =>
-      typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : fallback;
-    const min = positiveOr(fitWidth?.min, 10);
-    const max = positiveOr(fitWidth?.max, 100);
+    // Same resolver the fit policy applies, so the reported bounds cannot
+    // drift from the clamping behavior.
+    const fit = resolveFitWidthOptions(this.config.zoom?.fitWidth);
     return {
       mode: this.superdocStore?.zoomMode ?? 'manual',
       value: this.superdocStore?.activeZoom ?? 100,
       fitZoom: this.superdocStore?.viewportMetrics?.fitZoom ?? null,
-      min: Math.min(min, max),
-      max: Math.max(min, max),
+      min: fit.min,
+      max: fit.max,
     };
   }
 

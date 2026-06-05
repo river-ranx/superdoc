@@ -1,5 +1,6 @@
 import { onBeforeUnmount, nextTick, watch } from 'vue';
-import { DOCX } from '@superdoc/common';
+import { DOCX, PDF } from '@superdoc/common';
+import { PDF_TO_CSS_UNITS } from '@superdoc/core/pdf/helpers/constants.js';
 
 const CSS_PX_PER_INCH = 96;
 const SIDEBAR_SELECTOR = '.superdoc__right-sidebar';
@@ -40,25 +41,27 @@ export const computeFitZoom = (availableWidth, documentWidth) => {
 };
 
 // Applied zoom for the fit-width policy: padding reserved, then clamped.
+// Floored at 1: fractional bounds (e.g. a factor-style min of 0.4) plus a
+// degenerate container could otherwise round to 0, which the presentation
+// engine rejects with a throw.
 export const computeAppliedFitZoom = (availableWidth, documentWidth, options) => {
   const padded = computeFitZoom(availableWidth - options.padding, documentWidth);
   if (padded === null) return null;
-  return Math.round(Math.min(options.max, Math.max(options.min, padded)));
+  return Math.max(1, Math.round(Math.min(options.max, Math.max(options.min, padded))));
 };
-
-const PDF_POINTS_TO_CSS_PX = 96 / 72;
 
 // One measured PDF page width back to CSS px at 100% zoom. PDF pages size
 // via `calc(var(--scale-factor) * <pt>px)` where the scale factor is the
-// viewer zoom times the pt-to-CSS-px conversion (96/72), so dividing by the
-// page's actual scale factor yields PDF points regardless of zoom-sync
-// state, and multiplying by 96/72 converts back to CSS px at 100% zoom
-// (verified live: a 612pt letter page renders 816 CSS px at 100%). Without
-// a readable scale factor, fall back to dividing out the assumed zoom.
+// viewer zoom times PDF_TO_CSS_UNITS (the same constant PdfViewerPage uses
+// to write that variable), so dividing by the page's actual scale factor
+// yields PDF points regardless of zoom-sync state, and multiplying by
+// PDF_TO_CSS_UNITS converts back to CSS px at 100% zoom (verified live: a
+// 612pt letter page renders 816 CSS px at 100%). Without a readable scale
+// factor, fall back to dividing out the assumed zoom.
 export const normalizePdfPageMeasurement = (measured, scaleFactor, zoomFactor) => {
   if (!(measured > 0)) return null;
   if (Number.isFinite(scaleFactor) && scaleFactor > 0) {
-    return (measured / scaleFactor) * PDF_POINTS_TO_CSS_PX;
+    return (measured / scaleFactor) * PDF_TO_CSS_UNITS;
   }
   return zoomFactor > 0 ? measured / zoomFactor : measured;
 };
@@ -97,13 +100,36 @@ export function useViewportFit({
   zoomMode,
   viewportMetrics,
   showCommentsSidebar,
+  rightSidebarRef,
   superdocRoot,
   documents,
 }) {
-  // Page width in CSS px at 100% zoom for one DOCX editor, from its page
-  // styles (zoom-independent), or null when unavailable.
+  // Page width in CSS px at 100% zoom for one DOCX editor. Same two-tier
+  // source the renderer's own container sizing uses (SuperEditor.vue):
+  // the widest laid-out page first, so interior landscape or custom-width
+  // sections fit correctly, then the body section's page styles before
+  // pagination has produced pages. Both are zoom-independent. Like the
+  // renderer, the value converges as wider sections first render; the
+  // pagination-update hook re-evaluates on exactly that signal.
   const resolveEditorPageWidth = (editor) => {
     if (!editor) return null;
+
+    let widestPage = 0;
+    try {
+      const pages = editor.getPages?.();
+      if (Array.isArray(pages)) {
+        for (const page of pages) {
+          const width = page?.size?.w;
+          if (typeof width === 'number' && Number.isFinite(width) && width > widestPage) {
+            widestPage = width;
+          }
+        }
+      }
+    } catch {
+      widestPage = 0;
+    }
+    if (widestPage > 0) return widestPage;
+
     let pageStyles = null;
     try {
       pageStyles = editor.getPageStyles?.() ?? null;
@@ -118,8 +144,12 @@ export function useViewportFit({
   };
 
   // Widest rendered PDF page in CSS px at 100% zoom. See
-  // `normalizePdfPageMeasurement` for the unit handling.
+  // `normalizePdfPageMeasurement` for the unit handling. Skipped entirely
+  // when no PDF document is loaded: the query plus per-page computed-style
+  // reads would otherwise run on every repagination of DOCX-only docs.
   const resolvePdfPageWidth = () => {
+    const docs = documents?.value ?? [];
+    if (!docs.some((doc) => doc?.type === PDF)) return null;
     const root = superdocRoot.value;
     if (!root?.querySelectorAll) return null;
     let widest = 0;
@@ -180,9 +210,11 @@ export function useViewportFit({
   };
 
   // Width the comments sidebar takes from the container when visible.
+  // Template ref first (owned by SuperDoc.vue, rename-proof); selector
+  // only as a fallback for hosts that pass no ref.
   const resolveSidebarWidth = () => {
     if (!showCommentsSidebar?.value) return 0;
-    const sidebarEl = superdocRoot.value?.querySelector?.(SIDEBAR_SELECTOR);
+    const sidebarEl = rightSidebarRef?.value ?? superdocRoot.value?.querySelector?.(SIDEBAR_SELECTOR);
     const measured = Number(sidebarEl?.offsetWidth) || Number(sidebarEl?.getBoundingClientRect?.().width) || 0;
     return measured > 0 ? measured : 0;
   };
@@ -246,7 +278,13 @@ export function useViewportFit({
     }
   };
 
-  watch(superdocContainerWidth, evaluateViewport);
+  // Deferred a tick: the container width can change in the same flush that
+  // flips compact-comments mode (the sidebar's v-if has not patched yet) or
+  // mid render pass; evaluating post-flush sees the settled DOM and avoids
+  // a one-frame fit bounce.
+  watch(superdocContainerWidth, () => {
+    nextTick(() => evaluateViewport());
+  });
   watch(isReady, (ready) => {
     if (ready) evaluateViewport();
   });
@@ -269,7 +307,10 @@ export function useViewportFit({
     nextTick(() => evaluateViewport());
   };
   const handlePaginationUpdate = () => {
-    evaluateViewport();
+    // paginationUpdate is emitted mid render pass; defer like the other
+    // hooks so measurement never forces a layout flush against the
+    // freshly mutated tree.
+    nextTick(() => evaluateViewport());
   };
   const handlePdfDocumentReady = () => {
     nextTick(() => evaluateViewport());

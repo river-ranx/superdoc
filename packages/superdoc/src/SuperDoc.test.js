@@ -3001,12 +3001,17 @@ describe('SuperDoc.vue', () => {
       setContainerWidth(wrapper, 1199);
       wrapper.vm.recalculateCompactCommentsMode();
       await nextTick();
+      await nextTick();
 
       expect(viewportChangeCalls(superdocStub).length).toBe(1);
+      // The event dedupes, but stored metrics stay latest: reads must see
+      // the 1199 measurement the deduped event skipped.
+      expect(superdocStoreStub.viewportMetrics.value.availableWidth).toBe(1199);
 
       // A materially different width emits again.
       setContainerWidth(wrapper, 600);
       wrapper.vm.recalculateCompactCommentsMode();
+      await nextTick();
       await nextTick();
 
       const calls = viewportChangeCalls(superdocStub);
@@ -3192,6 +3197,28 @@ describe('SuperDoc.vue', () => {
       const calls = viewportChangeCalls(superdocStub);
       expect(calls.length).toBe(1);
       // 11in * 96 = 1056: the widest page wins over 816.
+      expect(calls[0][1].documentWidth).toBe(1056);
+      expect(calls[0][1].fitZoom).toBe(114);
+    });
+
+    it('prefers the widest laid-out page over body page styles (landscape sections)', async () => {
+      const superdocStub = createSuperdocStub();
+      // Portrait body section (8.5in) but a laid-out interior landscape
+      // page: the fit must target what the renderer paints (getPages max),
+      // exactly like SuperEditor's own container sizing.
+      superdocStub.activeEditor = {
+        getPages: vi.fn(() => [{ size: { w: 816 } }, { size: { w: 1056 } }]),
+        getPageStyles: vi.fn(() => ({ pageSize: { width: 8.5, height: 11 } })),
+      };
+
+      const wrapper = await mountComponent(superdocStub);
+      setContainerWidth(wrapper, 1200);
+      wrapper.vm.recalculateCompactCommentsMode();
+      superdocStoreStub.isReady.value = true;
+      await nextTick();
+
+      const calls = viewportChangeCalls(superdocStub);
+      expect(calls.length).toBe(1);
       expect(calls[0][1].documentWidth).toBe(1056);
       expect(calls[0][1].fitZoom).toBe(114);
     });

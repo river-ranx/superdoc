@@ -1133,8 +1133,10 @@ export interface ZoomHandle {
   getSnapshot(): ZoomSlice;
   /**
    * Subscribe to zoom snapshots. Fires on value changes, mode-only
-   * transitions, and viewport metric updates. Returns the unsubscribe
-   * function; pair with `scope.add(...)` for lifecycle handling.
+   * transitions, and fit-relevant viewport metric updates (the host's
+   * deduped `viewport-change`); `getSnapshot()` always reads the
+   * latest stored metrics. Returns the unsubscribe function; pair
+   * with `scope.add(...)` for lifecycle handling.
    */
   observe(listener: (snapshot: ZoomSlice) => void): () => void;
   /**

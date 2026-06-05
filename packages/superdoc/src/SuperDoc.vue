@@ -223,6 +223,7 @@ const superdocStyleVars = computed(() => {
 // Refs
 const superdocRoot = ref(null);
 const layers = ref(null);
+const rightSidebarRef = ref(null);
 const pdfViewerRef = ref(null);
 const pendingReplayTrackedChangeSync = ref(false);
 const toolsMenuPosition = reactive({ top: null, right: '-25px', zIndex: 101 });
@@ -351,6 +352,7 @@ const handleDocumentReady = (documentId, container) => {
     if (!proxy.$superdoc.config.collaboration) isReady.value = true;
   }
 
+  ensureInitialFallbackZoom();
   isFloatingCommentsReady.value = true;
   hasInitializedLocations.value = true;
   proxy.$superdoc.broadcastPdfDocumentReady();
@@ -497,6 +499,9 @@ const onEditorCreate = ({ editor }) => {
  * @param {PresentationEditor} payload.presentationEditor - The PresentationEditor wrapper
  */
 const onEditorReady = ({ editor, presentationEditor }) => {
+  // Legacy (non-layout-engine) editors return early below; the seeded
+  // initial zoom for their CSS-fallback transform must apply first.
+  ensureInitialFallbackZoom();
   if (!presentationEditor) return;
 
   // Store presentationEditor reference for mode changes
@@ -1438,6 +1443,7 @@ useViewportFit({
   zoomMode,
   viewportMetrics,
   showCommentsSidebar,
+  rightSidebarRef,
   superdocRoot,
   documents,
 });
@@ -1770,6 +1776,43 @@ const handlePdfSelectionRaw = ({ selectionBounds, documentId, page }) => {
   handleSelectionChange(selection);
 };
 
+// Web layout without layout engine — apply CSS transform directly
+// to non-PDF sub-document containers so zoom works for PM fallback rendering.
+// PDF documents are excluded because pdfViewer.updateScale() handles their zoom
+// separately; applying both would result in double-zoom.
+const applyFallbackZoomStyles = (zoomFactor) => {
+  const subDocs = layers.value?.querySelectorAll('.superdoc__sub-document');
+  subDocs?.forEach((el) => {
+    if (el.querySelector('.sd-pdf-viewer')) return;
+    if (zoomFactor === 1) {
+      el.style.transformOrigin = '';
+      el.style.transform = '';
+      el.style.width = '';
+    } else {
+      el.style.transformOrigin = 'top left';
+      el.style.transform = `scale(${zoomFactor})`;
+      el.style.width = `${100 / zoomFactor}%`;
+    }
+  });
+};
+
+// One-time initial application for surfaces that only consume zoom
+// imperatively. A seeded `zoom.initial` never fires the activeZoom watcher
+// (the ref starts at the seeded value), and the fallback transform targets
+// elements that do not exist until documents render — so apply once from
+// the per-document ready hooks. PresentationEditor and PdfViewer take
+// their initial value at creation (layoutEngineOptions.zoom /
+// :initial-scale) and need nothing here.
+let initialFallbackZoomApplied = false;
+const ensureInitialFallbackZoom = () => {
+  if (initialFallbackZoomApplied) return;
+  if (proxy.$superdoc.config.useLayoutEngine !== false) return;
+  const zoomFactor = (activeZoom.value ?? 100) / 100;
+  if (zoomFactor === 1) return;
+  initialFallbackZoomApplied = true;
+  nextTick(() => applyFallbackZoomStyles(zoomFactor));
+};
+
 watch(
   () => activeZoom.value,
   (zoom) => {
@@ -1778,23 +1821,8 @@ watch(
     if (proxy.$superdoc.config.useLayoutEngine !== false) {
       PresentationEditor.setGlobalZoom(zoomFactor);
     } else {
-      // Web layout without layout engine — apply CSS transform directly
-      // to non-PDF sub-document containers so zoom works for PM fallback rendering.
-      // PDF documents are excluded because pdfViewer.updateScale() handles their zoom
-      // separately below; applying both would result in double-zoom.
-      const subDocs = layers.value?.querySelectorAll('.superdoc__sub-document');
-      subDocs?.forEach((el) => {
-        if (el.querySelector('.sd-pdf-viewer')) return;
-        if (zoomFactor === 1) {
-          el.style.transformOrigin = '';
-          el.style.transform = '';
-          el.style.width = '';
-        } else {
-          el.style.transformOrigin = 'top left';
-          el.style.transform = `scale(${zoomFactor})`;
-          el.style.width = `${100 / zoomFactor}%`;
-        }
-      });
+      initialFallbackZoomApplied = true;
+      applyFallbackZoomStyles(zoomFactor);
     }
 
     const pdfViewer = getPDFViewer();
@@ -1936,6 +1964,7 @@ const getPDFViewer = () => {
             v-if="doc.type === PDF"
             :file="doc.data"
             :file-id="doc.id"
+            :initial-scale="(activeZoom ?? 100) / 100"
             :config="pdfConfig"
             @selection-raw="handlePdfSelectionRaw"
             @bypass-selection="handlePdfClick"
@@ -1966,7 +1995,7 @@ const getPDFViewer = () => {
       </div>
     </div>
 
-    <div class="superdoc__right-sidebar right-sidebar" v-if="showCommentsSidebar">
+    <div ref="rightSidebarRef" class="superdoc__right-sidebar right-sidebar" v-if="showCommentsSidebar">
       <div class="floating-comments">
         <FloatingComments
           v-if="hasInitializedLocations && (floatingComments.length > 0 || pendingComment)"

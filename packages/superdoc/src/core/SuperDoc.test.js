@@ -2439,6 +2439,31 @@ describe('SuperDoc core', () => {
       warn.mockRestore();
     });
 
+    it('setZoom and setZoomMode before initialization warn and emit nothing', async () => {
+      createAppHarness();
+
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+      });
+      // No flushMicrotasks: async #init has not attached superdocStore yet.
+      const zoomChangeSpy = vi.fn();
+      instance.on('zoomChange', zoomChangeSpy);
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      instance.setZoom(150);
+      instance.setZoomMode('fit-width');
+
+      // Neither call may advertise a change that was never persisted.
+      expect(zoomChangeSpy).not.toHaveBeenCalled();
+      expect(warn).toHaveBeenCalledTimes(2);
+      warn.mockRestore();
+
+      await flushMicrotasks();
+      expect(instance.getZoom()).toBe(100);
+      expect(instance.getZoomState().mode).toBe('manual');
+    });
+
     it('setZoomMode emits zoomChange for mode-only transitions and no-ops on the same mode', async () => {
       createAppHarness();
 
