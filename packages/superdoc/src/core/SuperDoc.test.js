@@ -2546,6 +2546,22 @@ describe('SuperDoc core', () => {
       expect(defaults.max).toBe(100);
     });
 
+    it('getZoomState uses default bounds for invalid fit-width fields', async () => {
+      createAppHarness();
+
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+        zoom: { fitWidth: { min: 'narrow', max: -1, padding: 'wide' } },
+      });
+      await flushMicrotasks();
+
+      expect(instance.getZoomState()).toMatchObject({
+        min: 10,
+        max: 100,
+      });
+    });
+
     it('getViewportMetrics returns null before the first measurement, then the stored metrics', async () => {
       const { superdocStore } = createAppHarness();
 

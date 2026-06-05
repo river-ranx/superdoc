@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
 import { h, defineComponent, ref, shallowRef, reactive, nextTick } from 'vue';
-import { DOCX } from '@superdoc/common';
+import { DOCX, PDF } from '@superdoc/common';
 import { Schema } from 'prosemirror-model';
 import { EditorState, TextSelection } from 'prosemirror-state';
 import { Mapping, StepMap } from 'prosemirror-transform';
@@ -104,6 +104,15 @@ const CommentsLayerStub = stubComponent('CommentsLayer');
 const HrbrFieldsLayerStub = stubComponent('HrbrFieldsLayer');
 const AiLayerStub = stubComponent('AiLayer');
 const HtmlViewerStub = stubComponent('HtmlViewer');
+const PdfViewerStub = defineComponent({
+  name: 'PdfViewer',
+  props: ['file', 'fileId', 'config'],
+  emits: ['page-rendered', 'document-ready', 'selection-raw', 'bypass-selection'],
+  setup(_props, { expose }) {
+    expose({ updateScale: vi.fn() });
+    return () => h('div', { class: 'sd-pdf-viewer' });
+  },
+});
 
 const createTrackedChangeIndexStub = () => ({
   subscribe: vi.fn(() => () => {}),
@@ -143,6 +152,10 @@ vi.mock('@superdoc/super-editor', () => ({
 
 vi.mock('./components/HtmlViewer/HtmlViewer.vue', () => ({
   default: HtmlViewerStub,
+}));
+
+vi.mock('./components/PdfViewer/PdfViewer.vue', () => ({
+  default: PdfViewerStub,
 }));
 
 vi.mock('@superdoc/components/CommentsLayer/CommentDialog.vue', () => ({
@@ -340,6 +353,7 @@ const mountComponent = async (
 const createSuperdocStub = () => {
   const toolbar = { config: { aiApiKey: 'abc' }, setActiveEditor: vi.fn(), updateToolbarState: vi.fn() };
   const runtimeMap = new Map();
+  const eventHandlers = new Map();
   return {
     config: {
       modules: { comments: {}, ai: {}, toolbar: {}, pdf: {} },
@@ -367,8 +381,24 @@ const createSuperdocStub = () => {
     getActiveRuntime: vi.fn(() => null),
     activateRuntimeFromEventTarget: vi.fn(() => false),
     lockSuperdoc: vi.fn(),
-    emit: vi.fn(),
-    listeners: vi.fn(),
+    on: vi.fn((eventName, handler) => {
+      const handlers = eventHandlers.get(eventName) ?? new Set();
+      handlers.add(handler);
+      eventHandlers.set(eventName, handlers);
+      return undefined;
+    }),
+    off: vi.fn((eventName, handler) => {
+      eventHandlers.get(eventName)?.delete(handler);
+      return undefined;
+    }),
+    emit: vi.fn((eventName, payload) => {
+      const handlers = eventHandlers.get(eventName);
+      if (handlers) {
+        for (const handler of [...handlers]) handler(payload);
+      }
+      return true;
+    }),
+    listeners: vi.fn((eventName) => [...(eventHandlers.get(eventName) ?? [])]),
     captureLayoutPipelineEvent: vi.fn(),
     canPerformPermission: vi.fn(() => true),
   };
@@ -2987,6 +3017,30 @@ describe('SuperDoc.vue', () => {
       expect(calls[0][1].fitZoom).toBe(147);
     });
 
+    it('falls back to page styles when laid-out pages are unavailable', async () => {
+      const superdocStub = createSuperdocStub();
+      superdocStub.activeEditor = {
+        getPages: vi.fn(() => {
+          throw new Error('layout not ready');
+        }),
+        getPageStyles: vi.fn(() => ({ pageSize: { width: 8.5, height: 11 } })),
+      };
+
+      const wrapper = await mountComponent(superdocStub);
+      setContainerWidth(wrapper, 1200);
+      wrapper.vm.recalculateCompactCommentsMode();
+      superdocStoreStub.isReady.value = true;
+      await nextTick();
+
+      const calls = viewportChangeCalls(superdocStub);
+      expect(calls.length).toBe(1);
+      expect(calls[0][1]).toEqual({
+        availableWidth: 1200,
+        documentWidth: 816,
+        fitZoom: 147,
+      });
+    });
+
     it('dedupes width changes that round to the same fit', async () => {
       const superdocStub = createSuperdocStub();
       stubPageStylesEditor(superdocStub);
@@ -3030,6 +3084,27 @@ describe('SuperDoc.vue', () => {
       await nextTick();
 
       expect(viewportChangeCalls(superdocStub).length).toBe(0);
+    });
+
+    it('does not scan PDF page DOM for DOCX-only documents', async () => {
+      const superdocStub = createSuperdocStub();
+      stubPageStylesEditor(superdocStub);
+
+      const wrapper = await mountComponent(superdocStub);
+      const rootEl = wrapper.find('.superdoc').element;
+      const querySelectorAllSpy = vi.spyOn(rootEl, 'querySelectorAll');
+
+      const pageEl = document.createElement('div');
+      pageEl.className = 'sd-pdf-viewer-page';
+      rootEl.appendChild(pageEl);
+
+      setContainerWidth(wrapper, 1200);
+      wrapper.vm.recalculateCompactCommentsMode();
+      superdocStoreStub.isReady.value = true;
+      await nextTick();
+
+      expect(querySelectorAllSpy).not.toHaveBeenCalledWith('.sd-pdf-viewer-page');
+      expect(viewportChangeCalls(superdocStub)[0][1].documentWidth).toBe(816);
     });
 
     const zoomChangeCalls = (superdocStub) => superdocStub.emit.mock.calls.filter(([name]) => name === 'zoomChange');
@@ -3109,6 +3184,32 @@ describe('SuperDoc.vue', () => {
         fitZoom: 112,
       });
       expect(superdocStoreStub.activeZoom.value).toBe(100);
+    });
+
+    it('subtracts the comments sidebar width through the owned template ref', async () => {
+      const superdocStub = createSuperdocStub();
+      stubPageStylesEditor(superdocStub);
+
+      const wrapper = await mountComponent(superdocStub);
+      commentsStoreStub.pendingComment.value = { commentId: 'pending-1', selection: { selectionBounds: {} } };
+      await nextTick();
+
+      const sidebarEl = wrapper.find('.superdoc__right-sidebar').element;
+      Object.defineProperty(sidebarEl, 'offsetWidth', { configurable: true, value: 240 });
+
+      setContainerWidth(wrapper, 1200);
+      wrapper.vm.recalculateCompactCommentsMode();
+      superdocStoreStub.isReady.value = true;
+      await nextTick();
+      await nextTick();
+
+      const calls = viewportChangeCalls(superdocStub);
+      expect(calls.length).toBe(1);
+      expect(calls[0][1]).toEqual({
+        availableWidth: 960,
+        documentWidth: 816,
+        fitZoom: 118,
+      });
     });
 
     it('does not re-apply zoom when the target equals the current zoom', async () => {
@@ -3223,11 +3324,53 @@ describe('SuperDoc.vue', () => {
       expect(calls[0][1].fitZoom).toBe(114);
     });
 
-    it('resolves PDF page width scale-relatively (zoom-sync state cannot corrupt the base)', async () => {
+    it('re-evaluates document width after pagination updates', async () => {
       const superdocStub = createSuperdocStub();
-      // No DOCX editor: the PDF page is the only measurable document.
+      let pages = [{ size: { w: 816 } }];
+      superdocStub.activeEditor = {
+        getPages: vi.fn(() => pages),
+        getPageStyles: vi.fn(() => ({ pageSize: { width: 8.5, height: 11 } })),
+      };
 
       const wrapper = await mountComponent(superdocStub);
+      setContainerWidth(wrapper, 1200);
+      wrapper.vm.recalculateCompactCommentsMode();
+      superdocStoreStub.isReady.value = true;
+      await nextTick();
+
+      expect(viewportChangeCalls(superdocStub)[0][1].documentWidth).toBe(816);
+
+      pages = [{ size: { w: 816 } }, { size: { w: 1056 } }];
+      superdocStub.emit.mockClear();
+      superdocStub.emit('pagination-update', { totalPages: 2, superdoc: superdocStub });
+
+      expect(viewportChangeCalls(superdocStub).length).toBe(0);
+      await nextTick();
+
+      const calls = viewportChangeCalls(superdocStub);
+      expect(calls.length).toBe(1);
+      expect(calls[0][1]).toEqual({
+        availableWidth: 1200,
+        documentWidth: 1056,
+        fitZoom: 114,
+      });
+    });
+
+    it('resolves PDF page width scale-relatively (zoom-sync state cannot corrupt the base)', async () => {
+      const superdocStub = createSuperdocStub();
+
+      const wrapper = await mountComponent(superdocStub);
+      superdocStoreStub.documents.value = [
+        {
+          id: 'pdf-1',
+          type: PDF,
+          data: { name: 'doc.pdf' },
+          editorMountNonce: ref(0),
+          setEditor: vi.fn(),
+          getEditor: vi.fn(() => null),
+        },
+      ];
+      await nextTick();
 
       // A rendered 612pt PDF page at 50% viewer zoom measures 408px with
       // --scale-factor 2/3 (zoom * 96/72). The store zoom claims 100% (a
