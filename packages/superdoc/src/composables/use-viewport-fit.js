@@ -79,9 +79,11 @@ export const normalizePdfPageMeasurement = (measured, scaleFactor, zoomFactor) =
  *
  * The base page width is re-resolved on every evaluation (never latched)
  * and is the widest measurable page across all loaded documents: DOCX
- * widths come from page styles (zoom-independent, so a zoom applied
- * before the first measurement cannot corrupt the ratio), PDF widths from
- * rendered pages normalized by their actual scale factor. HTML documents
+ * widths come from the widest laid-out page (editor.getPages(), the same
+ * source the renderer's container sizing uses) with body page styles as
+ * the pre-pagination fallback - both zoom-independent, so a zoom applied
+ * before the first measurement cannot corrupt the ratio - and PDF widths
+ * from rendered pages normalized by their actual scale factor. HTML documents
  * reflow and contribute nothing; an HTML-only instance reports no
  * metrics. A zoom-normalized DOM measurement is the last-resort fallback
  * for a DOCX editor without page styles.

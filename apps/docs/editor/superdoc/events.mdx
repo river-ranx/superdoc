@@ -469,7 +469,7 @@ superdoc.on('zoomChange', ({ zoom, mode }) => {
 When the implied fit changes: the rounded `fitZoom` or the document's base page width (container resize, comments sidebar toggle, page orientation). Pixel-level width movement that cannot change any fit decision is deduped; `getViewportMetrics()` always reads the latest measurements. The payload carries pure measurements; `zoom.fitWidth` policy options never affect them:
 
 - `availableWidth` - container width in pixels, minus the comments sidebar when visible
-- `documentWidth` - the widest document's base page width in pixels at 100% zoom (zoom-independent; DOCX from page styles, PDF from rendered pages)
+- `documentWidth` - the widest document page width in pixels at 100% zoom (zoom-independent; DOCX from laid-out pages with page-styles fallback, PDF from rendered pages)
 - `fitZoom` - the unclamped zoom percentage that fits the page into the available width
 
 HTML documents reflow to the container, so an HTML-only instance reports no metrics.
