@@ -98,27 +98,37 @@ describe('FontResolver (per-document context)', () => {
     expect(resolver.resolvePrimaryPhysicalFamily('Georgia')).toBe('Georgia'); // reverted to identity
   });
 
-  it('mapping a family to its DEFAULT physical drops any override instead of recording a redundant one', () => {
+  it('identity self-map is a no-op, but an explicit pin to the bundled clone is a STORED override', () => {
+    const norm = (f: string) => f.replace(/^["']|["']$/g, '').toLowerCase();
+    const registeredBoth = (f: string) => norm(f) === 'calibri' || norm(f) === 'carlito';
     const resolver = createFontResolver();
 
-    // Override away from the bundled default, then map back TO the bundled default.
-    resolver.map('Calibri', 'Tinos');
-    expect(resolver.version).toBe(1);
-    expect(resolver.signature).not.toBe('');
-    resolver.map('Calibri', 'Carlito'); // Carlito IS Calibri's bundled default
-    expect(resolver.resolvePrimaryPhysicalFamily('Calibri')).toBe('Carlito');
-    expect(resolver.version).toBe(2); // removing the override is a real change
-    expect(resolver.signature).toBe(''); // back to the shared default, not '[["calibri","Carlito"]]'
-
-    // Mapping to the default with no existing override is a pure no-op (no bump, no signature).
-    resolver.map('Cambria', 'Caladea'); // Caladea IS Cambria's bundled default
-    expect(resolver.version).toBe(2);
-    expect(resolver.signature).toBe('');
-
-    // Identity: mapping a non-substituted family to its own name is also a no-op.
+    // Identity self-map (and a quoted/cased variant of it) is the ABSENCE of an override: dropped, so
+    // the document keeps the shareable empty signature.
     resolver.map('Georgia', 'Georgia');
-    expect(resolver.version).toBe(2);
+    resolver.map('"Georgia"', 'Georgia');
+    expect(resolver.version).toBe(0);
     expect(resolver.signature).toBe('');
+
+    // Mapping to the bundled CLONE is an explicit PIN, not a no-op (after provider precedence a
+    // registered real Calibri would otherwise outrank the clone). It is stored as a custom_mapping.
+    resolver.map('Calibri', 'Carlito');
+    expect(resolver.signature).not.toBe('');
+    expect(resolver.resolveFontFamily('Calibri')).toEqual({
+      logicalFamily: 'Calibri',
+      physicalFamily: 'Carlito',
+      reason: 'custom_mapping',
+    });
+    // The pin wins even when a real Calibri face is registered (custom_mapping > registered_face).
+    expect(resolver.resolveFace('Calibri', { weight: '400', style: 'normal' }, registeredBoth)).toMatchObject({
+      physicalFamily: 'Carlito',
+      reason: 'custom_mapping',
+    });
+
+    // unmap reverts to normal provider precedence (back to the shareable empty signature).
+    resolver.unmap('Calibri');
+    expect(resolver.signature).toBe('');
+    expect(resolver.resolvePrimaryPhysicalFamily('Calibri')).toBe('Carlito');
   });
 
   it('isolates mappings per instance: two documents map the same logical family differently', () => {

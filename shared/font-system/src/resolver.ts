@@ -138,14 +138,21 @@ export class FontResolver {
     const physical = physicalFamily?.trim();
     if (!key || !physical) return;
     if (this.#overrides.get(key) === physical) return;
-    // Mapping a family to the physical it resolves to by DEFAULT - its bundled substitute, or its
-    // own name when there is none - is the ABSENCE of an override, not an override to record.
-    // Storing it would leave a non-empty signature that permanently de-opts this document's cache
-    // sharing (a non-empty signature never re-shares with default documents). So treat it as an
-    // unmap: drop any existing override (reverting to the default) and bump only if that removed
-    // one. This makes `map({ Calibri: 'Carlito' })` a true no-op whether Calibri was unmapped or
-    // previously pointed elsewhere (e.g. ->Tinos), restoring shared-cache eligibility either way.
-    if ((BUNDLED_SUBSTITUTES[key] ?? logicalFamily.trim()) === physical) {
+    // Mapping a family to its OWN name (identity, e.g. `map({ Georgia: 'Georgia' })`) is the ABSENCE
+    // of an override, not one to record: drop any existing override and revert to the default. Use
+    // `unmap()` to revert other mappings.
+    //
+    // Mapping to the bundled CLONE (e.g. `map({ Calibri: 'Carlito' })`) is NOT treated as a no-op,
+    // unlike before provider precedence. A registered real Calibri now outranks the clone via
+    // `registered_face`, so an explicit pin to the clone is semantically distinct from the default and
+    // must be STORED as a real override - else `custom_mapping` could never beat a registered face and
+    // the pin would be silently ignored. The cost is a non-empty signature (this document stops sharing
+    // the measure cache with default documents), accepted for an explicit pin.
+    //
+    // Identity is compared with the resolver's family normalization (quote-strip + lowercase), so a
+    // quoted/cased self-map (`map('"Georgia"', 'Georgia')`) is still recognized as identity and dropped,
+    // not stored as a spurious override.
+    if (key === normalizeFamilyKey(physical)) {
       if (this.#overrides.delete(key)) {
         this.#version += 1;
         this.#cachedSignature = null;
