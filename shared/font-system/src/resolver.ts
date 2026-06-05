@@ -90,6 +90,19 @@ function normalizeFamilyKey(family: string): string {
     .toLowerCase();
 }
 
+/**
+ * Strip surrounding quotes from a family name, PRESERVING case, so a STRUCTURED resolution returns a
+ * bare load/report family - a quoted CSS primary like `"Calibri"` becomes `Calibri`. Without this, a
+ * quoted family that resolves to `registered_face` returns `"Calibri"`, which the load/preload probe
+ * (`faceProbe` -> `quoteFamily`) quotes AGAIN, so the browser probes a literal `"Calibri"` and never
+ * matches the registered face (a false fallback + reflow). Distinct from {@link normalizeFamilyKey},
+ * which lowercases for KEYING; here the rendered/reported family must keep its case. The CSS paint
+ * paths intentionally keep the quotes (a quoted stack is valid CSS).
+ */
+function stripFamilyQuotes(family: string): string {
+  return family.trim().replace(/^["']|["']$/g, '');
+}
+
 /** Split a CSS font-family value into trimmed, non-empty families (primary first). */
 function splitStack(cssFontFamily: string): string[] {
   return cssFontFamily
@@ -252,7 +265,9 @@ export class FontResolver {
     const parts = splitStack(logicalFamily);
     const primary = parts[0] ?? logicalFamily;
     const { physical, reason } = this.#physicalFor(primary);
-    return { logicalFamily, physicalFamily: physical, reason };
+    // physicalFamily is a bare load/report family, never a CSS token: strip quotes a quoted primary
+    // carried through (as_requested). No-op for the already-bare substitute/override names.
+    return { logicalFamily, physicalFamily: stripFamilyQuotes(physical), reason };
   }
 
   /**
@@ -280,7 +295,11 @@ export class FontResolver {
     const parts = splitStack(logicalFamily);
     const primary = parts[0] ?? logicalFamily;
     const { physical, reason } = this.#resolveFaceLadder(primary, face, hasFace);
-    return { logicalFamily, physicalFamily: physical, reason };
+    // physicalFamily is a bare load/report family (the gate awaits it via faceProbe, which re-quotes):
+    // strip quotes off a quoted primary carried through for registered_face / fallback_face_absent /
+    // as_requested, so the probe matches the registered face instead of a literal "Calibri". The CSS
+    // paint variant (resolvePhysicalFamilyForFace) keeps the quoted stack. No-op for substitute names.
+    return { logicalFamily, physicalFamily: stripFamilyQuotes(physical), reason };
   }
 
   /**

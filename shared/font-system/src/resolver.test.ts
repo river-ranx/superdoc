@@ -355,4 +355,39 @@ describe('face-aware resolution (resolveFace / resolvePhysicalFamilyForFace)', (
       reason: 'as_requested',
     });
   });
+
+  it('strips surrounding quotes from a quoted registered family (registered_face returns the bare family)', () => {
+    const r = createFontResolver();
+    // A quoted CSS primary for a registered real Calibri: physicalFamily MUST be the bare 'Calibri'
+    // (case preserved), not '"Calibri"'. Otherwise the load/preload probe (faceProbe -> quoteFamily)
+    // quotes it again and the browser probes a literal "Calibri" that never matches the registered face.
+    expect(r.resolveFace('"Calibri", sans-serif', { weight: '400', style: 'normal' }, registered('Calibri'))).toEqual({
+      logicalFamily: '"Calibri", sans-serif',
+      physicalFamily: 'Calibri',
+      reason: 'registered_face',
+    });
+    // The CSS paint variant KEEPS the quoted stack (valid CSS); measure awaits the bare family above.
+    expect(
+      r.resolvePhysicalFamilyForFace(
+        '"Calibri", sans-serif',
+        { weight: '400', style: 'normal' },
+        registered('Calibri'),
+      ),
+    ).toBe('"Calibri", sans-serif');
+  });
+
+  it('strips quotes for as_requested and fallback_face_absent structured returns (case preserved)', () => {
+    const r = createFontResolver();
+    // as_requested: no provider; the bare, case-preserved family passes through.
+    expect(r.resolveFace('"Aptos"', { weight: '400', style: 'normal' }, noFaces)).toMatchObject({
+      physicalFamily: 'Aptos',
+      reason: 'as_requested',
+    });
+    // fallback_face_absent: a mapped substitute that cannot supply the face -> the bare logical family.
+    r.map('Georgia', 'Some System Font'); // unregistered target (noFaces) -> override known but no face
+    expect(r.resolveFace('"Georgia"', { weight: '400', style: 'normal' }, noFaces)).toMatchObject({
+      physicalFamily: 'Georgia',
+      reason: 'fallback_face_absent',
+    });
+  });
 });
