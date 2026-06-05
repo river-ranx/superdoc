@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { SuperConverter } from './SuperConverter.js';
 
 /**
@@ -160,6 +160,25 @@ describe('SuperConverter.getEmbeddedFontFaces', () => {
     converter.getEmbeddedFontFaces();
     const after = Array.from(converter.fonts['word/fonts/font1.odttf'].slice(0, 4));
     expect(after).toEqual(before); // stored obfuscated bytes untouched
+  });
+
+  it('legacy CSS extraction does not corrupt bytes before registry extraction', () => {
+    const converter = makeConverter();
+    const before = Array.from(converter.fonts['word/fonts/font1.odttf']);
+    const originalCreateObjectURL = URL.createObjectURL;
+    URL.createObjectURL = vi.fn(() => 'blob:mock-font');
+    try {
+      const legacy = converter.getFontFaceImportString();
+      expect(legacy.fontsImported).toContain('Calibri');
+    } finally {
+      if (originalCreateObjectURL) URL.createObjectURL = originalCreateObjectURL;
+      else delete URL.createObjectURL;
+    }
+
+    expect(Array.from(converter.fonts['word/fonts/font1.odttf'])).toEqual(before);
+    const faces = converter.getEmbeddedFontFaces();
+    const calibri = faces.find((f) => f.relationshipId === 'rId1');
+    expect(new DataView(calibri.source).getUint32(0)).toBe(0x00010000);
   });
 
   it('returns [] when there is no font table or no embedded binaries', () => {

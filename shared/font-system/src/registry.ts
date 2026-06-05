@@ -184,8 +184,17 @@ export class FontRegistry {
   readonly #faceInflight = new Map<string, Promise<FontFaceLoadResult>>();
   /** Registered `url(...)` source per face key, to name the failing URL on a face load error. */
   readonly #faceSources = new Map<string, string>();
-  /** Face keys seen per normalized family, for the family-level status rollup. */
+  /** Face keys seen per normalized family, for the family-level status rollup. Populated by BOTH
+   *  registration AND awaiting (so getStatus rolls up the status of an awaited pass-through face). */
   readonly #facesByFamily = new Map<string, Set<string>>();
+  /**
+   * Face keys this registry actually REGISTERED as a provider (a bundled clone or a `fonts.add`/
+   * embedded face) - NOT faces that were merely awaited. This is the oracle {@link hasFace} consults:
+   * the resolver's provider-precedence ladder must answer "is there a registered face for this
+   * family|weight|style?", which is distinct from `#facesByFamily`'s "have we ever seen/awaited it?".
+   * Mixing the two would let a once-awaited `as_requested` family masquerade as a registered face.
+   */
+  readonly #providerFaceKeys = new Set<string>();
   /** Faces already warned about a load failure, so the warning fires at most once each. */
   readonly #warnedFaceFailures = new Set<string>();
 
@@ -231,7 +240,11 @@ export class FontRegistry {
       }
     }
     if (this.#FontFaceCtor && this.#fontSet) {
-      const face = new this.#FontFaceCtor(family, source, descriptors);
+      // Build the FontFace with the BUCKETED weight/style the key uses, not the raw descriptor. The
+      // face key is family|<400|700>|<normal|italic>, so an off-bucket descriptor (e.g. weight 500)
+      // would answer hasFace for the 400 key yet render at 500 - the run model is binary, so clamp the
+      // rendered face to the same bucket. Other descriptors (stretch, unicodeRange, display) pass through.
+      const face = new this.#FontFaceCtor(family, source, { ...descriptors, weight, style });
       this.#fontSet.add(face);
       this.#addManagedFace(family, key, face);
     }
@@ -241,6 +254,8 @@ export class FontRegistry {
       this.#sources.set(family, list);
     }
     if (!this.#status.has(family)) this.#status.set(family, 'unloaded');
+    // Record this as a PROVIDER face (the hasFace oracle), distinct from the await-tracking below.
+    this.#providerFaceKeys.add(key);
     // Seed face-level status so the gate can await this exact weight/style.
     this.#trackFace(family, key);
     if (!this.#faceStatus.has(key)) this.#faceStatus.set(key, 'unloaded');
@@ -282,8 +297,9 @@ export class FontRegistry {
     const face = new this.#FontFaceCtor(family, source, { weight, style });
     this.#fontSet.add(face);
     this.#addManagedFace(family, key, face);
-    // Seed family- and face-level status so the gate can await this exact face and `hasFace` reports
-    // it (mirrors the bookkeeping `register` does for URL faces; binary faces have no `#faceSources`).
+    // Seed provider and status state so the resolver can see this face and the gate can await it.
+    // Binary faces have no `#faceSources`, but otherwise mirror the bookkeeping `register` does.
+    this.#providerFaceKeys.add(key);
     if (!this.#status.has(family)) this.#status.set(family, 'unloaded');
     this.#trackFace(family, key);
     if (!this.#faceStatus.has(key)) this.#faceStatus.set(key, 'unloaded');
@@ -320,6 +336,7 @@ export class FontRegistry {
     if (typeof this.#fontSet?.delete === 'function') this.#fontSet.delete(face);
     if (set.size > 0) return true; // another owner still provides this face; keep key/family state
     this.#facesByKey.delete(key);
+    this.#providerFaceKeys.delete(key);
     this.#faceStatus.delete(key);
     this.#faceSources.delete(key);
     const fam = normalizeFamilyKey(family);
@@ -364,16 +381,27 @@ export class FontRegistry {
   }
 
   /**
-   * Is a face (family + weight + style) REGISTERED/known in this registry, regardless of load
-   * state? The face-availability oracle the face-aware resolver consults to answer "does the
-   * physical family actually provide this face?" - so a single-face substitute is never mapped
-   * onto a weight/style it lacks (which the painter would faux-synthesize). Covers bundled faces
-   * (registered by `installBundledSubstitutes`) and customer `fonts.add()` faces alike, because
-   * both register through {@link register}. Distinct from {@link isAvailable}, which asks whether a
-   * face is LOADED right now; this asks only whether it EXISTS to be loaded.
+   * Is a face (family + weight + style) provided by a REGISTERED face that has not terminally failed
+   * to load? The face-availability oracle the face-aware resolver consults to answer "does the
+   * physical family actually provide this face?" - so a single-face substitute is never mapped onto a
+   * weight/style it lacks (which the painter would faux-synthesize). Covers bundled faces (registered
+   * by `installBundledSubstitutes`) and customer `fonts.add()` faces alike, because both register
+   * through {@link register}.
+   *
+   * Two deliberate exclusions:
+   *  - A merely-AWAITED face is not a provider. The oracle reads {@link #providerFaceKeys} (registration
+   *    only), NOT `#facesByFamily` (which the await path also populates for the status rollup), so an
+   *    `as_requested` family the gate once awaited does not masquerade as a registered face on the next
+   *    resolve.
+   *  - A face whose asset terminally FAILED to load is dropped, so the ladder steps down to the bundled
+   *    clone instead of committing forever to a broken registered face. `timed_out` is NOT excluded -
+   *    the late-load reflow still recovers a slow face, and demoting it would strand the real font.
+   *
+   * Distinct from {@link isAvailable}, which asks whether a face is LOADED right now.
    */
   hasFace(family: string, weight: '400' | '700', style: 'normal' | 'italic'): boolean {
-    return this.#facesByFamily.get(normalizeFamilyKey(family))?.has(faceKeyOf(family, weight, style)) ?? false;
+    const key = faceKeyOf(family, weight, style);
+    return this.#providerFaceKeys.has(key) && this.#faceStatus.get(key) !== 'failed';
   }
 
   /**

@@ -8,12 +8,13 @@ import {
 } from './index';
 
 describe('font resolver', () => {
-  it('maps the five verified clean clones (bare names)', () => {
+  it('maps the verified clean clones (bare names)', () => {
     expect(resolvePhysicalFamily('Calibri')).toBe('Carlito');
     expect(resolvePhysicalFamily('Cambria')).toBe('Caladea');
     expect(resolvePhysicalFamily('Arial')).toBe('Liberation Sans');
     expect(resolvePhysicalFamily('Times New Roman')).toBe('Liberation Serif');
     expect(resolvePhysicalFamily('Courier New')).toBe('Liberation Mono');
+    expect(resolvePhysicalFamily('Helvetica')).toBe('Liberation Sans');
   });
 
   it('resolves the PRIMARY family of a CSS stack and keeps the fallbacks', () => {
@@ -47,6 +48,21 @@ describe('font resolver', () => {
       reason: 'bundled_substitute',
     });
     expect(resolveFontFamily('Calibri, sans-serif').logicalFamily).toBe('Calibri, sans-serif');
+  });
+
+  it('aliases Helvetica to the already-bundled Liberation Sans (metric_safe alias, no new asset)', () => {
+    // docfonts records Helvetica -> Liberation Sans as metric_safe (0.000% analytic advance, all four
+    // faces; resolver-alias only, no layout proof). Resolves like a bundled substitute, not a visual
+    // fallback.
+    expect(resolveFontFamily('Helvetica')).toEqual({
+      logicalFamily: 'Helvetica',
+      physicalFamily: 'Liberation Sans',
+      reason: 'bundled_substitute',
+    });
+    // Resolves like the other clones: CSS stack keeps fallbacks, case/quote-insensitive.
+    expect(resolvePhysicalFamily('Helvetica, Arial, sans-serif')).toBe('Liberation Sans, Arial, sans-serif');
+    expect(resolvePhysicalFamily('"helvetica"')).toBe('Liberation Sans');
+    expect(resolvePrimaryPhysicalFamily('Helvetica, sans-serif')).toBe('Liberation Sans');
   });
 
   it('extracts the bare physical face the gate must await', () => {
@@ -98,27 +114,37 @@ describe('FontResolver (per-document context)', () => {
     expect(resolver.resolvePrimaryPhysicalFamily('Georgia')).toBe('Georgia'); // reverted to identity
   });
 
-  it('mapping a family to its DEFAULT physical drops any override instead of recording a redundant one', () => {
+  it('identity self-map is a no-op, but an explicit pin to the bundled clone is a STORED override', () => {
+    const norm = (f: string) => f.replace(/^["']|["']$/g, '').toLowerCase();
+    const registeredBoth = (f: string) => norm(f) === 'calibri' || norm(f) === 'carlito';
     const resolver = createFontResolver();
 
-    // Override away from the bundled default, then map back TO the bundled default.
-    resolver.map('Calibri', 'Tinos');
-    expect(resolver.version).toBe(1);
-    expect(resolver.signature).not.toBe('');
-    resolver.map('Calibri', 'Carlito'); // Carlito IS Calibri's bundled default
-    expect(resolver.resolvePrimaryPhysicalFamily('Calibri')).toBe('Carlito');
-    expect(resolver.version).toBe(2); // removing the override is a real change
-    expect(resolver.signature).toBe(''); // back to the shared default, not '[["calibri","Carlito"]]'
-
-    // Mapping to the default with no existing override is a pure no-op (no bump, no signature).
-    resolver.map('Cambria', 'Caladea'); // Caladea IS Cambria's bundled default
-    expect(resolver.version).toBe(2);
-    expect(resolver.signature).toBe('');
-
-    // Identity: mapping a non-substituted family to its own name is also a no-op.
+    // Identity self-map (and a quoted/cased variant of it) is the ABSENCE of an override: dropped, so
+    // the document keeps the shareable empty signature.
     resolver.map('Georgia', 'Georgia');
-    expect(resolver.version).toBe(2);
+    resolver.map('"Georgia"', 'Georgia');
+    expect(resolver.version).toBe(0);
     expect(resolver.signature).toBe('');
+
+    // Mapping to the bundled CLONE is an explicit PIN, not a no-op (after provider precedence a
+    // registered real Calibri would otherwise outrank the clone). It is stored as a custom_mapping.
+    resolver.map('Calibri', 'Carlito');
+    expect(resolver.signature).not.toBe('');
+    expect(resolver.resolveFontFamily('Calibri')).toEqual({
+      logicalFamily: 'Calibri',
+      physicalFamily: 'Carlito',
+      reason: 'custom_mapping',
+    });
+    // The pin wins even when a real Calibri face is registered (custom_mapping > registered_face).
+    expect(resolver.resolveFace('Calibri', { weight: '400', style: 'normal' }, registeredBoth)).toMatchObject({
+      physicalFamily: 'Carlito',
+      reason: 'custom_mapping',
+    });
+
+    // unmap reverts to normal provider precedence (back to the shareable empty signature).
+    resolver.unmap('Calibri');
+    expect(resolver.signature).toBe('');
+    expect(resolver.resolvePrimaryPhysicalFamily('Calibri')).toBe('Carlito');
   });
 
   it('isolates mappings per instance: two documents map the same logical family differently', () => {
@@ -355,6 +381,101 @@ describe('face-aware resolution (resolveFace / resolvePhysicalFamilyForFace)', (
       logicalFamily: 'Aptos',
       physicalFamily: 'Aptos',
       reason: 'as_requested',
+    });
+  });
+
+  it('strips surrounding quotes from a quoted registered family (registered_face returns the bare family)', () => {
+    const r = createFontResolver();
+    // A quoted CSS primary for a registered real Calibri: physicalFamily MUST be the bare 'Calibri'
+    // (case preserved), not '"Calibri"'. Otherwise the load/preload probe (faceProbe -> quoteFamily)
+    // quotes it again and the browser probes a literal "Calibri" that never matches the registered face.
+    expect(r.resolveFace('"Calibri", sans-serif', { weight: '400', style: 'normal' }, registered('Calibri'))).toEqual({
+      logicalFamily: '"Calibri", sans-serif',
+      physicalFamily: 'Calibri',
+      reason: 'registered_face',
+    });
+    // The CSS paint variant KEEPS the quoted stack (valid CSS); measure awaits the bare family above.
+    expect(
+      r.resolvePhysicalFamilyForFace(
+        '"Calibri", sans-serif',
+        { weight: '400', style: 'normal' },
+        registered('Calibri'),
+      ),
+    ).toBe('"Calibri", sans-serif');
+  });
+
+  it('strips quotes for as_requested and fallback_face_absent structured returns (case preserved)', () => {
+    const r = createFontResolver();
+    // as_requested: no provider; the bare, case-preserved family passes through.
+    expect(r.resolveFace('"Aptos"', { weight: '400', style: 'normal' }, noFaces)).toMatchObject({
+      physicalFamily: 'Aptos',
+      reason: 'as_requested',
+    });
+    // fallback_face_absent: a mapped substitute that cannot supply the face -> the bare logical family.
+    r.map('Georgia', 'Some System Font'); // unregistered target (noFaces) -> override known but no face
+    expect(r.resolveFace('"Georgia"', { weight: '400', style: 'normal' }, noFaces)).toMatchObject({
+      physicalFamily: 'Georgia',
+      reason: 'fallback_face_absent',
+    });
+  });
+});
+
+describe('category_fallback (non-metric family fallback: Calibri Light -> Carlito)', () => {
+  const norm = (f: string) => f.replace(/^["']|["']$/g, '').toLowerCase();
+  const carlito = (f: string) => norm(f) === 'carlito'; // bundled Carlito is registered; Calibri Light is not
+  const noFaces = () => false;
+  const R400 = { weight: '400', style: 'normal' } as const;
+
+  it('family-level: Calibri Light -> Carlito with reason category_fallback (NOT bundled_substitute)', () => {
+    expect(resolveFontFamily('Calibri Light')).toEqual({
+      logicalFamily: 'Calibri Light',
+      physicalFamily: 'Carlito',
+      reason: 'category_fallback',
+    });
+    // Calibri (Regular) stays a metric clone, unaffected.
+    expect(resolveFontFamily('Calibri').reason).toBe('bundled_substitute');
+    // CSS stack keeps fallbacks; case/quote-insensitive.
+    expect(resolvePhysicalFamily('Calibri Light, sans-serif')).toBe('Carlito, sans-serif');
+    expect(resolvePhysicalFamily('"calibri light"')).toBe('Carlito');
+    expect(resolvePrimaryPhysicalFamily('Calibri Light, sans-serif')).toBe('Carlito');
+  });
+
+  it('face-aware: resolveFace maps Calibri Light -> Carlito (category_fallback) when Carlito has the face', () => {
+    const r = createFontResolver();
+    expect(r.resolveFace('Calibri Light', R400, carlito)).toEqual({
+      logicalFamily: 'Calibri Light',
+      physicalFamily: 'Carlito',
+      reason: 'category_fallback',
+    });
+  });
+
+  it('paint/measure: resolvePhysicalFamilyForFace swaps the stack to Carlito (incl. a quoted primary)', () => {
+    const r = createFontResolver();
+    expect(r.resolvePhysicalFamilyForFace('Calibri Light, sans-serif', R400, carlito)).toBe('Carlito, sans-serif');
+    // The normalized swap guard swaps a quoted/cased primary too (not a raw physical !== parts[0]).
+    expect(r.resolvePhysicalFamilyForFace('"Calibri Light"', R400, carlito)).toBe('Carlito');
+  });
+
+  it('category target lacking the face falls through to as_requested (no swap, NOT fallback_face_absent)', () => {
+    const r = createFontResolver();
+    // Carlito provides no faces here: there is no metric substitute that could be "absent".
+    expect(r.resolveFace('Calibri Light', R400, noFaces)).toEqual({
+      logicalFamily: 'Calibri Light',
+      physicalFamily: 'Calibri Light',
+      reason: 'as_requested',
+    });
+    expect(r.resolvePhysicalFamilyForFace('Calibri Light, sans-serif', R400, noFaces)).toBe(
+      'Calibri Light, sans-serif',
+    );
+  });
+
+  it('a customer fonts.map still overrides the category fallback (custom_mapping wins)', () => {
+    const r = createFontResolver();
+    r.map('Calibri Light', 'Customer Light');
+    expect(r.resolveFontFamily('Calibri Light')).toEqual({
+      logicalFamily: 'Calibri Light',
+      physicalFamily: 'Customer Light',
+      reason: 'custom_mapping',
     });
   });
 });

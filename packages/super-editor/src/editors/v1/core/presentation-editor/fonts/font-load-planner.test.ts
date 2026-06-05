@@ -196,4 +196,14 @@ describe('planFontFaces (face-aware single plan)', () => {
       new Set(['Carlito|400|normal', 'Carlito|700|normal', 'Carlito|400|italic', 'Carlito|700|italic']),
     );
   });
+
+  it('a quoted registered family produces a BARE required face (Calibri|..., not "Calibri"|...)', () => {
+    const resolver = createFontResolver();
+    // A run whose CSS family is quoted (`"Calibri"`) and whose real face is registered. The required
+    // face the gate awaits must be the bare `Calibri|400|normal`; a quoted `"Calibri"|400|normal` would
+    // re-quote in the probe and never match the registered face.
+    const registeredCalibri = (f: string) => f.replace(/^["']|["']$/g, '').toLowerCase() === 'calibri';
+    const reqs = planFontFaces([para('p', [text('"Calibri"')])], resolver, registeredCalibri).requiredFaces;
+    expect(keyset(reqs)).toEqual(new Set(['Calibri|400|normal']));
+  });
 });

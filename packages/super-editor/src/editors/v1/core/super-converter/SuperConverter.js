@@ -1011,8 +1011,16 @@ class SuperConverter {
       if (!filePath) return;
 
       const fontUint8Array = this.fonts[`word/${filePath}`];
-      const fontBuffer = fontUint8Array?.buffer;
-      if (!fontBuffer) return;
+      if (!fontUint8Array?.buffer) return;
+      // Copy the EXACT view bytes into a fresh buffer BEFORE deobfuscating. deobfuscateFont XORs its
+      // input IN PLACE; passing `this.fonts[...].buffer` would mutate the shared embedded-font bytes,
+      // so the later registry extraction (getEmbeddedFontFaces) would double-XOR and corrupt the face.
+      // The byteOffset/byteLength slice also avoids XORing the wrong bytes when the Uint8Array is a
+      // view into a larger pooled buffer. getEmbeddedFontFaces already copies the same way.
+      const fontBuffer = fontUint8Array.buffer.slice(
+        fontUint8Array.byteOffset,
+        fontUint8Array.byteOffset + fontUint8Array.byteLength,
+      );
 
       const ttfBuffer = deobfuscateFont(fontBuffer, font.attributes['w:fontKey']);
       if (!ttfBuffer) return;

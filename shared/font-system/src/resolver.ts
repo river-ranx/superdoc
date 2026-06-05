@@ -17,26 +17,36 @@
  * own so two editors on one page can map the same logical family differently (a
  * customer `fonts.map`) without leaking across documents - the same per-document
  * isolation the registry already has per `FontFaceSet`. Every instance is seeded with
- * the five verified clean clones (Calibri->Carlito, Cambria->Caladea, Arial->Liberation
- * Sans, Times New Roman->Liberation Serif, Courier New->Liberation Mono). The
- * module-level `resolve*` functions delegate to a shared default instance for callers
- * that have no document context (and for backward compatibility).
+ * the verified clean clones (Calibri->Carlito, Cambria->Caladea, Arial->Liberation Sans,
+ * Times New Roman->Liberation Serif, Courier New->Liberation Mono, plus Helvetica aliased
+ * to the same Liberation Sans). The module-level `resolve*` functions delegate to a shared
+ * default instance for callers that have no document context (and for backward compatibility).
  */
+
+import { SUBSTITUTION_EVIDENCE } from './substitution-evidence';
 
 export type FontResolutionReason =
   /** No substitute is known; the requested family is used as-is. */
   | 'as_requested'
   /**
-   * The logical family ITSELF has a registered real face for this weight/style (a customer
-   * `fonts.add`, or - later - an embedded document font), so SuperDoc intentionally rendered the
-   * real family and bypassed the bundled substitute. Higher precedence than `bundled_substitute`,
-   * lower than an explicit `custom_mapping`. Only the face-aware path yields this.
+   * A real face is registered for this weight/style, either under the logical family itself
+   * (customer `fonts.add`) or under a document-unique embedded-font alias. SuperDoc intentionally
+   * renders the registered provider and bypasses bundled substitutes. Higher precedence than
+   * `bundled_substitute`, lower than an explicit `custom_mapping`. Only the face-aware path yields
+   * this.
    */
   | 'registered_face'
   /** Replaced by a bundled metric-compatible clone. */
   | 'bundled_substitute'
   /** Replaced by a runtime mapping set on this document's resolver (customer `fonts.map`). */
   | 'custom_mapping'
+  /**
+   * Replaced by the closest bundled FAMILY, but NOT a metric-compatible clone: advances reflow and/or
+   * the weight differs (e.g. Calibri Light -> Carlito, which has no Light face, so it renders at Regular
+   * and reflows ~6.6%). A useful family fallback, never reported as metric-safe. Lower precedence than
+   * `bundled_substitute`; sourced from docfonts rows with `policyAction: 'category_fallback'`.
+   */
+  | 'category_fallback'
   /**
    * A substitute is known for the family but does NOT provide the requested face (weight/style),
    * so the family passes through UNsubstituted rather than faux-styling the substitute's Regular
@@ -67,21 +77,6 @@ export interface FaceKey {
  */
 export type HasFace = (physicalFamily: string, weight: '400' | '700', style: 'normal' | 'italic') => boolean;
 
-/**
- * Logical (normalized) -> physical family. Lowercased, quote-stripped keys.
- *
- * Only metric-verified clean clones (advance widths + OS/2 line metrics match the Word
- * original) belong here. Each target MUST be a family the bundled pack supplies
- * (see `bundled.ts`). Aptos/Georgia are intentionally absent - no clean clone yet.
- */
-const BUNDLED_SUBSTITUTES: Readonly<Record<string, string>> = Object.freeze({
-  calibri: 'Carlito',
-  cambria: 'Caladea',
-  arial: 'Liberation Sans',
-  'times new roman': 'Liberation Serif',
-  'courier new': 'Liberation Mono',
-});
-
 /** Normalize a family name for lookup: trim, strip surrounding quotes, lowercase. */
 function normalizeFamilyKey(family: string): string {
   return family
@@ -93,6 +88,64 @@ function normalizeFamilyKey(family: string): string {
 /** Deterministically sort [key, value] pairs by key, for a stable, order-independent signature. */
 function sortPairs(pairs: Array<[string, string]>): Array<[string, string]> {
   return pairs.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+}
+
+/**
+ * Logical (normalized) -> physical family, DERIVED from the substitution evidence registry
+ * ({@link ./substitution-evidence}): every row docfonts marks `policyAction: 'substitute'` with a
+ * physical target. The evidence file is the single source of truth; this is its resolver projection
+ * (lowercased, quote-stripped keys).
+ *
+ * The inclusion predicate is policyAction, NOT verdict: a QUALIFIED substitute - e.g. Cambria ->
+ * Caladea, top-level `visual_only` because Bold Italic's U+0060 advance reflows - is still the
+ * recommended substitute and stays mapped. Verdict drives how fidelity is REPORTED (a later pass),
+ * never whether SuperDoc substitutes. Gate status (e.g. Helvetica's stale `ship: fail`) is diagnostic,
+ * never an inclusion input. Each physical target MUST be a family the bundled pack supplies
+ * (see `bundled-manifest.ts`); `substitution-evidence.test.ts` enforces that.
+ */
+function deriveBundledSubstitutes(): Readonly<Record<string, string>> {
+  const substitutes: Record<string, string> = {};
+  for (const row of SUBSTITUTION_EVIDENCE) {
+    if (row.policyAction === 'substitute' && row.physicalFamily) {
+      substitutes[normalizeFamilyKey(row.logicalFamily)] = row.physicalFamily;
+    }
+  }
+  return Object.freeze(substitutes);
+}
+
+const BUNDLED_SUBSTITUTES: Readonly<Record<string, string>> = deriveBundledSubstitutes();
+
+/**
+ * Logical (normalized) -> non-metric family fallback, DERIVED from the evidence rows docfonts marks
+ * `policyAction: 'category_fallback'`. These carry the right letterforms but are NOT metric clones
+ * (they reflow and/or differ in weight, e.g. Calibri Light -> Carlito), so they resolve with reason
+ * `category_fallback`, never `bundled_substitute`. A SEPARATE map and reason keep a lower-fidelity
+ * fallback from being mistaken for a clean clone. Same source of truth as
+ * {@link deriveBundledSubstitutes}; the two partition the evidence by `policyAction`.
+ */
+function deriveCategoryFallbacks(): Readonly<Record<string, string>> {
+  const fallbacks: Record<string, string> = {};
+  for (const row of SUBSTITUTION_EVIDENCE) {
+    if (row.policyAction === 'category_fallback' && row.physicalFamily) {
+      fallbacks[normalizeFamilyKey(row.logicalFamily)] = row.physicalFamily;
+    }
+  }
+  return Object.freeze(fallbacks);
+}
+
+const CATEGORY_FALLBACKS: Readonly<Record<string, string>> = deriveCategoryFallbacks();
+
+/**
+ * Strip surrounding quotes from a family name, PRESERVING case, so a STRUCTURED resolution returns a
+ * bare load/report family - a quoted CSS primary like `"Calibri"` becomes `Calibri`. Without this, a
+ * quoted family that resolves to `registered_face` returns `"Calibri"`, which the load/preload probe
+ * (`faceProbe` -> `quoteFamily`) quotes AGAIN, so the browser probes a literal `"Calibri"` and never
+ * matches the registered face (a false fallback + reflow). Distinct from {@link normalizeFamilyKey},
+ * which lowercases for KEYING; here the rendered/reported family must keep its case. The CSS paint
+ * paths intentionally keep the quotes (a quoted stack is valid CSS).
+ */
+function stripFamilyQuotes(family: string): string {
+  return family.trim().replace(/^["']|["']$/g, '');
 }
 
 /** Split a CSS font-family value into trimmed, non-empty families (primary first). */
@@ -132,6 +185,10 @@ export class FontResolver {
    * Map a logical family to a physical render family for this document, overriding the
    * bundled default (e.g. "Georgia" -> "Gelasio", or a customer family -> their font).
    * The physical family must be one the registry can load.
+   *
+   * A self-map (`map('Georgia', 'Georgia')`, normalized) is the absence of an override and is dropped.
+   * Mapping to the bundled clone (`map('Calibri', 'Carlito')`) is NOT a no-op: it is stored as an
+   * explicit pin so it outranks a registered real face for that family (`custom_mapping` > `registered_face`).
    */
   map(logicalFamily: string, physicalFamily: string): void {
     const key = normalizeFamilyKey(logicalFamily);
@@ -140,14 +197,21 @@ export class FontResolver {
     const physical = physicalFamily?.trim();
     if (!key || !physical) return;
     if (this.#overrides.get(key) === physical) return;
-    // Mapping a family to the physical it resolves to by DEFAULT - its bundled substitute, or its
-    // own name when there is none - is the ABSENCE of an override, not an override to record.
-    // Storing it would leave a non-empty signature that permanently de-opts this document's cache
-    // sharing (a non-empty signature never re-shares with default documents). So treat it as an
-    // unmap: drop any existing override (reverting to the default) and bump only if that removed
-    // one. This makes `map({ Calibri: 'Carlito' })` a true no-op whether Calibri was unmapped or
-    // previously pointed elsewhere (e.g. ->Tinos), restoring shared-cache eligibility either way.
-    if ((BUNDLED_SUBSTITUTES[key] ?? logicalFamily.trim()) === physical) {
+    // Mapping a family to its OWN name (identity, e.g. `map({ Georgia: 'Georgia' })`) is the ABSENCE
+    // of an override, not one to record: drop any existing override and revert to the default. Use
+    // `unmap()` to revert other mappings.
+    //
+    // Mapping to the bundled CLONE (e.g. `map({ Calibri: 'Carlito' })`) is NOT treated as a no-op,
+    // unlike before provider precedence. A registered real Calibri now outranks the clone via
+    // `registered_face`, so an explicit pin to the clone is semantically distinct from the default and
+    // must be STORED as a real override - else `custom_mapping` could never beat a registered face and
+    // the pin would be silently ignored. The cost is a non-empty signature (this document stops sharing
+    // the measure cache with default documents), accepted for an explicit pin.
+    //
+    // Identity is compared with the resolver's family normalization (quote-strip + lowercase), so a
+    // quoted/cased self-map (`map('"Georgia"', 'Georgia')`) is still recognized as identity and dropped,
+    // not stored as a spurious override.
+    if (key === normalizeFamilyKey(physical)) {
       if (this.#overrides.delete(key)) {
         this.#version += 1;
         this.#cachedSignature = null;
@@ -246,6 +310,8 @@ export class FontResolver {
     if (override) return { physical: override, reason: 'custom_mapping' };
     const bundled = BUNDLED_SUBSTITUTES[key];
     if (bundled) return { physical: bundled, reason: 'bundled_substitute' };
+    const category = CATEGORY_FALLBACKS[key];
+    if (category) return { physical: category, reason: 'category_fallback' };
     return { physical: bareFamily, reason: 'as_requested' };
   }
 
@@ -257,10 +323,13 @@ export class FontResolver {
    *       (so a shared FontFaceSet renders THIS document's bytes, not another document's same-named font)
    *   2b. a registered real face for the logical family itself (customer `fonts.add`) -> registered_face
    *   3. bundled metric-compatible substitute -> bundled_substitute  (if it provides the face)
-   *   4. otherwise as_requested (no provider) - or fallback_face_absent when an override/substitute
-   *      WAS known but lacked the face, so a single-face clone is never faux-styled.
-   * `physical === primary` (no swap) for 2b / as_requested / fallback_face_absent; an embedded face (2a)
-   * swaps to its unique physical family.
+   *   4. non-metric category fallback -> category_fallback  (if it provides the face; a lower-fidelity
+   *      family fallback like Calibri Light -> Carlito, never reported metric-safe)
+   *   5. otherwise as_requested (no provider, including a category fallback that lacked the face) - or
+   *      fallback_face_absent when an override/bundled substitute WAS known but lacked the face, so a
+   *      single-face clone is never faux-styled.
+   * `physical === primary` (no swap) for 2b / as_requested / fallback_face_absent; embedded 2a swaps
+   * to its document-unique physical family.
    */
   #resolveFaceLadder(
     primary: string,
@@ -293,12 +362,19 @@ export class FontResolver {
     if (bundled && hasFace(bundled, face.weight, face.style)) {
       return { physical: bundled, reason: 'bundled_substitute' };
     }
-    // 4. a configured provider (an override or a bundled clone) was known but none could supply this
+    // 4. non-metric category fallback (e.g. Calibri Light -> Carlito): a family fallback, lower
+    //    fidelity. Apply only when it actually supplies the face. On a miss it falls through to
+    //    as_requested below (there was no metric substitute to be "absent"), never fallback_face_absent.
+    const category = CATEGORY_FALLBACKS[key];
+    if (category && hasFace(category, face.weight, face.style)) {
+      return { physical: category, reason: 'category_fallback' };
+    }
+    // 5. a configured provider (an override or a bundled clone) was known but none could supply this
     //    face: pass the logical family through, reported non-metric, never faux-styled.
     if (override || bundled) {
       return { physical: primary, reason: 'fallback_face_absent' };
     }
-    // 5. no provider at all: render the requested family as-is (browser/system fallback).
+    // 6. no provider at all: render the requested family as-is (browser/system fallback).
     return { physical: primary, reason: 'as_requested' };
   }
 
@@ -311,7 +387,9 @@ export class FontResolver {
     const parts = splitStack(logicalFamily);
     const primary = parts[0] ?? logicalFamily;
     const { physical, reason } = this.#physicalFor(primary);
-    return { logicalFamily, physicalFamily: physical, reason };
+    // physicalFamily is a bare load/report family, never a CSS token: strip quotes a quoted primary
+    // carried through (as_requested). No-op for the already-bare substitute/override names.
+    return { logicalFamily, physicalFamily: stripFamilyQuotes(physical), reason };
   }
 
   /**
@@ -339,7 +417,11 @@ export class FontResolver {
     const parts = splitStack(logicalFamily);
     const primary = parts[0] ?? logicalFamily;
     const { physical, reason } = this.#resolveFaceLadder(primary, face, hasFace);
-    return { logicalFamily, physicalFamily: physical, reason };
+    // physicalFamily is a bare load/report family (the gate awaits it via faceProbe, which re-quotes):
+    // strip quotes off a quoted primary carried through for registered_face / fallback_face_absent /
+    // as_requested, so the probe matches the registered face instead of a literal "Calibri". The CSS
+    // paint variant (resolvePhysicalFamilyForFace) keeps the quoted stack. No-op for substitute names.
+    return { logicalFamily, physicalFamily: stripFamilyQuotes(physical), reason };
   }
 
   /**
@@ -353,13 +435,13 @@ export class FontResolver {
     if (!cssFontFamily) return cssFontFamily;
     const parts = splitStack(cssFontFamily);
     if (parts.length === 0) return cssFontFamily;
-    const { physical, reason } = this.#resolveFaceLadder(parts[0], face, hasFace);
-    // Swap the primary to the physical when a provider applies. For an embedded face, `registered_face`
-    // carries a document-unique physical family that MUST reach paint (else the shared FontFaceSet
-    // renders the wrong document's same-named font); for a `fonts.add` registered_face the physical
-    // equals the primary, so the swap is a harmless no-op. as_requested / fallback_face_absent keep the
-    // original stack (the physical IS the logical family; browser/system fallback renders it).
-    if (reason === 'custom_mapping' || reason === 'bundled_substitute' || reason === 'registered_face') {
+    const { physical } = this.#resolveFaceLadder(parts[0], face, hasFace);
+    // Swap the primary to the physical whenever resolution actually CHANGED the family - any provider
+    // tier, including embedded registered_face aliases. Comparing the family instead of enumerating
+    // reasons keeps future provider tiers from needing another paint-path whitelist. Compare NORMALIZED
+    // (quote-stripped + lowercased) because a same-name registered_face, as_requested, or
+    // fallback_face_absent must not swap just because the primary was quoted or cased.
+    if (normalizeFamilyKey(physical) !== normalizeFamilyKey(parts[0])) {
       return [physical, ...parts.slice(1)].join(', ');
     }
     return cssFontFamily;
