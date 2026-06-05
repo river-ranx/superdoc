@@ -106,7 +106,7 @@ const AiLayerStub = stubComponent('AiLayer');
 const HtmlViewerStub = stubComponent('HtmlViewer');
 const PdfViewerStub = defineComponent({
   name: 'PdfViewer',
-  props: ['file', 'fileId', 'config'],
+  props: ['file', 'fileId', 'config', 'initialScale'],
   emits: ['page-rendered', 'document-ready', 'selection-raw', 'bypass-selection'],
   setup(_props, { expose }) {
     expose({ updateScale: vi.fn() });
@@ -155,6 +155,12 @@ vi.mock('./components/HtmlViewer/HtmlViewer.vue', () => ({
 }));
 
 vi.mock('./components/PdfViewer/PdfViewer.vue', () => ({
+  // SuperDoc.vue loads PdfViewer through defineAsyncComponent, so Vue
+  // receives this module namespace and interop-probes it (__isTeleport
+  // etc.); vitest's strict mock proxy throws on undeclared exports. The
+  // __esModule flag makes Vue's resolver take `default` immediately,
+  // before any probing.
+  __esModule: true,
   default: PdfViewerStub,
 }));
 
