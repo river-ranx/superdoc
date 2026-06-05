@@ -130,6 +130,10 @@ export class FontResolver {
    * Map a logical family to a physical render family for this document, overriding the
    * bundled default (e.g. "Georgia" -> "Gelasio", or a customer family -> their font).
    * The physical family must be one the registry can load.
+   *
+   * A self-map (`map('Georgia', 'Georgia')`, normalized) is the absence of an override and is dropped.
+   * Mapping to the bundled clone (`map('Calibri', 'Carlito')`) is NOT a no-op: it is stored as an
+   * explicit pin so it outranks a registered real face for that family (`custom_mapping` > `registered_face`).
    */
   map(logicalFamily: string, physicalFamily: string): void {
     const key = normalizeFamilyKey(logicalFamily);
