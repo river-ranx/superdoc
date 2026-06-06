@@ -83,6 +83,14 @@ describe('SuperToolbar font dropdown rebuild trigger', () => {
     expect(fontOptions().some((o) => o.label === 'Aptos')).toBe(true);
   });
 
+  it('emits toolbar-items-changed on active-editor change so a freshly attached editor is not left locked', () => {
+    const changed = vi.fn();
+    toolbar.on('toolbar-items-changed', changed);
+
+    toolbar.setActiveEditor(new EventEmitter());
+    expect(changed).toHaveBeenCalledTimes(1);
+  });
+
   it('does not rebuild when fonts-changed fires with the same options (signature guard)', () => {
     documentOptions = [aptos];
     editor.emit('fonts-changed'); // first change -> rebuild
