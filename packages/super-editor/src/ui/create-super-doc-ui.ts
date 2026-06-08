@@ -172,6 +172,28 @@ const ALL_TOOLBAR_COMMAND_IDS: PublicToolbarItemId[] = Object.keys(createToolbar
  */
 const EMPTY_ACTIVE_IDS: readonly string[] = Object.freeze<string[]>([]);
 
+function resolveActiveCommentIdFromList(items: CommentsListResult['items'], commentId: string): string | null {
+  const matches = (item: CommentsListResult['items'][number], id: string) => {
+    const importedId = (item as { importedId?: string }).importedId;
+    return item.id === id || importedId === id;
+  };
+
+  let item = items.find((candidate) => matches(candidate, commentId));
+  const visited = new Set<string>();
+
+  while (item) {
+    if (visited.has(item.id)) return null;
+    visited.add(item.id);
+
+    const parentId = (item as { parentCommentId?: string }).parentCommentId;
+    if (!parentId) return item.id;
+
+    item = items.find((candidate) => matches(candidate, parentId));
+  }
+
+  return null;
+}
+
 /**
  * Recursive structural clone for `ui.selection.capture()` (SD-2821).
  * The captured handle is consumer-facing; it must not share array
@@ -1769,16 +1791,22 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     },
     setActive(commentId) {
       const editor = resolveHostEditor(superdoc) as unknown as {
-        doc?: { comments?: { setActive?(input: { commentId: string | null }): Receipt } };
+        commands?: { setActiveComment?(input: { commentId: string | null }): boolean };
+        doc?: { comments?: { list?(): CommentsListResult } };
       } | null;
 
       try {
-        const comments = editor?.doc?.comments;
-        const setActive = comments?.setActive;
-        if (typeof setActive !== 'function') return false;
+        const setActiveComment = editor?.commands?.setActiveComment;
+        if (typeof setActiveComment !== 'function') return false;
 
-        const receipt = setActive.call(comments, { commentId });
-        return receipt.success === true;
+        let resolvedCommentId: string | null = null;
+        if (commentId !== null) {
+          const items = editor?.doc?.comments?.list?.().items ?? [];
+          resolvedCommentId = resolveActiveCommentIdFromList(items, commentId);
+          if (!resolvedCommentId) return false;
+        }
+
+        return setActiveComment({ commentId: resolvedCommentId }) === true;
       } catch {
         return false;
       }
