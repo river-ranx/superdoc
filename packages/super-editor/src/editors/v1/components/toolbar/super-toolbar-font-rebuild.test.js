@@ -31,7 +31,7 @@ const fontFamilyItem = (toolbarFonts) => ({
   allowWithoutEditor: { value: false },
 });
 
-const aptos = { logicalFamily: 'Aptos', previewFamily: 'Aptos', status: 'needs_font' };
+const aptos = { logicalFamily: 'Aptos', previewFamily: 'Aptos' };
 
 describe('SuperToolbar font dropdown rebuild trigger', () => {
   let toolbar;

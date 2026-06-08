@@ -41,8 +41,7 @@ function compareToolbarFontOptions(a, b) {
  * - With no document options, returns `undefined` so the caller keeps its fallback to {@link TOOLBAR_FONTS}.
  * - Otherwise: bundled defaults and document fonts are deduped by normalized logical family, then sorted
  *   alphabetically by the visible font name. `label`/`key` stay the pure logical family (active-state
- *   matching + the stored value), and the preview renders in `previewFamily`. Support status stays in
- *   the public read API and is not rendered in the picker.
+ *   matching + the stored value), and the preview renders in `previewFamily`.
  *
  * @param {ReadonlyArray<import('@superdoc/font-system').DocumentFontOption>} documentOptions
  * @param {Array} [configFonts] - the consumer's `fonts` config, if any
@@ -55,14 +54,14 @@ export function composeToolbarFontOptions(documentOptions, configFonts) {
   const merged = [...TOOLBAR_FONTS];
   for (const option of documentOptions) {
     const dedupeKey = normalizeToolbarFamily(option.logicalFamily);
-    if (seen.has(dedupeKey)) continue; // already a bundled default (e.g. Calibri) -> not duplicated
+    if (seen.has(dedupeKey)) continue;
     seen.add(dedupeKey);
     merged.push({
-      label: option.logicalFamily, // pure logical name: stored / exported + active-state matched
-      key: option.logicalFamily, // the logical family applied to the selection
+      label: option.logicalFamily,
+      key: option.logicalFamily,
       fontWeight: 400,
       props: {
-        style: { fontFamily: option.previewFamily || option.logicalFamily }, // preview in what paints
+        style: { fontFamily: option.previewFamily || option.logicalFamily },
         'data-item': 'btn-fontFamily-option',
       },
     });

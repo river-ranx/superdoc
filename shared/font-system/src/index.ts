@@ -77,5 +77,5 @@ export {
   fontOfferingRenderStack,
 } from './font-offerings';
 
-export type { FontSupportStatus, DocumentFontOption } from './document-font-options';
-export { buildDocumentFontOptions } from './document-font-options';
+export type { DocumentFontOption, FontFamilyOption } from './document-font-options';
+export { buildDocumentFontOptions, buildFontFamilyOptions } from './document-font-options';

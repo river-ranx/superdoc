@@ -78,6 +78,7 @@ export type {
 export type {
   // Substrate
   EqualityFn,
+  FontFamilyOption,
   SelectorFn,
   Subscribable,
 
@@ -109,6 +110,8 @@ export type {
   CustomCommandRegistration,
   CustomCommandRegistrationResult,
   DynamicCommandHandle,
+  FontsHandle,
+  FontsSlice,
   ToolbarCommandHandleState,
   ToolbarHandle,
   ToolbarSnapshotSlice,

@@ -34,7 +34,7 @@ async function selectFontOption(superdoc: SuperDocFixture, label: string): Promi
 
 async function stubDocumentFontsAndNotify(
   superdoc: SuperDocFixture,
-  options: Array<{ logicalFamily: string; previewFamily: string; status: string }>,
+  options: Array<{ logicalFamily: string; previewFamily: string }>,
 ): Promise<void> {
   await superdoc.page.evaluate((opts) => {
     const sd = (window as any).superdoc;
@@ -79,9 +79,9 @@ test('a document-specific font reaches the live dropdown without status text and
   await superdoc.waitForStable();
 
   await stubDocumentFontsAndNotify(superdoc, [
-    { logicalFamily: 'Aptos', previewFamily: 'Aptos', status: 'needs_font' },
-    { logicalFamily: 'Apple Chancery', previewFamily: 'Apple Chancery', status: 'needs_font' },
-    { logicalFamily: 'Bangla MN', previewFamily: 'Bangla MN', status: 'needs_font' },
+    { logicalFamily: 'Aptos', previewFamily: 'Aptos' },
+    { logicalFamily: 'Apple Chancery', previewFamily: 'Apple Chancery' },
+    { logicalFamily: 'Bangla MN', previewFamily: 'Bangla MN' },
   ]);
 
   const pos = await superdoc.findTextPos('Document font sample');
@@ -105,7 +105,7 @@ test('a document-specific font reaches the live dropdown without status text and
     .filter({ has: superdoc.page.getByText('Aptos', { exact: true }) });
   await expect(aptosOption.locator('.toolbar-dropdown-option__label')).toHaveText('Aptos');
   await expect(aptosOption.locator('.toolbar-dropdown-option__secondary')).toHaveCount(0);
-  await expect(aptosOption).not.toHaveAttribute('aria-label', /Needs font/);
+  await expect(aptosOption).toHaveAttribute('aria-label', 'Aptos');
 
   await selectFontOption(superdoc, 'Aptos');
 
@@ -120,9 +120,7 @@ test('the dropdown refreshes on fonts-changed without a resize', async ({ superd
   await superdoc.waitForStable();
   await expectFontFamilyDropdownClosed(superdoc);
 
-  await stubDocumentFontsAndNotify(superdoc, [
-    { logicalFamily: 'Aptos', previewFamily: 'Aptos', status: 'needs_font' },
-  ]);
+  await stubDocumentFontsAndNotify(superdoc, [{ logicalFamily: 'Aptos', previewFamily: 'Aptos' }]);
 
   await openFontFamilyDropdown(superdoc);
   expect(await fontOptionLabels(superdoc)).toContain('Aptos');

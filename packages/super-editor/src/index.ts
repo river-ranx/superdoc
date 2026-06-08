@@ -74,7 +74,6 @@ export type {
 export type {
   FontResolutionRecord,
   DocumentFontOption,
-  FontSupportStatus,
   FontResolutionReason,
   FontLoadStatus,
   FontLoadSummary,

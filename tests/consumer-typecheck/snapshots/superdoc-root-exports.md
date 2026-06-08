@@ -1,17 +1,17 @@
 # superdoc root export inventory (SD-3212 PR A0)
 
-Generated: 2026-06-06T01:57:50.052Z
+Generated: 2026-06-08T11:16:20.709Z
 Source: packed and installed `tests/consumer-typecheck/node_modules/superdoc`
 
 ## Counts
 
 | Source | Path | Count |
 |---|---|---|
-| types.import | `./dist/superdoc/src/public/index.d.ts` | 238 |
-| types.require | `./dist/superdoc/src/public/index.d.cts` | 238 |
+| types.import | `./dist/superdoc/src/public/index.d.ts` | 237 |
+| types.require | `./dist/superdoc/src/public/index.d.cts` | 237 |
 | import | `./dist/superdoc.es.js` | 41 |
 | require | `./dist/superdoc.cjs` | 41 |
-| **union** |  | **238** |
+| **union** |  | **237** |
 
 ## Divergences
 
@@ -19,7 +19,7 @@ Source: packed and installed `tests/consumer-typecheck/node_modules/superdoc`
 - types.require only (not in types.import): 0
 - ESM only (not in CJS): 0
 - CJS only (not in ESM): 0
-- typed but no runtime export (phantom risk): 197
+- typed but no runtime export (phantom risk): 196
 - runtime export but not typed (silent shadow on root): 0
 
 ### Type-only names (no runtime)
@@ -96,7 +96,6 @@ Source: packed and installed `tests/consumer-typecheck/node_modules/superdoc`
 - `FontFaceConfig`
 - `FontFamilyConfig`
 - `FontResolutionRecord`
-- `FontSupportStatus`
 - `FontsChangedPayload`
 - `FontsConfig`
 - `FontsResolvedPayload`
@@ -307,7 +306,6 @@ Source: packed and installed `tests/consumer-typecheck/node_modules/superdoc`
 | `FontFaceConfig` | ✓ | ✓ |   |   | 2 |   | 0 | 0 | 0 |   |
 | `FontFamilyConfig` | ✓ | ✓ |   |   | 2 |   | 0 | 0 | 0 |   |
 | `FontResolutionRecord` | ✓ | ✓ |   |   | 2 |   | 0 | 0 | 0 |   |
-| `FontSupportStatus` | ✓ | ✓ |   |   | 0 |   | 0 | 0 | 0 |   |
 | `FontsChangedPayload` | ✓ | ✓ |   |   | 2 |   | 0 | 0 | 0 |   |
 | `FontsConfig` | ✓ | ✓ |   |   | 1 |   | 0 | 0 | 0 |   |
 | `FontsResolvedPayload` | ✓ | ✓ |   |   | 2 | ✓ | 0 | 0 | 0 |   |

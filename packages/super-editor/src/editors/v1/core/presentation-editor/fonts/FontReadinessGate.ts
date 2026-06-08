@@ -214,10 +214,9 @@ export class FontReadinessGate {
 
   /**
    * The document's own fonts for the toolbar's document-specific picker: one option per LOGICAL family
-   * the document RENDERS, each with the family to preview it in and a diagnostic support status. These
-   * are DOCUMENT fonts only - the toolbar composes them with its defaults. Built through the same
-   * registry + resolver + used faces as {@link getReport}, so the status reflects exactly what SuperDoc
-   * renders. Never throws (font UI must not break layout): returns [] before the plan exists.
+   * the document RENDERS, each with the family to preview it in. These are DOCUMENT fonts only - the
+   * toolbar composes them with its defaults. Built through the same registry + resolver + used faces as
+   * {@link getReport}. Never throws (font UI must not break layout): returns [] before the plan exists.
    */
   getDocumentFontOptions(): DocumentFontOption[] {
     try {

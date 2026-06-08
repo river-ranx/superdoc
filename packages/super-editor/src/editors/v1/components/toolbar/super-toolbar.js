@@ -528,7 +528,7 @@ export class SuperToolbar extends EventEmitter {
 
   /**
    * The font dropdown options. Lifecycle only: get the active document's font options from the read API
-   * and hand the composition (dedupe, ordering, status labels, preview styling) to the pure
+   * and hand the composition (dedupe, ordering, preview styling) to the pure
    * {@link composeToolbarFontOptions} seam. A consumer-provided `configFonts` list is returned untouched.
    * @private
    * @param {Array|undefined} configFonts - the consumer's `fonts` config, if any
@@ -571,7 +571,7 @@ export class SuperToolbar extends EventEmitter {
    */
   #fontOptionsSignature() {
     const options = this.superdoc?.fonts?.getDocumentFontOptions?.() ?? [];
-    return options.map((option) => `${option.logicalFamily}:${option.status}:${option.previewFamily}`).join('|');
+    return options.map((option) => `${option.logicalFamily}:${option.previewFamily}`).join('|');
   }
 
   /**
@@ -1049,7 +1049,7 @@ export class SuperToolbar extends EventEmitter {
 
   /**
    * Rebuild the toolbar (and so the font dropdown) when the active document's font picture resolves.
-   * Fonts load asynchronously after a document opens, so support statuses settle with no edit/transaction.
+   * Fonts load asynchronously after a document opens, so document font options can change with no edit.
    * @returns {void}
    */
   onEditorFontsChanged() {

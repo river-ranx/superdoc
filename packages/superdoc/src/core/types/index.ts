@@ -108,7 +108,7 @@ export interface SuperDocFontsApi {
   getDocumentFonts(): string[];
   /**
    * The document's own fonts as toolbar options: one per logical family the document renders, each with
-   * a preview family and diagnostic support status. Document fonts only - compose with the defaults.
+   * a preview family. Document fonts only - compose with the defaults.
    */
   getDocumentFontOptions(): DocumentFontOption[];
   /**

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-06T01:57:50.052Z",
+  "generatedAt": "2026-06-08T11:16:20.709Z",
   "ticket": "SD-3212 PR A0",
   "package": "superdoc",
   "rootExport": {
@@ -95,7 +95,6 @@
         "FontFaceConfig",
         "FontFamilyConfig",
         "FontResolutionRecord",
-        "FontSupportStatus",
         "FontsChangedPayload",
         "FontsConfig",
         "FontsResolvedPayload",
@@ -339,7 +338,6 @@
         "FontFaceConfig",
         "FontFamilyConfig",
         "FontResolutionRecord",
-        "FontSupportStatus",
         "FontsChangedPayload",
         "FontsConfig",
         "FontsResolvedPayload",
@@ -595,11 +593,11 @@
     }
   },
   "counts": {
-    "types.import": 238,
-    "types.require": 238,
+    "types.import": 237,
+    "types.require": 237,
     "import": 41,
     "require": 41,
-    "union": 238
+    "union": 237
   },
   "divergences": {
     "typesImportVsRequire": {
@@ -684,7 +682,6 @@
         "FontFaceConfig",
         "FontFamilyConfig",
         "FontResolutionRecord",
-        "FontSupportStatus",
         "FontsChangedPayload",
         "FontsConfig",
         "FontsResolvedPayload",

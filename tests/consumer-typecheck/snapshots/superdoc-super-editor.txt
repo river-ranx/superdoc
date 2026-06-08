@@ -64,7 +64,6 @@ FontLoadStatus
 FontLoadSummary
 FontResolutionReason
 FontResolutionRecord
-FontSupportStatus
 FontsChangedPayload
 FontsConfig
 FontsResolvedPayload

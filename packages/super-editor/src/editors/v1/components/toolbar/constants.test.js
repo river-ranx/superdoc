@@ -40,15 +40,14 @@ describe('TOOLBAR_FONTS (built-in font dropdown, derived from the font-offering 
 });
 
 describe('composeToolbarFontOptions (document fonts unioned with the bundled defaults)', () => {
-  const doc = (logicalFamily, status, previewFamily) => ({
+  const doc = (logicalFamily, previewFamily) => ({
     logicalFamily,
-    status,
     previewFamily: previewFamily ?? logicalFamily,
   });
 
   it('returns a consumer-provided fonts list unchanged (custom toolbars own their list)', () => {
     const custom = [{ label: 'My Font', key: 'My Font' }];
-    expect(composeToolbarFontOptions([doc('Aptos', 'needs_font')], custom)).toBe(custom);
+    expect(composeToolbarFontOptions([doc('Aptos')], custom)).toBe(custom);
   });
 
   it('returns undefined with no document fonts, so the caller keeps the bundled defaults', () => {
@@ -58,12 +57,7 @@ describe('composeToolbarFontOptions (document fonts unioned with the bundled def
 
   it('combines defaults and document fonts alphabetically, deduping one already in the defaults', () => {
     const options = composeToolbarFontOptions(
-      [
-        doc('Calibri', 'available', 'Carlito'),
-        doc('Bangla MN', 'needs_font'),
-        doc('Aptos', 'needs_font'),
-        doc('Apple Chancery', 'needs_font'),
-      ],
+      [doc('Calibri', 'Carlito'), doc('Bangla MN'), doc('Aptos'), doc('Apple Chancery')],
       undefined,
     );
     expect(options.map((o) => o.label)).toEqual([
@@ -80,7 +74,7 @@ describe('composeToolbarFontOptions (document fonts unioned with the bundled def
   });
 
   it('maps a document font as a plain logical picker row, with no visible status text', () => {
-    const options = composeToolbarFontOptions([doc('Aptos', 'needs_font', 'Aptos')], undefined);
+    const options = composeToolbarFontOptions([doc('Aptos')], undefined);
     const aptos = options.find((option) => option.label === 'Aptos');
     expect(aptos).toMatchObject({
       label: 'Aptos', // pure logical name (active-state match + the stored/exported value)
@@ -90,15 +84,8 @@ describe('composeToolbarFontOptions (document fonts unioned with the bundled def
     expect(aptos.secondaryLabel).toBeUndefined();
   });
 
-  it('does not expose status text for any document font status', () => {
-    for (const status of ['available', 'fallback', 'pending', 'needs_font', 'preserve_only']) {
-      const options = composeToolbarFontOptions([doc(`BrandSans-${status}`, status, 'BrandSans')], undefined);
-      expect(options.at(-1).secondaryLabel).toBeUndefined();
-    }
-  });
-
-  it('keeps an available document font as a plain name', () => {
-    const options = composeToolbarFontOptions([doc('BrandSans', 'available', 'BrandSans')], undefined);
+  it('keeps a document font as a plain name', () => {
+    const options = composeToolbarFontOptions([doc('BrandSans')], undefined);
     const brandSans = options.find((option) => option.label === 'BrandSans');
     expect(brandSans.label).toBe('BrandSans');
     expect(brandSans.secondaryLabel).toBeUndefined();

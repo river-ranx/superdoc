@@ -540,7 +540,7 @@ describe('FontReadinessGate.getDocumentFontOptions (document-used fonts, public 
     const options = gate.getDocumentFontOptions();
 
     expect(options.map((o) => o.logicalFamily)).toEqual(['Aptos']);
-    expect(options[0].status).toBe('needs_font');
+    expect(options[0]).toEqual({ logicalFamily: 'Aptos', previewFamily: 'Aptos' });
   });
 
   it('returns [] when the document renders no fonts, even with declared families (no defaults leak in)', () => {

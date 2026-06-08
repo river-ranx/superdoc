@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   buildDocumentFontOptions,
-  type FontSupportStatus,
+  buildFontFamilyOptions,
   type FontFaceRequest,
   type FontLoadStatus,
   type FontRegistry,
@@ -51,42 +51,39 @@ function loadedRegistry(): FaceRegistry {
   return reg;
 }
 
-describe('buildDocumentFontOptions (document-specific toolbar fonts + support status)', () => {
-  it('classifies each font the document uses by how faithfully SuperDoc renders it', () => {
+describe('buildDocumentFontOptions (document-specific toolbar fonts)', () => {
+  it('returns one plain option for each font the document uses', () => {
     const reg = loadedRegistry().asRegistry();
     const options = buildDocumentFontOptions(
       [
-        regular('Calibri'), // metric-safe bundled clone (Carlito)
-        regular('Cambria'), // bundled clone (Caladea) but qualified (visual_only)
-        regular('Calibri Light'), // category fallback (Carlito, non-metric)
-        regular('Georgia'), // candidate Gelasio exists but is not bundled yet
-        regular('Aptos'), // no open clone - the customer must supply it
-        regular('Cambria Math'), // math font - preserve, never substitute
-        regular('BrandSans'), // a real face the document embeds / adds
-        regular('Wingdings'), // docfonts has no record at all
+        regular('Calibri'),
+        regular('Cambria'),
+        regular('Calibri Light'),
+        regular('Georgia'),
+        regular('Aptos'),
+        regular('Cambria Math'),
+        regular('BrandSans'),
+        regular('Wingdings'),
       ],
       reg,
     );
-    const byName = Object.fromEntries(options.map((o) => [o.logicalFamily, o.status])) as Record<
-      string,
-      FontSupportStatus
-    >;
-    expect(byName).toEqual({
-      Calibri: 'available',
-      Cambria: 'fallback',
-      'Calibri Light': 'fallback',
-      Georgia: 'pending',
-      Aptos: 'needs_font',
-      'Cambria Math': 'preserve_only',
-      BrandSans: 'available',
-      Wingdings: 'needs_font',
-    });
+    expect(options.map((o) => o.logicalFamily)).toEqual([
+      'Calibri',
+      'Cambria',
+      'Calibri Light',
+      'Georgia',
+      'Aptos',
+      'Cambria Math',
+      'BrandSans',
+      'Wingdings',
+    ]);
+    expect(options.every((option) => !('status' in option))).toBe(true);
   });
 
-  it('renders an available font through its bundled clone, and preserves the logical name', () => {
+  it('previews a bundled substitute through its physical clone, while preserving the logical name', () => {
     const reg = loadedRegistry().asRegistry();
     const [calibri] = buildDocumentFontOptions([regular('Calibri')], reg);
-    expect(calibri).toMatchObject({ logicalFamily: 'Calibri', previewFamily: 'Carlito', status: 'available' });
+    expect(calibri).toMatchObject({ logicalFamily: 'Calibri', previewFamily: 'Carlito' });
   });
 
   it('dedupes a family used at multiple faces into one option (regular face represents it)', () => {
@@ -100,21 +97,49 @@ describe('buildDocumentFontOptions (document-specific toolbar fonts + support st
       reg,
     );
     expect(options).toHaveLength(1);
-    expect(options[0]).toMatchObject({ logicalFamily: 'Calibri', status: 'available' });
+    expect(options[0]).toMatchObject({ logicalFamily: 'Calibri', previewFamily: 'Carlito' });
   });
 
-  it('reports the WORST status across used faces (available Regular + non-substitutable Bold = fallback)', () => {
+  it('keeps the regular face as the preview representative when another used face is absent', () => {
     const reg = new FaceRegistry();
-    reg.setFace('Carlito', '400', 'normal', 'loaded'); // ONLY Carlito Regular registered - no Bold
+    reg.setFace('Carlito', '400', 'normal', 'loaded');
     const options = buildDocumentFontOptions(
       [
-        { logicalFamily: 'Calibri', weight: '400', style: 'normal' }, // available via Carlito Regular
-        { logicalFamily: 'Calibri', weight: '700', style: 'normal' }, // no Carlito Bold -> fallback_face_absent
+        { logicalFamily: 'Calibri', weight: '400', style: 'normal' },
+        { logicalFamily: 'Calibri', weight: '700', style: 'normal' },
       ],
       reg.asRegistry(),
     );
     expect(options).toHaveLength(1);
-    // Regular alone reads `available`; aggregating the unsubstitutable Bold honestly drops it to `fallback`.
-    expect(options[0]).toMatchObject({ logicalFamily: 'Calibri', previewFamily: 'Carlito', status: 'fallback' });
+    expect(options[0]).toMatchObject({ logicalFamily: 'Calibri', previewFamily: 'Carlito' });
+  });
+});
+
+describe('buildFontFamilyOptions (custom UI font picker rows)', () => {
+  it('combines bundled defaults and document fonts alphabetically with no status field', () => {
+    const options = buildFontFamilyOptions([
+      { logicalFamily: 'Aptos', previewFamily: 'Aptos' },
+      { logicalFamily: 'Bangla MN', previewFamily: 'Bangla MN' },
+      { logicalFamily: 'Calibri', previewFamily: 'Carlito' },
+      { logicalFamily: 'Apple Chancery', previewFamily: 'Apple Chancery' },
+    ]);
+    expect(options.map((option) => option.label)).toEqual([
+      'Apple Chancery',
+      'Aptos',
+      'Arial',
+      'Bangla MN',
+      'Calibri',
+      'Courier New',
+      'Helvetica',
+      'Times New Roman',
+    ]);
+    expect(options.filter((option) => option.label === 'Calibri')).toHaveLength(1);
+    expect(options.every((option) => !('status' in option))).toBe(true);
+  });
+
+  it('uses the logical family as the apply value and previewFamily only for row rendering', () => {
+    const options = buildFontFamilyOptions([{ logicalFamily: 'Calibri', previewFamily: 'Carlito' }]);
+    const calibri = options.find((option) => option.label === 'Calibri');
+    expect(calibri).toMatchObject({ label: 'Calibri', value: 'Calibri', previewFamily: 'Carlito' });
   });
 });

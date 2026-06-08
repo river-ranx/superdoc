@@ -3117,9 +3117,8 @@ export class PresentationEditor extends EventEmitter {
 
   /**
    * The document's own fonts for the toolbar's document-specific picker: one option per LOGICAL family
-   * the document renders, each with the family to preview it in and a diagnostic support status.
-   * DOCUMENT fonts only - the toolbar composes them with its defaults. Surfaced publicly as
-   * `superdoc.fonts.getDocumentFontOptions()`.
+   * the document renders, each with the family to preview it in. DOCUMENT fonts only - the toolbar
+   * composes them with its defaults. Surfaced publicly as `superdoc.fonts.getDocumentFontOptions()`.
    */
   getDocumentFontOptions(): DocumentFontOption[] {
     return this.#fontGate?.getDocumentFontOptions() ?? [];
