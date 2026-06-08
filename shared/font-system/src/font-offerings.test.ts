@@ -8,7 +8,7 @@ import {
 } from './font-offerings';
 import { SUBSTITUTION_EVIDENCE } from './substitution-evidence';
 
-const EXPECTED_DEFAULTS = ['Arial', 'Calibri', 'Courier New', 'Helvetica', 'Times New Roman'];
+const EXPECTED_DEFAULTS = ['Arial', 'Calibri', 'Cooper Black', 'Courier New', 'Helvetica', 'Times New Roman'];
 
 /**
  * Must NOT appear as DEFAULT options yet. Aptos/Georgia/Baskerville/Arial Narrow are not bundled (or
@@ -40,6 +40,7 @@ describe('font offerings', () => {
     expect(getDefaultFontFamilyOptions()).toEqual([
       { label: 'Arial', value: 'Arial, sans-serif' },
       { label: 'Calibri', value: 'Calibri, sans-serif' },
+      { label: 'Cooper Black', value: 'Cooper Black, serif' },
       { label: 'Courier New', value: 'Courier New, monospace' },
       { label: 'Helvetica', value: 'Helvetica, sans-serif' },
       { label: 'Times New Roman', value: 'Times New Roman, serif' },

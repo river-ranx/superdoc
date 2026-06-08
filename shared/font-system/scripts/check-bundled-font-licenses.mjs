@@ -79,6 +79,15 @@ function parseRuntimeManifest() {
       files: FOUR_FACE_SUFFIXES.map((suffix) => `${filePrefix}-${suffix}.woff2`),
     });
   }
+  const customPattern = /familyWithFaces\('([^']+)'\s*,\s*'([^']+)'\s*,\s*\[([\s\S]*?)\]\)/g;
+  const facePattern = /{\s*weight:\s*'([^']+)'\s*,\s*style:\s*'([^']+)'\s*,\s*file:\s*'([^']+)'\s*}/g;
+  while ((match = customPattern.exec(source)) !== null) {
+    const [, family, license, faceBlock] = match;
+    const files = [];
+    let faceMatch;
+    while ((faceMatch = facePattern.exec(faceBlock)) !== null) files.push(faceMatch[3]);
+    rows.push({ family, license, files });
+  }
   return rows;
 }
 

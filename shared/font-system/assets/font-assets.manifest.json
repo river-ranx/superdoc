@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "spdxExpression": "OFL-1.1 AND Apache-2.0",
-  "generatedFrom": "Bundled font legal review, 2026-06-03",
+  "generatedFrom": "Bundled font legal review, 2026-06-03; Caprasimo added from DocFonts Google Fonts OFL provenance, 2026-06-08",
   "families": [
     {
       "family": "Carlito",
@@ -186,6 +186,29 @@
           "weight": "bold",
           "style": "italic",
           "sha256": "0fce31aa9a25eb896122b309d86ebfd5541a12d917f2b94669b0e166302e29b9"
+        }
+      ]
+    },
+    {
+      "family": "Caprasimo",
+      "replaces": ["Cooper Black"],
+      "license": "OFL-1.1",
+      "licenseFiles": ["OFL.txt"],
+      "version": "1.001",
+      "upstreamSource": "google/fonts c89741abbf4eeabce432c3ed2fd7dc28b022701e, ofl/caprasimo",
+      "reservedFontName": null,
+      "copyrightNotice": "Copyright 2023 The Caprasimo Project Authors (https://github.com/docrepair-fonts/caprasimo-fonts).",
+      "trademarkNotice": null,
+      "sourceFile": {
+        "file": "Caprasimo-Regular.ttf",
+        "sha256": "786ab84ee787d40df55be78cb4361e485a1c6687195cbcccf3538cb5e46ced90"
+      },
+      "faces": [
+        {
+          "file": "Caprasimo-Regular.woff2",
+          "weight": "normal",
+          "style": "normal",
+          "sha256": "66c6d1e052b6553371f29d21bfee798bb3c2238f51b54a89fe50d4234db348b1"
         }
       ]
     }

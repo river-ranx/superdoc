@@ -6,6 +6,7 @@ describe('TOOLBAR_FONTS (built-in font dropdown, derived from the font-offering 
     expect(TOOLBAR_FONTS.map((f) => f.label)).toEqual([
       'Arial',
       'Calibri',
+      'Cooper Black',
       'Courier New',
       'Helvetica',
       'Times New Roman',
@@ -66,6 +67,7 @@ describe('composeToolbarFontOptions (document fonts unioned with the bundled def
       'Arial',
       'Bangla MN',
       'Calibri',
+      'Cooper Black',
       'Courier New',
       'Helvetica',
       'Times New Roman',

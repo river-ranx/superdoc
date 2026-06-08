@@ -33,6 +33,7 @@ describe('installBundledSubstitutes URL resolution', () => {
     expect(reg.registered).toHaveLength(FACE_COUNT);
     expect(reg.sourcesFor('Carlito')).toContain('url(/fonts/Carlito-Regular.woff2)');
     expect(reg.sourcesFor('Liberation Sans')).toContain('url(/fonts/LiberationSans-Bold.woff2)');
+    expect(reg.sourcesFor('Caprasimo')).toEqual(['url(/fonts/Caprasimo-Regular.woff2)']);
   });
 
   it('uses assetBaseUrl and normalizes a missing trailing slash', () => {

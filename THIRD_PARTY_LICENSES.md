@@ -36,19 +36,21 @@ SPDX license expression for this bundled font set: `OFL-1.1 AND Apache-2.0`.
 | Liberation Sans | Arial | OFL-1.1 | none declared | 2.1.5 |
 | Liberation Serif | Times New Roman | OFL-1.1 | none declared | 2.1.5 |
 | Liberation Mono | Courier New | OFL-1.1 | none declared | 2.1.5 |
+| Caprasimo | Cooper Black | OFL-1.1 | none | 1.001 |
 
 ### Copyright & trademark notices from the font `name` tables
 
 - **Carlito** (OFL-1.1): `Copyright (c) 2010-2013 by tyPoland Lukasz Dziedzic with Reserved Font Name "Carlito". Licensed under the SIL Open Font License, Version 1.1.` Carlito is a trademark of tyPoland Lukasz Dziedzic.
 - **Caladea** (Apache-2.0): `Copyright (c) 2012 Huerta Tipografia`. Caladea is a trademark of Huerta Tipografia. No Reserved Font Name. No upstream `NOTICE` file.
 - **Liberation Sans / Serif / Mono** (OFL-1.1): `Digitized data copyright (c) 2010 Google Corporation.` / `Copyright (c) 2012 Red Hat, Inc.` "Liberation" is a registered Red Hat trademark. The v2.1.5 files declare no OFL Reserved Font Name. SuperDoc names the unmodified fonts.
+- **Caprasimo** (OFL-1.1): `Copyright 2023 The Caprasimo Project Authors (https://github.com/docrepair-fonts/caprasimo-fonts).` The v1.001 file declares no OFL Reserved Font Name.
 
 ### Format conversion
 
 The bundled faces are format-only TrueType-to-WOFF2 conversions (`fontTools`,
 `flavor="woff2"`, Brotli; no subsetting; WOFF2 metadata omitted). No design,
 metric, glyph, `cmap`, or `name`-table change. Verified for this ship set:
-20 / 20 faces have a WOFF2 `name` table byte-identical to their source TTF with
+21 / 21 faces have a WOFF2 `name` table byte-identical to their source TTF with
 identical glyph count and `cmap`, and all metrics are preserved. Under OFL FAQ
 2.2.1 these are not Modified Versions and retain the original font names. For
 Caladea, this also serves as the Apache-2.0 section 4(b) notice.

@@ -4,9 +4,8 @@ import { SUBSTITUTION_EVIDENCE } from './substitution-evidence';
 import { BUNDLED_MANIFEST } from './bundled-manifest';
 
 /**
- * The six logical -> physical substitutions the resolver shipped before the evidence registry
- * existed. The registry must derive EXACTLY these - introducing the manifest is a no-behavior-change
- * refactor, not an expansion. Adding a substitute is a deliberate, reviewed edit to this list.
+ * The logical -> physical substitutions the resolver activates from DocFonts evidence and bundled
+ * assets. Adding a substitute is a deliberate, reviewed edit to this list.
  */
 const EXPECTED_SUBSTITUTES: ReadonlyArray<readonly [logical: string, physical: string]> = [
   ['Calibri', 'Carlito'],
@@ -15,16 +14,17 @@ const EXPECTED_SUBSTITUTES: ReadonlyArray<readonly [logical: string, physical: s
   ['Times New Roman', 'Liberation Serif'],
   ['Courier New', 'Liberation Mono'],
   ['Helvetica', 'Liberation Sans'],
+  ['Cooper Black', 'Caprasimo'],
 ];
 
 describe('substitution evidence -> resolver derivation', () => {
-  it("derives exactly today's six substitutions (no behavior change)", () => {
+  it('derives exactly the reviewed bundled substitutions', () => {
     const resolver = createFontResolver();
     for (const [logical, physical] of EXPECTED_SUBSTITUTES) {
       expect(resolver.resolvePrimaryPhysicalFamily(logical)).toBe(physical);
     }
     // Asset-gated input: the registry carries more substitute rows than SuperDoc ships, so count only
-    // the ones whose clone is bundled (the resolver's actual input). That set is exactly the six pairs.
+    // the ones whose clone is bundled (the resolver's actual input).
     const bundled = new Set(BUNDLED_MANIFEST.map((f) => f.family));
     const activeSubstitutes = SUBSTITUTION_EVIDENCE.filter(
       (r) => r.policyAction === 'substitute' && r.physicalFamily && bundled.has(r.physicalFamily),
@@ -96,5 +96,21 @@ describe('substitution evidence -> resolver derivation', () => {
     expect(resolveFontFamily('Calibri Light').reason).toBe('category_fallback');
     // Its Carlito target still ships in the bundled pack, so the runtime can render the fallback.
     expect(new Set(BUNDLED_MANIFEST.map((f) => f.family)).has('Carlito')).toBe(true);
+  });
+
+  it('Cooper Black activates only the Regular Caprasimo face from the metric-safe DocFonts row', () => {
+    const row = SUBSTITUTION_EVIDENCE.find((r) => r.evidenceId === 'cooper-black');
+    expect(row).toMatchObject({
+      logicalFamily: 'Cooper Black',
+      physicalFamily: 'Caprasimo',
+      policyAction: 'substitute',
+      verdict: 'metric_safe',
+      faces: { regular: true, bold: false, italic: false, boldItalic: false },
+    });
+    expect(resolveFontFamily('Cooper Black')).toEqual({
+      logicalFamily: 'Cooper Black',
+      physicalFamily: 'Caprasimo',
+      reason: 'bundled_substitute',
+    });
   });
 });

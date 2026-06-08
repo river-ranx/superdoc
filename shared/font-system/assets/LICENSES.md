@@ -3,7 +3,9 @@
 _Location: `shared/font-system/assets/LICENSES.md`. This file ships in the same
 directory as the font files, `OFL.txt`, and `Apache-2.0.txt`, and travels with
 them in every distribution. All strings below were taken verbatim from the
-shipped fonts' `name` tables on 2026-06-03._
+shipped fonts' `name` tables. The original five-family set was reviewed on
+2026-06-03. Caprasimo was added from DocFonts' Google Fonts OFL provenance on
+2026-06-08._
 
 ## Scope (read first)
 
@@ -31,6 +33,7 @@ Machine-readable asset metadata: `font-assets.manifest.json`.
 | Liberation Sans | Arial | OFL-1.1 | none declared* | 2.1.5 | github.com/liberationfonts/liberation-fonts 2.1.5 |
 | Liberation Serif | Times New Roman | OFL-1.1 | none declared* | 2.1.5 | github.com/liberationfonts/liberation-fonts 2.1.5 |
 | Liberation Mono | Courier New | OFL-1.1 | none declared* | 2.1.5 | github.com/liberationfonts/liberation-fonts 2.1.5 |
+| Caprasimo | Cooper Black | OFL-1.1 | none | 1.001 | google/fonts c89741abbf4eeabce432c3ed2fd7dc28b022701e, ofl/caprasimo |
 
 \* The Liberation v2.1.5 files carry no OFL Reserved Font Name. "Liberation" is a
 registered Red Hat trademark, which is separate from an OFL RFN. SuperDoc names
@@ -64,6 +67,15 @@ No OFL Reserved Font Name is declared in these files. Each file's description
 field notes the Arimo / Tinos / Cousine design lineage (Steve Matteson,
 Ascender). Those names are not declared as Reserved Font Names here.
 
+**Caprasimo** - OFL-1.1
+
+```text
+Copyright 2023 The Caprasimo Project Authors (https://github.com/docrepair-fonts/caprasimo-fonts).
+License description: This Font Software is licensed under the SIL Open Font License, Version 1.1. This license is available with a FAQ at: https://scripts.sil.org/OFL
+```
+
+No OFL Reserved Font Name is declared in this file.
+
 ## Conversion notice (covers OFL section 1 / FAQ 2.2.1 and Apache-2.0 section 4(b))
 
 The WOFF2 faces in this distribution are **format-only conversions** of the
@@ -78,9 +90,9 @@ Carlito Reserved Font Name. For Caladea, the same statement satisfies the
 Apache-2.0 section 4(b) "modified files" notice. Caladea carries **no upstream
 `NOTICE` file**, so Apache-2.0 section 4(d) adds nothing.
 
-## Verification evidence (this ship set, 2026-06-03)
+## Verification evidence (current ship set)
 
-- **20 / 20 WOFF2 faces:** WOFF2 flavor, WOFF2 metadata block omitted, `name`
+- **21 / 21 WOFF2 faces:** WOFF2 flavor, WOFF2 metadata block omitted, `name`
   table byte-identical to the source TTF, identical glyph count and `cmap`.
 - **Metrics:** `unitsPerEm`, `hhea` ascent/descent, OS/2 win/typo ascent/descent,
   and every glyph advance width compared source-vs-WOFF2:
@@ -88,8 +100,8 @@ Apache-2.0 section 4(b) "modified files" notice. Caladea carries **no upstream
 
 ## Full license texts
 
-- OFL-1.1 (Carlito, Liberation): `OFL.txt` in this directory. The copyright
-  notices above are also stacked at the top of that file.
+- OFL-1.1 (Carlito, Liberation, Caprasimo): `OFL.txt` in this directory. The
+  copyright notices above are also stacked at the top of that file.
 - Apache-2.0 (Caladea): `Apache-2.0.txt` in this directory.
 
 SuperDoc does not relicense these fonts. They remain under their own OFL-1.1 /
