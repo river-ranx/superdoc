@@ -249,6 +249,26 @@ button {
   opacity: 0.5;
 }
 
+.tb-select {
+  height: 30px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+
+.tb-select:disabled {
+  color: var(--text-muted);
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.tb-font-select {
+  min-width: 150px;
+  padding: 0 8px;
+}
+
 .tb-btn.export-btn {
   border-color: var(--border);
   padding: 0 12px;

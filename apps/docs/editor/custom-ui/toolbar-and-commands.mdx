@@ -93,6 +93,38 @@ function FontSizePicker() {
 }
 ```
 
+## Font family picker
+
+Use `useSuperDocFontOptions()` for a custom font dropdown. It returns the built-in defaults plus fonts used by the active document, sorted alphabetically.
+
+`label` is what you show. `value` is what you pass to the `font-family` command. `previewFamily` is only for rendering the option row.
+
+```tsx
+import { useSuperDocCommand, useSuperDocFontOptions, useSuperDocUI } from 'superdoc/ui/react';
+
+function FontFamilyPicker() {
+  const ui = useSuperDocUI();
+  const font = useSuperDocCommand('font-family');
+  const options = useSuperDocFontOptions();
+
+  return (
+    <select
+      value={typeof font.value === 'string' ? font.value : ''}
+      disabled={font.disabled}
+      onChange={(e) => ui?.toolbar.execute('font-family', e.target.value)}
+    >
+      {options.map((option) => (
+        <option key={option.value} value={option.value} style={{ fontFamily: option.previewFamily }}>
+          {option.label}
+        </option>
+      ))}
+    </select>
+  );
+}
+```
+
+When a user picks Calibri, SuperDoc stores and exports Calibri. The preview can render with the bundled fallback that actually paints it.
+
 ## What the hook returns
 
 | Field | Type | Meaning |

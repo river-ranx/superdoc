@@ -11,6 +11,7 @@
 * { box-sizing: border-box; }
 body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, sans-serif; font-size: 14px; color: var(--text); background: var(--bg-muted); }
 button { font: inherit; cursor: pointer; }
+select { font: inherit; }
 
 .app { display: flex; flex-direction: column; height: 100vh; }
 .toolbar {
@@ -39,6 +40,17 @@ button { font: inherit; cursor: pointer; }
   color: var(--accent);
 }
 .toolbar button:disabled { color: var(--text-muted); cursor: not-allowed; opacity: 0.5; }
+
+.toolbar select {
+  height: 30px;
+  min-width: 150px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+}
+.toolbar select:disabled { color: var(--text-muted); cursor: not-allowed; opacity: 0.5; }
 
 .toolbar button.italic { font-style: italic; }
 .toolbar button.underline { text-decoration: underline; }

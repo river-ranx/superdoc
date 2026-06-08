@@ -1,7 +1,7 @@
 /**
  * The smallest example that proves how to build your own toolbar with
- * `superdoc/ui`. Three built-in commands and one custom command, all
- * on the same surface, no framework.
+ * `superdoc/ui`. Formatting buttons, a font-family picker, and one
+ * custom command, all on the same surface, no framework.
  *
  * Each button subscribes per-id via `ui.commands.<id>.observe(...)`,
  * which only fires when that command's `active` / `disabled` /
@@ -74,6 +74,47 @@ for (const config of BUILT_IN_BUTTONS) {
 const sep = document.createElement('span');
 sep.className = 'sep';
 toolbar.appendChild(sep);
+
+const fontSelect = document.createElement('select');
+fontSelect.title = 'Font family';
+fontSelect.setAttribute('aria-label', 'Font family');
+toolbar.appendChild(fontSelect);
+
+let currentFontValue = '';
+
+scope.add(
+  ui.fonts.observe((snapshot) => {
+    fontSelect.replaceChildren(
+      ...snapshot.options.map((font) => {
+        const option = document.createElement('option');
+        option.value = font.value;
+        option.textContent = font.label;
+        option.style.fontFamily = font.previewFamily;
+        return option;
+      }),
+    );
+    fontSelect.value = currentFontValue;
+  }),
+);
+
+const fontCommand = ui.commands.get('font-family');
+if (fontCommand) {
+  scope.add(
+    fontCommand.observe((state) => {
+      fontSelect.disabled = state.disabled;
+      currentFontValue = typeof state.value === 'string' ? state.value : '';
+      fontSelect.value = currentFontValue;
+    }),
+  );
+}
+
+fontSelect.addEventListener('change', () => {
+  ui.toolbar.execute('font-family', fontSelect.value);
+});
+
+const fontSep = document.createElement('span');
+fontSep.className = 'sep';
+toolbar.appendChild(fontSep);
 
 // Custom command. Same surface as built-ins. The id is namespaced so
 // it won't collide with future built-ins.

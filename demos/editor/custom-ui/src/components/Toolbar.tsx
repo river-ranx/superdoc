@@ -3,6 +3,7 @@ import type { DocumentMode } from 'superdoc';
 import {
   useSuperDocUI,
   useSuperDocCommand,
+  useSuperDocFontOptions,
   useSuperDocSelection,
   useSuperDocDocument,
 } from 'superdoc/ui/react';
@@ -67,6 +68,7 @@ export function Toolbar({ onComposeComment }: ToolbarProps) {
         {TEXT_BUTTONS.map((b) => (
           <ToolbarButton key={b.id} id={b.id} ready={ready} button={b} onClick={() => execute(b.id)} />
         ))}
+        <FontFamilyPicker />
       </div>
 
       <div className="toolbar-group">
@@ -108,6 +110,37 @@ export function Toolbar({ onComposeComment }: ToolbarProps) {
         <ExportButton />
       </div>
     </div>
+  );
+}
+
+function normalizeFontValue(value: unknown): string {
+  return typeof value === 'string' ? value.split(',')[0]?.trim().replace(/^["']|["']$/g, '') || '' : '';
+}
+
+function FontFamilyPicker() {
+  const ui = useSuperDocUI();
+  const font = useSuperDocCommand('font-family');
+  const options = useSuperDocFontOptions();
+  const current = normalizeFontValue(font.value);
+
+  return (
+    <select
+      className="tb-select tb-font-select"
+      value={current}
+      disabled={!ui || font.disabled}
+      aria-label="Font family"
+      title="Font family"
+      onChange={(event) => ui?.toolbar.execute('font-family', event.target.value)}
+    >
+      <option value="" disabled>
+        Font
+      </option>
+      {options.map((option) => (
+        <option key={option.value} value={option.value} style={{ fontFamily: option.previewFamily }}>
+          {option.label}
+        </option>
+      ))}
+    </select>
   );
 }
 

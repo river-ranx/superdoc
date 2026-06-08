@@ -3,8 +3,8 @@
  * actually uses. Distinct from the static {@link ./font-offerings} (the bundled DEFAULTS): this is
  * runtime and document-scoped because it needs the document's registry and resolver.
  *
- * Support status is intentionally not part of this surface. The toolbar lists document fonts as plain
- * picker rows; internal fallback/reporting details stay in SuperDoc's runtime font report.
+ * Fallback diagnostics are intentionally not part of this surface. The toolbar lists document fonts as
+ * plain picker rows; internal fallback/reporting details stay in SuperDoc's runtime font report.
  */
 import { buildFaceReport, type FontResolutionRecord, type UsedFace } from './report';
 import { getDefaultFontOfferings } from './font-offerings';

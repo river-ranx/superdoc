@@ -4,7 +4,7 @@ import { getDefaultFontOfferings, fontOfferingStack, fontOfferingRenderStack } f
  * Built-in toolbar font dropdown options, DERIVED from the shared font-offering registry
  * (`@superdoc/font-system`) instead of a hand-maintained list. Only metric-safe, bundled-backed fonts
  * are advertised as defaults; Cambria (qualified), Calibri Light (category fallback), and not-yet-
- * bundled candidates like Georgia are intentionally absent until they ship with a fidelity status.
+ * bundled candidates like Georgia are intentionally absent from the static defaults.
  *
  * Per `FontConfig`: `label` is the Word-facing logical name (stored on the selection + active-state
  * match), `key` is the logical CSS stack, and the row preview renders in the physical clone that

@@ -4,12 +4,11 @@
  * already uses, what do we render?". An offering answers "should SuperDoc advertise this logical font
  * as a choice, and on which surface?".
  *
- * Two consumers are intended (only the first ships here):
+ * Two consumers are intended:
  *   1. DEFAULT toolbar options - reliable, bundled, metric-safe fonts SuperDoc can render
  *      deterministically today. Built from {@link getDefaultFontOfferings}.
- *   2. DOCUMENT-specific options (later) - whatever a given document actually uses, surfaced with a
- *      diagnostic status. That is document-scoped and runtime-aware; it does NOT belong in this
- *      static module.
+ *   2. DOCUMENT-specific options - whatever a given document actually uses. Those are
+ *      document-scoped and runtime-aware; this static module only provides the default offerings.
  *
  * Derived from `SUBSTITUTION_EVIDENCE` x `BUNDLED_MANIFEST`. Adding/retiring a font is an evidence
  * edit, never a hand-maintained toolbar list.
