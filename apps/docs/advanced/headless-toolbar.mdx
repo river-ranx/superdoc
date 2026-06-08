@@ -329,6 +329,8 @@ Snapshot values match the format you pass to `execute()`. What you read is what 
 
 For a font dropdown that also includes fonts used by the active document, use `useSuperDocFontOptions()` from `superdoc/ui/react` or `ui.fonts` from `superdoc/ui`.
 
+For font family, font size, and other commands that apply to selected text, prefer a button menu or popover that prevents `mousedown` from moving focus out of the editor. Native selects can visually clear the editor selection while their menu is open.
+
 <CodeGroup>
 
 ```ts Usage
