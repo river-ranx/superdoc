@@ -97,7 +97,7 @@ import { RemoteCursorManager, type RenderDependencies } from './remote-cursors/R
 import { EditorInputManager } from './pointer-events/EditorInputManager.js';
 import { SelectionSyncCoordinator } from './selection/SelectionSyncCoordinator.js';
 import { PresentationInputBridge } from './input/PresentationInputBridge.js';
-import { calculateExtendedSelection } from './selection/SelectionHelpers.js';
+import { calculateExtendedSelection, stabilizeTextSelectionAcrossTableCells } from './selection/SelectionHelpers.js';
 import { getAtomNodeTypes as getAtomNodeTypesFromSchema } from './utils/SchemaNodeTypes.js';
 import { buildPositionMapFromPmDoc } from './utils/PositionMapFromPm.js';
 import {
@@ -9287,17 +9287,23 @@ export class PresentationEditor extends EventEmitter {
     }
 
     const head = Math.max(0, Math.min(mappedHead.pos, doc.content.size));
-    const { selAnchor, selHead } = this.#calculateExtendedSelection(anchor, head, mode);
+    const extended = this.#calculateExtendedSelection(anchor, head, mode);
+    const stabilized = stabilizeTextSelectionAcrossTableCells(doc, extended.selAnchor, extended.selHead);
+    if (!stabilized) {
+      return;
+    }
 
     const current = this.#editor.state.selection;
-    const desiredFrom = Math.min(selAnchor, selHead);
-    const desiredTo = Math.max(selAnchor, selHead);
+    const desiredFrom = Math.min(stabilized.selAnchor, stabilized.selHead);
+    const desiredTo = Math.max(stabilized.selAnchor, stabilized.selHead);
     if (current.from === desiredFrom && current.to === desiredTo) {
       return;
     }
 
     try {
-      const tr = this.#editor.state.tr.setSelection(TextSelection.create(this.#editor.state.doc, selAnchor, selHead));
+      const tr = this.#editor.state.tr.setSelection(
+        TextSelection.create(this.#editor.state.doc, stabilized.selAnchor, stabilized.selHead),
+      );
       this.#editor.view?.dispatch(tr);
       this.#scheduleSelectionUpdate();
     } catch {

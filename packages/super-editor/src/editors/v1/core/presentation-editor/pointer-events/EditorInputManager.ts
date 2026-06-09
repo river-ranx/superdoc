@@ -31,12 +31,14 @@ import {
   getFirstTextPosition as getFirstTextPositionFromHelper,
   registerPointerClick as registerPointerClickFromHelper,
 } from '../input/ClickSelectionUtilities.js';
-import { calculateExtendedSelection } from '../selection/SelectionHelpers.js';
+import { calculateExtendedSelection, stabilizeTextSelectionAcrossTableCells } from '../selection/SelectionHelpers.js';
 import {
   shouldUseCellSelection as shouldUseCellSelectionFromHelper,
   getCellPosFromTableHit as getCellPosFromTableHitFromHelper,
   getTablePosFromHit as getTablePosFromHitFromHelper,
   hitTestTable as hitTestTableFromHelper,
+  resolveCrossCellSelection,
+  resolveCellAnchorStateFromCellPos,
 } from '../tables/TableSelectionUtilities.js';
 import { debugLog } from '../selection/SelectionDebug.js';
 import { DOM_CLASS_NAMES, buildAnnotationSelector, DRAGGABLE_SELECTOR } from '@superdoc/dom-contract';
@@ -1053,18 +1055,59 @@ export class EditorInputManager {
     return getTablePosFromHitFromHelper(tableHit, editor?.state?.doc ?? null, layoutState?.blocks ?? []);
   }
 
+  #setCellAnchorState(cellAnchor: CellAnchorState, mode: 'pending' | 'active' = 'pending'): void {
+    this.#cellAnchor = cellAnchor;
+    this.#cellDragMode = mode;
+  }
+
   #setCellAnchor(tableHit: TableHitResult, tablePos: number): void {
     const cellPos = this.#getCellPosFromTableHit(tableHit);
     if (cellPos === null) return;
 
-    this.#cellAnchor = {
-      tablePos,
+    this.#setCellAnchorState(
+      {
+        tablePos,
+        cellPos,
+        cellRowIndex: tableHit.cellRowIndex,
+        cellColIndex: tableHit.cellColIndex,
+        tableBlockId: tableHit.block.id,
+      },
+      'pending',
+    );
+  }
+
+  #setCellAnchorFromCellPos(cellPos: number, mode: 'pending' | 'active' = 'pending'): boolean {
+    const editor = this.#deps?.getEditor();
+    const layoutState = this.#deps?.getLayoutState();
+    const cellAnchor = resolveCellAnchorStateFromCellPos(
+      editor?.state?.doc ?? null,
+      layoutState?.blocks ?? [],
       cellPos,
-      cellRowIndex: tableHit.cellRowIndex,
-      cellColIndex: tableHit.cellColIndex,
-      tableBlockId: tableHit.block.id,
-    };
-    this.#cellDragMode = 'pending';
+    );
+    if (!cellAnchor) return false;
+
+    this.#setCellAnchorState(cellAnchor, mode);
+    return true;
+  }
+
+  #dispatchExtendedTextSelection(editor: Editor, anchor: number, head: number): boolean {
+    const { selAnchor, selHead } = this.#calculateExtendedSelection(anchor, head, this.#dragExtensionMode);
+    const stabilized = stabilizeTextSelectionAcrossTableCells(editor.state.doc, selAnchor, selHead);
+    if (!stabilized) {
+      return false;
+    }
+
+    try {
+      const tr = editor.state.tr.setSelection(
+        TextSelection.create(editor.state.doc, stabilized.selAnchor, stabilized.selHead),
+      );
+      editor.view?.dispatch(tr);
+      this.#callbacks.scheduleSelectionUpdate?.();
+      return true;
+    } catch (error) {
+      console.warn('[SELECTION] Failed to extend text selection:', error);
+      return false;
+    }
   }
 
   #hitTestTable(x: number, y: number): TableHitResult | null {
@@ -1848,6 +1891,15 @@ export class EditorInputManager {
 
     const dragAnchor = this.#dragAnchor;
     const dragMode = this.#dragExtensionMode;
+
+    if (
+      (!pendingMarginClick || pendingMarginClick.pointerId !== event.pointerId) &&
+      dragAnchor != null &&
+      this.#dragThresholdExceeded
+    ) {
+      this.#handleDragSelectionAt(event.clientX, event.clientY);
+    }
+
     const dragUsedFallback = this.#dragUsedPageNotMountedFallback;
     const dragPointer = this.#dragLastPointer;
 
@@ -2533,15 +2585,7 @@ export class EditorInputManager {
     if (!editor) return;
 
     const anchor = editor.state.selection.anchor;
-    const { selAnchor, selHead } = this.#calculateExtendedSelection(anchor, headPos, this.#dragExtensionMode);
-
-    try {
-      const tr = editor.state.tr.setSelection(TextSelection.create(editor.state.doc, selAnchor, selHead));
-      editor.view?.dispatch(tr);
-      this.#callbacks.scheduleSelectionUpdate?.();
-    } catch (error) {
-      console.warn('[SELECTION] Failed to extend selection on shift+click:', error);
-    }
+    this.#dispatchExtendedTextSelection(editor, anchor, headPos);
 
     this.#focusEditor();
   }
@@ -2607,23 +2651,45 @@ export class EditorInputManager {
       return;
     }
 
-    // Text selection mode
     const anchor = this.#dragAnchor!;
     const head = hit.pos;
 
-    const { selAnchor, selHead } = this.#calculateExtendedSelection(anchor, head, this.#dragExtensionMode);
-
-    try {
-      const tr = editor.state.tr.setSelection(TextSelection.create(editor.state.doc, selAnchor, selHead));
-      editor.view?.dispatch(tr);
-      this.#callbacks.scheduleSelectionUpdate?.();
-    } catch (error) {
-      console.warn('[SELECTION] Failed to extend selection during drag:', error);
+    // SD-3328: Cross-cell selection from the resolved PM positions. The geometry trigger above
+    // (#hitTestTable) can miss empty cell paragraphs and similar spots, leaving #cellAnchor unset,
+    // so a drag across cells falls to the text path — where prosemirror-tables collapses it
+    // (forward) or the guard freezes it (backward). Deriving the cells from the resolved positions
+    // is reliable: when the anchor and head land in different cells of the same table, select the
+    // cell range directly, the way Word and Google Docs do, regardless of the flaky geometry hit.
+    if (!useActiveSurfaceHitTest) {
+      const crossCell = resolveCrossCellSelection(editor.state.doc, anchor, head);
+      if (crossCell) {
+        try {
+          const tr = editor.state.tr.setSelection(
+            CellSelection.create(editor.state.doc, crossCell.anchorCellPos, crossCell.headCellPos),
+          );
+          editor.view?.dispatch(tr);
+          if (!this.#setCellAnchorFromCellPos(crossCell.anchorCellPos, 'active')) {
+            console.warn('[CELL-SELECTION] Failed to cache anchor state for cross-cell drag selection.');
+          }
+          this.#callbacks.scheduleSelectionUpdate?.();
+          return;
+        } catch (error) {
+          // Fall through to text selection if the cell range cannot be built.
+          console.warn('[SELECTION] Failed to create cross-cell CellSelection during drag:', error);
+        }
+      }
     }
+
+    this.#dispatchExtendedTextSelection(editor, anchor, head);
   }
 
   #handleCellDragSelection(currentTableHit: TableHitResult | null, hit: PositionHit): void {
-    const headCellPos = currentTableHit ? this.#getCellPosFromTableHit(currentTableHit) : null;
+    if (!this.#cellAnchor) return;
+    if (!currentTableHit || currentTableHit.block.id !== this.#cellAnchor.tableBlockId) {
+      return;
+    }
+
+    const headCellPos = this.#getCellPosFromTableHit(currentTableHit);
     if (headCellPos === null) return;
 
     if (this.#cellDragMode !== 'active') {
@@ -2645,16 +2711,8 @@ export class EditorInputManager {
       this.#callbacks.scheduleSelectionUpdate?.();
     } catch (error) {
       console.warn('[CELL-SELECTION] Failed to create CellSelection, falling back to TextSelection:', error);
-      // Fall back to text selection
       const anchor = this.#dragAnchor!;
-      const head = hit.pos;
-      const { selAnchor, selHead } = this.#calculateExtendedSelection(anchor, head, this.#dragExtensionMode);
-
-      try {
-        const tr = editor.state.tr.setSelection(TextSelection.create(editor.state.doc, selAnchor, selHead));
-        editor.view?.dispatch(tr);
-        this.#callbacks.scheduleSelectionUpdate?.();
-      } catch {}
+      this.#dispatchExtendedTextSelection(editor, anchor, hit.pos);
     }
   }
 
