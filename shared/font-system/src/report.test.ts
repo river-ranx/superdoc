@@ -1,11 +1,11 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
-  buildFontReport,
   buildFaceReport,
+  buildFontReport,
   createFontResolver,
   type FontFaceRequest,
-  type FontRegistry,
   type FontLoadStatus,
+  type FontRegistry,
 } from './index';
 
 class FakeRegistry {
@@ -75,11 +75,20 @@ describe('buildFontReport', () => {
 
   it('covers bundled mappings and dedupes', () => {
     const reg = new FakeRegistry();
-    ['Carlito', 'Caladea', 'Liberation Sans', 'Liberation Serif', 'Liberation Mono', 'Caprasimo'].forEach((f) =>
-      reg.statuses.set(f, 'loaded'),
-    );
+    for (const family of [
+      'Carlito',
+      'Caladea',
+      'Liberation Sans',
+      'Liberation Serif',
+      'Liberation Mono',
+      'Caprasimo',
+      'Gelasio',
+      'Noto Sans',
+    ]) {
+      reg.statuses.set(family, 'loaded');
+    }
     const report = buildFontReport(
-      ['Calibri', 'Cambria', 'Arial', 'Times New Roman', 'Courier New', 'Cooper Black', 'Calibri'],
+      ['Calibri', 'Cambria', 'Arial', 'Times New Roman', 'Courier New', 'Cooper Black', 'Georgia', 'Tahoma', 'Calibri'],
       reg.asRegistry(),
     );
     expect(report.map((r) => r.physicalFamily)).toEqual([
@@ -89,8 +98,17 @@ describe('buildFontReport', () => {
       'Liberation Serif',
       'Liberation Mono',
       'Caprasimo',
+      'Gelasio',
+      'Noto Sans',
     ]);
-    expect(report.every((r) => r.reason === 'bundled_substitute' && !r.missing)).toBe(true);
+    expect(report.find((r) => r.logicalFamily === 'Georgia')).toMatchObject({
+      reason: 'bundled_substitute',
+      missing: false,
+    });
+    expect(report.find((r) => r.logicalFamily === 'Tahoma')).toMatchObject({
+      reason: 'category_fallback',
+      missing: true,
+    });
   });
 
   it('reports Calibri Light as a non-metric category_fallback and marks it missing even when loaded', () => {
@@ -141,7 +159,7 @@ class FaceRegistry {
 describe('buildFaceReport (face-level)', () => {
   it('single-face substitute: Regular substituted (faithful), Bold fallback_face_absent + missing', () => {
     const reg = new FaceRegistry();
-    reg.setFace('Gelasio', '400', 'normal', 'loaded'); // only Regular registered + loaded
+    reg.setFace('Gelasio', '400', 'normal', 'loaded'); // custom target with only Regular registered
     // The planner adds the pass-through `Georgia 700` to requiredFaces, so the gate awaits it; an
     // unregistered family can never report `loaded` (document.fonts.load resolves only registered
     // faces, not system fonts), so in production it settles to `fallback_used` - model that, not the

@@ -7,16 +7,16 @@
  * Three consumers are intended:
  *   1. CLEAN defaults - reliable, bundled, metric-safe fonts SuperDoc can render deterministically.
  *      Built from {@link getDefaultFontOfferings}.
- *   2. BUILT-IN toolbar options - bundled choices SuperDoc can render, plus qualified rows the product
- *      has explicitly chosen to advertise. Built from {@link getBuiltInToolbarFontOfferings}.
+ *   2. BUILT-IN toolbar options - bundled choices SuperDoc can render, plus qualified/category rows
+ *      the product has explicitly chosen to advertise. Built from {@link getBuiltInToolbarFontOfferings}.
  *   3. DOCUMENT-specific options - whatever a given document actually uses. Those are
  *      document-scoped and runtime-aware; this static module only provides the default offerings.
  *
  * Derived from `SUBSTITUTION_EVIDENCE` x `BUNDLED_MANIFEST`. Adding/retiring a font is an evidence
  * edit, never a hand-maintained toolbar list.
  */
-import { SUBSTITUTION_EVIDENCE, type CssGeneric, type SubstituteVerdict } from './substitution-evidence';
 import { BUNDLED_MANIFEST } from './bundled-manifest';
+import { type CssGeneric, SUBSTITUTION_EVIDENCE, type SubstituteVerdict } from './substitution-evidence';
 
 /** CSS generic family used to terminate an offering's fallback stack. */
 export type FontGeneric = CssGeneric;
@@ -24,9 +24,9 @@ export type FontGeneric = CssGeneric;
 /** Which UI surface a logical font may appear on. A product decision, distinct from the verdict. */
 export type OfferingClass =
   | 'default' // metric_safe + bundled: safe to advertise as a normal default toolbar option
-  | 'qualified' // bundled and renderable, but with fidelity caveats (visual_only / near_metric), e.g. Cambria
+  | 'qualified' // bundled and renderable, but with fidelity caveats (visual_only / near_metric), e.g. Georgia
   | 'category_fallback' // a usable family fallback, not a faithful clone, e.g. Calibri Light -> Carlito
-  | 'requires_asset' // a candidate exists, but SuperDoc does not bundle its asset yet, e.g. Georgia -> Gelasio
+  | 'requires_asset' // a candidate exists, but SuperDoc does not bundle its asset yet, e.g. Arial Narrow
   | 'customer_supplied' // no open substitute; the real font must come from the customer, e.g. Aptos
   | 'preserve_only'; // keep the name, never a default option, e.g. Cambria Math
 
@@ -44,14 +44,21 @@ export interface FontOffering {
    * later document-scoped offering function.
    */
   bundled: boolean;
-  /** docfonts fidelity verdict, used to separate clean defaults from qualified bundled fallbacks. */
+  /** docfonts fidelity verdict, used to separate clean defaults from qualified/category fallbacks. */
   verdict: SubstituteVerdict;
   /** Provenance back to the evidence row. */
   evidenceId: string;
 }
 
 const BUNDLED_FAMILIES: ReadonlySet<string> = new Set(BUNDLED_MANIFEST.map((f) => f.family));
-const ADVERTISED_QUALIFIED_TOOLBAR_FAMILIES: ReadonlySet<string> = new Set(['Cooper Black']);
+const ADVERTISED_BUILT_IN_TOOLBAR_FAMILIES: ReadonlySet<string> = new Set([
+  'Cooper Black',
+  'Comic Sans MS',
+  'Garamond',
+  'Georgia',
+  'Tahoma',
+  'Trebuchet MS',
+]);
 
 /** Classify one evidence row by its policy action, verdict, and whether its target is bundled. */
 function classifyOffering(
@@ -93,23 +100,25 @@ function compareLogicalFamily(a: FontOffering, b: FontOffering): number {
 
 /**
  * The metric-safe, bundled-backed offerings safe to treat as clean defaults, sorted by logical family.
- * Excludes qualified rows (Cambria, Cooper Black), category fallbacks (Calibri Light), and
- * not-yet-bundled candidates (Georgia).
+ * Excludes qualified rows (Cambria, Cooper Black, Georgia), category fallbacks (Calibri Light,
+ * Tahoma), and not-yet-bundled candidates.
  */
 export function getDefaultFontOfferings(): FontOffering[] {
   return FONT_OFFERINGS.filter((o) => o.offering === 'default').sort(compareLogicalFamily);
 }
 
 /**
- * Built-in font picker options SuperDoc can render from its bundled assets. Includes clean defaults
- * plus qualified bundled fallbacks that are explicit product choices. Consumers that need strict
- * metric-safe choices should use {@link getDefaultFontOfferings}.
+ * Built-in font picker options SuperDoc can render from its bundled assets. Includes clean defaults plus
+ * explicitly advertised qualified/category fallbacks. Consumers that need strict metric-safe choices
+ * should use {@link getDefaultFontOfferings}.
  */
 export function getBuiltInToolbarFontOfferings(): FontOffering[] {
   return FONT_OFFERINGS.filter(
     (o) =>
       o.offering === 'default' ||
-      (o.offering === 'qualified' && ADVERTISED_QUALIFIED_TOOLBAR_FAMILIES.has(o.logicalFamily)),
+      (o.bundled &&
+        ADVERTISED_BUILT_IN_TOOLBAR_FAMILIES.has(o.logicalFamily) &&
+        (o.offering === 'qualified' || o.offering === 'category_fallback')),
   ).sort(compareLogicalFamily);
 }
 

@@ -1,7 +1,7 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
+import { BUNDLED_MANIFEST } from './bundled-manifest';
 import { createFontResolver, resolveFontFamily } from './resolver';
 import { SUBSTITUTION_EVIDENCE } from './substitution-evidence';
-import { BUNDLED_MANIFEST } from './bundled-manifest';
 
 /**
  * The logical -> physical substitutions the resolver activates from DocFonts evidence and bundled
@@ -15,6 +15,7 @@ const EXPECTED_SUBSTITUTES: ReadonlyArray<readonly [logical: string, physical: s
   ['Courier New', 'Liberation Mono'],
   ['Helvetica', 'Liberation Sans'],
   ['Cooper Black', 'Caprasimo'],
+  ['Georgia', 'Gelasio'],
 ];
 
 describe('substitution evidence -> resolver derivation', () => {
@@ -62,13 +63,13 @@ describe('substitution evidence -> resolver derivation', () => {
   });
 
   it('keeps an un-bundled substitute inert until its asset ships (the asset gate, not just the policy)', () => {
-    // The registry recommends substitutes SuperDoc has not shipped a clone for (e.g. Georgia -> Gelasio).
+    // The registry recommends substitutes SuperDoc has not shipped a clone for (e.g. Arial Narrow).
     // canRenderFamily must keep every such row OUT of the resolver: it resolves as_requested, not mapped.
     const bundled = new Set(BUNDLED_MANIFEST.map((f) => f.family));
     const unbundled = SUBSTITUTION_EVIDENCE.filter(
       (r) => r.policyAction === 'substitute' && r.physicalFamily && !bundled.has(r.physicalFamily),
     );
-    expect(unbundled.length).toBeGreaterThan(0); // the registry really does carry some (e.g. Georgia)
+    expect(unbundled.length).toBeGreaterThan(0); // the registry really does carry some.
     for (const row of unbundled) {
       expect(resolveFontFamily(row.logicalFamily).reason).toBe('as_requested');
     }
@@ -97,7 +98,7 @@ describe('substitution evidence -> resolver derivation', () => {
   it('Calibri Light is a category_fallback (visual_only), not a metric substitute', () => {
     const cl = SUBSTITUTION_EVIDENCE.find((r) => r.evidenceId === 'calibri-light');
     expect(cl).toMatchObject({ policyAction: 'category_fallback', verdict: 'visual_only', physicalFamily: 'Carlito' });
-    // NOT among the metric substitutes, so the six-pair guard above is unaffected; the resolver maps it
+    // NOT among the metric substitutes, so the reviewed-substitute guard above is unaffected; the resolver maps it
     // with reason category_fallback, never bundled_substitute.
     const substituteRows = SUBSTITUTION_EVIDENCE.filter((r) => r.policyAction === 'substitute' && r.physicalFamily);
     expect(substituteRows.some((r) => r.evidenceId === 'calibri-light')).toBe(false);

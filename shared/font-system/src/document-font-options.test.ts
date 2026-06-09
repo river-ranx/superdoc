@@ -129,10 +129,15 @@ describe('buildFontFamilyOptions (custom UI font picker rows)', () => {
       'Arial',
       'Bangla MN',
       'Calibri',
+      'Comic Sans MS',
       'Cooper Black',
       'Courier New',
+      'Garamond',
+      'Georgia',
       'Helvetica',
+      'Tahoma',
       'Times New Roman',
+      'Trebuchet MS',
     ]);
     expect(options.filter((option) => option.label === 'Calibri')).toHaveLength(1);
     expect(options.every((option) => !('status' in option))).toBe(true);

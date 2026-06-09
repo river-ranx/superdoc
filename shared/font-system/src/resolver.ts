@@ -3,11 +3,10 @@
  *
  * A document refers to a font by its *logical* family - the name Word wrote, e.g.
  * "Calibri". The browser may not have that font (it is proprietary), so SuperDoc
- * renders a metric-compatible *physical* substitute - e.g. Carlito, whose advance
- * widths match Calibri so line breaks land where Word puts them. The logical name
- * stays the source of truth (toolbar, export); only measurement and paint use the
- * physical family, and they MUST use the same one or text is measured in one font
- * and painted in another.
+ * renders a reviewed *physical* fallback, such as metric-compatible Carlito for Calibri. The
+ * logical name stays the source of truth (toolbar, export); only measurement and paint use the
+ * physical family, and they MUST use the same one or text is measured in one font and painted in
+ * another.
  *
  * The value reaching measure and paint is a CSS font-family *stack* the layout
  * builds via `toCssFontFamily`, e.g. "Calibri, sans-serif" - so resolution applies
@@ -16,11 +15,10 @@
  * Resolution is a {@link FontResolver} INSTANCE, not a global: each document gets its
  * own so two editors on one page can map the same logical family differently (a
  * customer `fonts.map`) without leaking across documents - the same per-document
- * isolation the registry already has per `FontFaceSet`. Every instance is seeded with
- * the verified clean clones (Calibri->Carlito, Cambria->Caladea, Arial->Liberation Sans,
- * Times New Roman->Liberation Serif, Courier New->Liberation Mono, plus Helvetica aliased
- * to the same Liberation Sans). The module-level `resolve*` functions delegate to a shared
- * default instance for callers that have no document context (and for backward compatibility).
+ * isolation the registry already has per `FontFaceSet`. Every instance is seeded from DocFonts
+ * evidence gated by the local bundled asset manifest. The module-level `resolve*` functions delegate
+ * to a shared default instance for callers that have no document context (and for backward
+ * compatibility).
  */
 
 import { getFallbackDecisionForFace, getRenderableFallback } from '@docfonts/fallbacks';
@@ -100,7 +98,7 @@ function sortPairs(pairs: Array<[string, string]>): Array<[string, string]> {
 
 /**
  * Asset gate: a docfonts fallback activates only when SuperDoc actually ships its physical clone. The
- * evidence registry carries more substitutes than the bundled pack covers (e.g. Georgia -> Gelasio), so
+ * evidence registry carries more substitutes than the bundled pack covers (e.g. Arial Narrow), so
  * `canRenderFamily` keeps an un-shipped candidate OUT of the resolver until its `.woff2` lands. The
  * predicate checks the SUBSTITUTE (physical) family against `bundled-manifest`, matching the package's
  * `getRenderableFallback` contract.
@@ -231,8 +229,8 @@ function splitStack(cssFontFamily: string): string[] {
 }
 
 /**
- * Per-document logical -> physical font resolver. Seeded with the bundled clean-clone
- * map; also holds per-instance runtime overrides (a customer `fonts.map`). Because each
+ * Per-document logical -> physical font resolver. Seeded with bundled DocFonts fallbacks;
+ * also holds per-instance runtime overrides (a customer `fonts.map`). Because each
  * document owns its instance, two documents can map the same logical family to different
  * physical families without interfering. Its {@link signature} (NOT the numeric
  * {@link version}) is the identity measure-cache keys and paint reuse signatures must fold in,
@@ -538,7 +536,7 @@ export class FontResolver {
   }
 }
 
-/** Create a per-document resolver seeded with the bundled clean-clone map. */
+/** Create a per-document resolver seeded with bundled DocFonts fallbacks. */
 export function createFontResolver(): FontResolver {
   return new FontResolver();
 }

@@ -1,14 +1,14 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
+  createFontResolver,
   resolveFontFamily,
+  resolvePhysicalFamilies,
   resolvePhysicalFamily,
   resolvePrimaryPhysicalFamily,
-  resolvePhysicalFamilies,
-  createFontResolver,
 } from './index';
 
 describe('font resolver', () => {
-  it('maps the verified clean clones (bare names)', () => {
+  it('maps bundled substitutions and category fallbacks (bare names)', () => {
     expect(resolvePhysicalFamily('Calibri')).toBe('Carlito');
     expect(resolvePhysicalFamily('Cambria')).toBe('Caladea');
     expect(resolvePhysicalFamily('Arial')).toBe('Liberation Sans');
@@ -16,6 +16,11 @@ describe('font resolver', () => {
     expect(resolvePhysicalFamily('Courier New')).toBe('Liberation Mono');
     expect(resolvePhysicalFamily('Helvetica')).toBe('Liberation Sans');
     expect(resolvePhysicalFamily('Cooper Black')).toBe('Caprasimo');
+    expect(resolvePhysicalFamily('Georgia')).toBe('Gelasio');
+    expect(resolvePhysicalFamily('Garamond')).toBe('Cardo');
+    expect(resolvePhysicalFamily('Comic Sans MS')).toBe('Comic Relief');
+    expect(resolvePhysicalFamily('Tahoma')).toBe('Noto Sans');
+    expect(resolvePhysicalFamily('Trebuchet MS')).toBe('PT Sans');
   });
 
   it('resolves the PRIMARY family of a CSS stack and keeps the fallbacks', () => {
@@ -37,9 +42,9 @@ describe('font resolver', () => {
       physicalFamily: 'Verdana',
       reason: 'as_requested',
     });
-    // Aptos/Georgia have no bundled clean clone yet -> not mapped.
+    // Aptos has no open clone; Arial Narrow has an evidence row, but no bundled asset yet.
     expect(resolvePhysicalFamily('Aptos')).toBe('Aptos');
-    expect(resolvePhysicalFamily('Georgia')).toBe('Georgia');
+    expect(resolvePhysicalFamily('Arial Narrow')).toBe('Arial Narrow');
   });
 
   it('reports the substitution reason + preserves the logical family', () => {
@@ -47,6 +52,16 @@ describe('font resolver', () => {
       logicalFamily: 'Cambria',
       physicalFamily: 'Caladea',
       reason: 'bundled_substitute',
+    });
+    expect(resolveFontFamily('Georgia')).toEqual({
+      logicalFamily: 'Georgia',
+      physicalFamily: 'Gelasio',
+      reason: 'bundled_substitute',
+    });
+    expect(resolveFontFamily('Tahoma')).toEqual({
+      logicalFamily: 'Tahoma',
+      physicalFamily: 'Noto Sans',
+      reason: 'category_fallback',
     });
     expect(resolveFontFamily('Calibri, sans-serif').logicalFamily).toBe('Calibri, sans-serif');
   });
@@ -81,7 +96,7 @@ describe('font resolver', () => {
 });
 
 describe('FontResolver (per-document context)', () => {
-  it('is seeded with the bundled clean-clone map', () => {
+  it('is seeded with bundled DocFonts fallbacks', () => {
     const resolver = createFontResolver();
     expect(resolver.resolvePrimaryPhysicalFamily('Calibri')).toBe('Carlito');
     expect(resolver.resolvePhysicalFamily('Arial, sans-serif')).toBe('Liberation Sans, sans-serif');
@@ -112,7 +127,7 @@ describe('FontResolver (per-document context)', () => {
     expect(resolver.version).toBe(2);
     resolver.unmap('Georgia'); // absent -> no bump
     expect(resolver.version).toBe(2);
-    expect(resolver.resolvePrimaryPhysicalFamily('Georgia')).toBe('Georgia'); // reverted to identity
+    expect(resolver.resolvePrimaryPhysicalFamily('Georgia')).toBe('Gelasio'); // reverted to bundled default
   });
 
   it('identity self-map is a no-op, but an explicit pin to the bundled clone is a STORED override', () => {
@@ -157,7 +172,7 @@ describe('FontResolver (per-document context)', () => {
     expect(docA.resolvePrimaryPhysicalFamily('Georgia')).toBe('Gelasio');
     expect(docB.resolvePrimaryPhysicalFamily('Georgia')).toBe('Tinos');
     // A document with no override still gets the bundled default, unaffected by the others.
-    expect(createFontResolver().resolvePrimaryPhysicalFamily('Georgia')).toBe('Georgia');
+    expect(createFontResolver().resolvePrimaryPhysicalFamily('Georgia')).toBe('Gelasio');
     expect(docA.resolvePrimaryPhysicalFamily('Calibri')).toBe('Carlito'); // bundled map intact
   });
 
@@ -196,7 +211,7 @@ describe('FontResolver (per-document context)', () => {
 
     resolver.reset();
     expect(resolver.signature).toBe(''); // back to default identity
-    expect(resolver.resolvePrimaryPhysicalFamily('Georgia')).toBe('Georgia'); // override gone
+    expect(resolver.resolvePrimaryPhysicalFamily('Georgia')).toBe('Gelasio'); // override gone, bundled default restored
     expect(resolver.resolvePrimaryPhysicalFamily('Calibri')).toBe('Carlito'); // bundled default restored
     expect(resolver.version).toBe(3); // 2 maps + 1 reset
 
@@ -246,8 +261,8 @@ describe('FontResolver (per-document context)', () => {
     expect(resolver.version).toBe(1);
     resolver.map('Georgia', 'Gelasio'); // same after trim -> no bump
     expect(resolver.version).toBe(1);
-    resolver.map('Tahoma', '   '); // whitespace-only physical -> ignored
-    expect(resolver.resolvePrimaryPhysicalFamily('Tahoma')).toBe('Tahoma');
+    resolver.map('Verdana', '   '); // whitespace-only physical -> ignored
+    expect(resolver.resolvePrimaryPhysicalFamily('Verdana')).toBe('Verdana');
     expect(resolver.version).toBe(1);
   });
 });
@@ -338,9 +353,9 @@ describe('face-aware resolution (resolveFace / resolvePhysicalFamilyForFace)', (
     });
   });
 
-  it('single-face substitute: maps the provided face, passes other faces through (fallback_face_absent)', () => {
+  it('custom map with one registered target face maps that face and passes other faces through', () => {
     const r = createFontResolver();
-    r.map('Georgia', 'Gelasio'); // a single-face clone, Regular-only registered (regularOnly)
+    r.map('Georgia', 'Gelasio'); // custom target with Regular only registered in this test
     expect(r.resolveFace('Georgia', { weight: '400', style: 'normal' }, regularOnly)).toEqual({
       logicalFamily: 'Georgia',
       physicalFamily: 'Gelasio',
@@ -606,7 +621,7 @@ describe('embedded provider identity (mapEmbedded / clearEmbedded)', () => {
     r.map('Georgia', 'Gelasio');
     r.reset();
     expect(r.resolveFace('Calibri', regular, registeredOf(PHYS, 'Carlito')).reason).toBe('bundled_substitute');
-    expect(r.resolvePrimaryPhysicalFamily('Georgia')).toBe('Georgia');
+    expect(r.resolvePrimaryPhysicalFamily('Georgia')).toBe('Gelasio');
     expect(r.signature).toBe('');
   });
 
