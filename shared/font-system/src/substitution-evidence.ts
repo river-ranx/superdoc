@@ -11,6 +11,14 @@
  * against `bundled-manifest`) and how they load, render, and report.
  */
 import { SUBSTITUTION_EVIDENCE as DOCFONTS_EVIDENCE } from '@docfonts/fallbacks';
+import type {
+  AdvanceDelta as DocFontsAdvanceDelta,
+  FaceCoverage as DocFontsFaceCoverage,
+  FallbackFaceSource as DocFontsFallbackFaceSource,
+  GlyphException as DocFontsGlyphException,
+  SubstituteGates as DocFontsSubstituteGates,
+  SubstitutionEvidence as DocFontsSubstitutionEvidence,
+} from '@docfonts/fallbacks';
 
 /** docfonts fidelity verdict, best to worst. */
 export type SubstituteVerdict =
@@ -125,6 +133,21 @@ export interface SubstitutionEvidence {
   /** SuperDoc renders substitutes but always exports the original name. Always this for now. */
   exportRule: 'preserve_original_name';
 }
+
+type AssertNoMissingDocFontsKeys<Upstream, Local> = Exclude<keyof Upstream, keyof Local> extends never ? true : never;
+type SyntheticFaceSource<T> = Extract<T, { kind: 'synthetic' }>;
+type RealFaceSource<T> = Extract<T, { kind: 'real' }>;
+type DocFontsEvidenceDriftGuards = [
+  AssertNoMissingDocFontsKeys<DocFontsSubstitutionEvidence, SubstitutionEvidence>,
+  AssertNoMissingDocFontsKeys<DocFontsAdvanceDelta, AdvanceDelta>,
+  AssertNoMissingDocFontsKeys<DocFontsFaceCoverage, FaceCoverage>,
+  AssertNoMissingDocFontsKeys<DocFontsSubstituteGates, SubstituteGates>,
+  AssertNoMissingDocFontsKeys<DocFontsGlyphException, GlyphException>,
+  AssertNoMissingDocFontsKeys<SyntheticFaceSource<DocFontsFallbackFaceSource>, SyntheticFaceSource<FallbackFaceSource>>,
+  AssertNoMissingDocFontsKeys<RealFaceSource<DocFontsFallbackFaceSource>, RealFaceSource<FallbackFaceSource>>,
+];
+const _docFontsEvidenceDriftGuards: DocFontsEvidenceDriftGuards = [true, true, true, true, true, true, true];
+void _docFontsEvidenceDriftGuards;
 
 /**
  * The reviewed substitution evidence, sourced from `@docfonts/fallbacks` and pinned to SuperDoc's
