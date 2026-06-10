@@ -68,6 +68,7 @@ export type {
   EntityAddress,
   EqualityFn,
   FontFamilyOption,
+  FontSizeOption,
   FontsHandle,
   FontsSlice,
   MetadataHandle,

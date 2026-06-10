@@ -79,6 +79,7 @@ export type {
   // Substrate
   EqualityFn,
   FontFamilyOption,
+  FontSizeOption,
   SelectorFn,
   Subscribable,
 
