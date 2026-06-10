@@ -4,7 +4,8 @@ import type {
   Layout,
   PageNumberChapterSeparator,
   PageNumberFormat,
-  SectionMetadata, ParagraphBlock 
+  SectionMetadata,
+  ParagraphBlock,
 } from '@superdoc/contracts';
 import {
   computeDisplayPageNumber,
