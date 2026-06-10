@@ -595,6 +595,9 @@ export class EditorInputManager {
   // Margin click state
   #pendingMarginClick: PendingMarginClick | null = null;
 
+  /** TOC link recorded at pointerdown; navigates on pointerup unless the pointer dragged. */
+  #pendingTocLinkNav: HTMLAnchorElement | null = null;
+
   // Image selection state
   #lastSelectedImageBlockId: string | null = null;
 
@@ -1359,12 +1362,18 @@ export class EditorInputManager {
       return;
     }
 
-    // Handle link clicks - dispatch custom event on pointerdown for immediate UI response
-    // Navigation prevention happens in #handleClick (on 'click' event)
+    // Handle link clicks - dispatch custom event on pointerdown for immediate UI response.
+    // Navigation prevention happens in #handleClick (on 'click' event).
+    // TOC links are deferred to pointerup so the user can drag-select inside the TOC.
     const linkEl = target?.closest?.('a.superdoc-link') as HTMLAnchorElement | null;
+    this.#pendingTocLinkNav = null;
     if (linkEl) {
-      this.#handleLinkClick(event, linkEl);
-      return;
+      if (linkEl.closest(`.${DOM_CLASS_NAMES.TOC_ENTRY}`)) {
+        this.#pendingTocLinkNav = linkEl;
+      } else {
+        this.#handleLinkClick(event, linkEl);
+        return;
+      }
     }
 
     // Handle field annotation clicks
@@ -1811,6 +1820,13 @@ export class EditorInputManager {
     editor.emit?.('pointerUp', { editor, event });
 
     this.#suppressFocusInFromDraggable = false;
+
+    // Resolve a deferred TOC click: navigate only if the pointer never dragged.
+    const pendingTocLink = this.#pendingTocLinkNav;
+    this.#pendingTocLinkNav = null;
+    if (pendingTocLink && !this.#dragThresholdExceeded) {
+      this.#handleLinkClick(event, pendingTocLink);
+    }
 
     if (!this.#isDragging) {
       this.#stopAutoScroll();
@@ -2298,7 +2314,18 @@ export class EditorInputManager {
       visiblePointerSurface?.kind === 'headerFooter' &&
       visiblePointerSurface.surface.closest(activeSurfaceSelector) != null;
 
+    // behindDoc fragments are placed directly on the page element (not inside
+    // .superdoc-page-footer/header), so resolveVisibleSurfaceAtPointer classifies
+    // them as 'bodyContent'. Detect them via data-behind-doc-section and let the
+    // active H/F editor handle the click instead of exiting the session.
     if (visiblePointerSurface?.kind === 'bodyContent') {
+      const behindDocSection = (
+        event.target instanceof Element ? event.target.closest<HTMLElement>('[data-behind-doc-section]') : null
+      )?.dataset.behindDocSection;
+      const sessionMode = session?.session?.mode;
+      if (behindDocSection && behindDocSection === sessionMode) {
+        return false; // Fall through to normal hit testing in the active H/F editor
+      }
       this.#callbacks.exitHeaderFooterMode?.();
       return false; // Continue to body click handling after exiting the active H/F session
     }
@@ -2463,6 +2490,10 @@ export class EditorInputManager {
   ): boolean {
     if (!fragmentHit) return false;
     if (fragmentHit.fragment.kind !== 'image' && fragmentHit.fragment.kind !== 'drawing') return false;
+    // Textboxes use text selection (caret), not image-style anchor drag selection.
+    if (fragmentHit.fragment.kind === 'drawing' && fragmentHit.fragment.drawingKind === 'textboxShape') {
+      return false;
+    }
 
     const editor = this.#deps?.getEditor();
     try {

@@ -20,6 +20,11 @@ export type SelectorFn<TState, TSlice> = (state: TState) => TSlice;
 
 export type { FontFamilyOption } from '@superdoc/font-system';
 
+export type FontSizeOption = {
+  label: string;
+  value: string;
+};
+
 /**
  * A read-only signal. `get()` is synchronous; `subscribe()` invokes the
  * listener once with the current value, then again whenever the value
@@ -275,6 +280,25 @@ export interface SuperDocEditorLike {
       height: number;
     }>;
     /**
+     * Body-surface variant of `getRangeRects`, consumed by
+     * `ui.viewport.getRect`'s text-target path so a body-anchored target
+     * returns body geometry even while a header/footer/note session is
+     * active. Optional in the structural typing for stub validity.
+     */
+    getBodyRangeRects?(
+      from: number,
+      to: number,
+      relativeTo?: HTMLElement,
+    ): Array<{
+      pageIndex: number;
+      left: number;
+      right: number;
+      top: number;
+      bottom: number;
+      width: number;
+      height: number;
+    }>;
+    /**
      * Painted-DOM host element. `ui.viewport.entityAt` reads it to
      * confirm the hit returned by `document.elementFromPoint` lives
      * inside this controller's editor — without that scope check, a
@@ -378,6 +402,8 @@ export interface SuperDocUIState {
 export interface FontsSlice {
   /** Final font-family picker rows: bundled defaults plus active document fonts. */
   options: import('@superdoc/font-system').FontFamilyOption[];
+  /** Default font-size picker rows for custom toolbar UIs. */
+  sizeOptions: FontSizeOption[];
 }
 
 /**
@@ -1196,6 +1222,8 @@ export interface FontsHandle {
   observe(listener: (snapshot: FontsSlice) => void): () => void;
   /** Convenience read for `getSnapshot().options`. */
   getOptions(): import('@superdoc/font-system').FontFamilyOption[];
+  /** Convenience read for `getSnapshot().sizeOptions`. */
+  getSizeOptions(): FontSizeOption[];
 }
 
 /**
@@ -1994,17 +2022,24 @@ export type ViewportEntityAddress = import('@superdoc/document-api').EntityAddre
 
 export interface ViewportGetRectInput {
   /**
-   * Entity to look up — comment, tracked change, or content control
-   * (SDT) by id. Today `getRect` resolves rects via the painter's
-   * data attributes (`data-comment-ids`, `data-track-change-id`,
-   * `data-sdt-id`) which only stamp entity addresses, not
-   * text-anchored ranges. Text targets (`TextAddress` / `TextTarget`)
-   * are intentionally not in the union: surface should match real
-   * behavior so a typed call site isn't lying about what works at
-   * runtime. They land via a follow-up that adds story-aware text
-   * resolution to the rect helper.
+   * What to measure. Either:
+   * - an entity address (comment / tracked change / content control by
+   *   id), resolved via the painter's data attributes; or
+   * - a Document API text address/target (`TextAddress` single block, or
+   *   `TextTarget` multi-segment), resolved to document positions and
+   *   then to painted rects. A `TextTarget` yields one set of rects per
+   *   segment, concatenated in document order.
+   *
+   * Text targets are **body-story only** today: a target carrying a
+   * non-body `story` (header/footer/footnote/endnote) returns
+   * `{ success: false, reason: 'unresolved' }`. Story-aware text rects
+   * are a follow-up. Entity targets remain story-aware via their
+   * `story` field.
    */
-  target: ViewportEntityAddress;
+  target:
+    | ViewportEntityAddress
+    | import('@superdoc/document-api').TextAddress
+    | import('@superdoc/document-api').TextTarget;
 }
 
 export type ViewportRectResult =
