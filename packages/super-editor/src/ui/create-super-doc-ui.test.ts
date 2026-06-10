@@ -171,6 +171,7 @@ describe('createSuperDocUI', () => {
       'Tahoma',
       'Times New Roman',
       'Trebuchet MS',
+      'Verdana',
     ]);
     expect(options.find((option) => option.label === 'Aptos')).toEqual({
       label: 'Aptos',
@@ -231,6 +232,7 @@ describe('createSuperDocUI', () => {
       'Tahoma',
       'Times New Roman',
       'Trebuchet MS',
+      'Verdana',
     ]);
     expect(observed.at(-1)).toEqual([
       'Aptos',
@@ -253,6 +255,7 @@ describe('createSuperDocUI', () => {
       'Tahoma',
       'Times New Roman',
       'Trebuchet MS',
+      'Verdana',
     ]);
   });
 

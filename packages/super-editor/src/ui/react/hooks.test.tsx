@@ -204,6 +204,7 @@ describe('domain hooks', () => {
       'Tahoma',
       'Times New Roman',
       'Trebuchet MS',
+      'Verdana',
     ]);
     expect(options?.find((option) => option.label === 'Aptos')).toEqual({
       label: 'Aptos',

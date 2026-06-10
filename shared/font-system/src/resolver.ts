@@ -192,7 +192,7 @@ const BUNDLED_SUBSTITUTES: Readonly<Record<string, string>> = deriveBundledSubst
  * `category_fallback`, never `bundled_substitute`. A SEPARATE map and reason keep a lower-fidelity
  * fallback from being mistaken for a clean clone. Same asset gate as {@link deriveBundledSubstitutes};
  * the two partition the renderable fallbacks by `policyAction` (an un-bundled category target, e.g.
- * Consolas -> Inconsolata SemiExpanded, stays inert).
+ * Arial Rounded MT Bold -> Ubuntu, stays inert).
  */
 function deriveCategoryFallbacks(): Readonly<Record<string, string>> {
   const fallbacks: Record<string, string> = {};

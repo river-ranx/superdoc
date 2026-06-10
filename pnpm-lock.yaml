@@ -3318,8 +3318,8 @@ importers:
   shared/font-system:
     dependencies:
       '@docfonts/fallbacks':
-        specifier: 0.14.0
-        version: 0.14.0
+        specifier: 0.15.0
+        version: 0.15.0
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
@@ -4814,8 +4814,8 @@ packages:
     resolution: {integrity: sha512-4B4OijXeVNOPZlYA2oEwWOTkzyltLao+xbotHQeqN++Rv27Y6s818+n2Qkp8q+Fxhn0t/5lA5X1Mxktud8eayQ==}
     engines: {node: '>=14.17.0'}
 
-  '@docfonts/fallbacks@0.14.0':
-    resolution: {integrity: sha512-Ek3Fnb/JlWl6PSmjE/1Z5gV+qPftbklxruvA/wGPxKAqTl2fLr1OfD8nG/2E3yaTqHw/1gQZ8/rRwTJf/cTrqw==}
+  '@docfonts/fallbacks@0.15.0':
+    resolution: {integrity: sha512-RC64SFSbOgGKyXuo2vtplC3W5qdb8lVF31efsgS/ZleEgY78HOE2voaJ9e9u3JpcNODQQcFO7t4OkdoMnWVxpg==}
 
   '@dxup/nuxt@0.4.0':
     resolution: {integrity: sha512-28LDotpr9G2knUse3cQYsOo6NJq5yhABv4ByRVRYJUmzf9Q31DI7rpRek4POlKy1aAcYyKgu5J2616pyqLohYg==}
@@ -25633,7 +25633,7 @@ snapshots:
 
   '@discoveryjs/json-ext@0.6.3': {}
 
-  '@docfonts/fallbacks@0.14.0': {}
+  '@docfonts/fallbacks@0.15.0': {}
 
   '@dxup/nuxt@0.4.0(magicast@0.5.2)(typescript@5.9.3)':
     dependencies:

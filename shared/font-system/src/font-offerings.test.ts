@@ -30,13 +30,14 @@ const EXPECTED_BUILT_IN_TOOLBAR = [
   'Tahoma',
   'Times New Roman',
   'Trebuchet MS',
+  'Verdana',
 ];
 
 /**
  * Must NOT appear as DEFAULT options yet. Aptos has no clone, Cambria/Georgia/Cooper Black/
- * Baskerville Old Face/Arial Black/Arial Narrow/Century/Century Schoolbook are qualified, and
+ * Baskerville Old Face/Arial Black/Arial Narrow/Century/Century Schoolbook/ITC Bookman are qualified, and
  * Calibri Light/Tahoma/Trebuchet MS/Garamond/Comic Sans MS/Brush Script MT/Gill Sans MT Condensed/
- * Lucida Console are category fallbacks.
+ * Lucida Console/Consolas/Verdana are category fallbacks.
  * Some may be explicit built-in picker choices, but none should become silent strict defaults.
  */
 const NOT_DEFAULT_YET = [
@@ -58,6 +59,9 @@ const NOT_DEFAULT_YET = [
   'Brush Script MT',
   'Lucida Console',
   'Gill Sans MT Condensed',
+  'Consolas',
+  'ITC Bookman',
+  'Verdana',
 ];
 
 describe('font offerings', () => {
@@ -100,6 +104,12 @@ describe('font offerings', () => {
       physicalFamily: 'Bacasime Antique',
     });
     expect(byName('Bookman Old Style')).toMatchObject({
+      offering: 'qualified',
+      verdict: 'visual_only',
+      bundled: true,
+      physicalFamily: 'TeX Gyre Bonum',
+    });
+    expect(byName('ITC Bookman')).toMatchObject({
       offering: 'qualified',
       verdict: 'visual_only',
       bundled: true,
@@ -150,10 +160,20 @@ describe('font offerings', () => {
       bundled: true,
       physicalFamily: 'Noto Sans Mono',
     });
+    expect(byName('Consolas')).toMatchObject({
+      offering: 'category_fallback',
+      bundled: true,
+      physicalFamily: 'Inconsolata SemiExpanded',
+    });
     expect(byName('Gill Sans MT Condensed')).toMatchObject({
       offering: 'category_fallback',
       bundled: true,
       physicalFamily: 'PT Sans Narrow',
+    });
+    expect(byName('Verdana')).toMatchObject({
+      offering: 'category_fallback',
+      bundled: true,
+      physicalFamily: 'Noto Sans',
     });
   });
 
@@ -178,6 +198,7 @@ describe('font offerings', () => {
       { label: 'Tahoma', value: 'Tahoma, sans-serif' },
       { label: 'Times New Roman', value: 'Times New Roman, serif' },
       { label: 'Trebuchet MS', value: 'Trebuchet MS, sans-serif' },
+      { label: 'Verdana', value: 'Verdana, sans-serif' },
     ]);
   });
 

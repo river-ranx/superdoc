@@ -23,6 +23,7 @@ const EXPECTED_SUBSTITUTES: ReadonlyArray<readonly [logical: string, physical: s
   ['Georgia', 'Gelasio'],
   ['Baskerville Old Face', 'Bacasime Antique'],
   ['Bookman Old Style', 'TeX Gyre Bonum'],
+  ['ITC Bookman', 'TeX Gyre Bonum'],
 ];
 
 describe('substitution evidence -> resolver derivation', () => {
@@ -187,6 +188,23 @@ describe('substitution evidence -> resolver derivation', () => {
       },
       advance: { basis: 'monospace_cell', meanDelta: 0.00254, maxDelta: 0.00303 },
     });
+    expect(SUBSTITUTION_EVIDENCE.find((r) => r.evidenceId === 'consolas')).toMatchObject({
+      logicalFamily: 'Consolas',
+      physicalFamily: 'Inconsolata SemiExpanded',
+      policyAction: 'category_fallback',
+      faces: { regular: true, bold: true, italic: false, boldItalic: false },
+      faceSources: {
+        italic: { kind: 'synthetic', from: 'regular' },
+        boldItalic: { kind: 'synthetic', from: 'bold' },
+      },
+      faceVerdicts: {
+        regular: 'cell_width_only',
+        bold: 'cell_width_only',
+        italic: 'visual_only',
+        boldItalic: 'visual_only',
+      },
+      advance: { basis: 'monospace_cell', meanDelta: 0.00019531, maxDelta: 0.00019531 },
+    });
     expect(SUBSTITUTION_EVIDENCE.find((r) => r.evidenceId === 'gill-sans-mt-condensed')).toMatchObject({
       logicalFamily: 'Gill Sans MT Condensed',
       physicalFamily: 'PT Sans Narrow',
@@ -197,9 +215,18 @@ describe('substitution evidence -> resolver derivation', () => {
         boldItalic: { kind: 'synthetic', from: 'bold' },
       },
     });
+    expect(SUBSTITUTION_EVIDENCE.find((r) => r.evidenceId === 'verdana')).toMatchObject({
+      logicalFamily: 'Verdana',
+      physicalFamily: 'Noto Sans',
+      policyAction: 'category_fallback',
+      verdict: 'visual_only',
+      faces: { regular: true, bold: true, italic: true, boldItalic: true },
+    });
     expect(resolveFontFamily('Baskerville Old Face').reason).toBe('bundled_substitute');
     expect(resolveFontFamily('Brush Script MT').reason).toBe('category_fallback');
     expect(resolveFontFamily('Lucida Console').reason).toBe('category_fallback');
+    expect(resolveFontFamily('Consolas').reason).toBe('category_fallback');
     expect(resolveFontFamily('Gill Sans MT Condensed').reason).toBe('category_fallback');
+    expect(resolveFontFamily('Verdana').reason).toBe('category_fallback');
   });
 });

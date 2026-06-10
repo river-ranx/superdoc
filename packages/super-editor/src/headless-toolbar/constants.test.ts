@@ -23,6 +23,7 @@ describe('DEFAULT_FONT_FAMILY_OPTIONS (headless default font options, derived fr
       { label: 'Tahoma', value: 'Tahoma, sans-serif' },
       { label: 'Times New Roman', value: 'Times New Roman, serif' },
       { label: 'Trebuchet MS', value: 'Trebuchet MS, sans-serif' },
+      { label: 'Verdana', value: 'Verdana, sans-serif' },
     ]);
   });
 

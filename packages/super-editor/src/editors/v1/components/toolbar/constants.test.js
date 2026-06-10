@@ -23,6 +23,7 @@ describe('TOOLBAR_FONTS (built-in font dropdown, derived from the font-offering 
       'Tahoma',
       'Times New Roman',
       'Trebuchet MS',
+      'Verdana',
     ]);
   });
 
@@ -97,6 +98,7 @@ describe('composeToolbarFontOptions (document fonts unioned with the bundled def
       'Tahoma',
       'Times New Roman',
       'Trebuchet MS',
+      'Verdana',
     ]);
     expect(options.filter((o) => o.label === 'Calibri')).toHaveLength(1);
   });

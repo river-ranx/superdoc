@@ -98,6 +98,10 @@ export const BUNDLED_MANIFEST: readonly BundledFamilyManifest[] = Object.freeze(
     { weight: 'normal', style: 'normal', file: 'NotoSansMono-Regular.woff2' },
     { weight: 'bold', style: 'normal', file: 'NotoSansMono-Bold.woff2' },
   ]),
+  familyWithFaces('Inconsolata SemiExpanded', 'OFL-1.1', [
+    { weight: 'normal', style: 'normal', file: 'InconsolataSemiExpanded-Regular.woff2' },
+    { weight: 'bold', style: 'normal', file: 'InconsolataSemiExpanded-Bold.woff2' },
+  ]),
   family('PT Sans', 'PTSans', 'OFL-1.1'),
   familyWithFaces('PT Sans Narrow', 'OFL-1.1', [
     { weight: 'normal', style: 'normal', file: 'PTSansNarrow-Regular.woff2' },

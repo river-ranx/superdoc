@@ -51,8 +51,8 @@ describe('buildFontReport', () => {
 
   it('an as_requested font that did load is not missing', () => {
     const reg = new FakeRegistry();
-    reg.statuses.set('Verdana', 'loaded');
-    expect(buildFontReport(['Verdana'], reg.asRegistry())[0].missing).toBe(false);
+    reg.statuses.set('BrandSans', 'loaded');
+    expect(buildFontReport(['BrandSans'], reg.asRegistry())[0].missing).toBe(false);
   });
 
   it('does not mark a transient unloaded state as missing (no early-pull over-report)', () => {
@@ -87,6 +87,7 @@ describe('buildFontReport', () => {
       'TeX Gyre Bonum',
       'Oregano Italic',
       'Gelasio',
+      'Inconsolata SemiExpanded',
       'Noto Sans',
       'Noto Sans Mono',
       'PT Sans Narrow',
@@ -104,10 +105,13 @@ describe('buildFontReport', () => {
         'Cooper Black',
         'Baskerville Old Face',
         'Bookman Old Style',
+        'ITC Bookman',
         'Brush Script MT',
         'Georgia',
+        'Consolas',
         'Lucida Console',
         'Tahoma',
+        'Verdana',
         'Gill Sans MT Condensed',
         'Calibri',
       ],
@@ -123,9 +127,12 @@ describe('buildFontReport', () => {
       'Caprasimo',
       'Bacasime Antique',
       'TeX Gyre Bonum',
+      'TeX Gyre Bonum',
       'Oregano Italic',
       'Gelasio',
+      'Inconsolata SemiExpanded',
       'Noto Sans Mono',
+      'Noto Sans',
       'Noto Sans',
       'PT Sans Narrow',
     ]);
@@ -141,6 +148,10 @@ describe('buildFontReport', () => {
       reason: 'bundled_substitute',
       missing: false,
     });
+    expect(report.find((r) => r.logicalFamily === 'ITC Bookman')).toMatchObject({
+      reason: 'bundled_substitute',
+      missing: false,
+    });
     expect(report.find((r) => r.logicalFamily === 'Arial Black')).toMatchObject({
       reason: 'bundled_substitute',
       missing: false,
@@ -153,7 +164,15 @@ describe('buildFontReport', () => {
       reason: 'category_fallback',
       missing: true,
     });
+    expect(report.find((r) => r.logicalFamily === 'Consolas')).toMatchObject({
+      reason: 'category_fallback',
+      missing: true,
+    });
     expect(report.find((r) => r.logicalFamily === 'Tahoma')).toMatchObject({
+      reason: 'category_fallback',
+      missing: true,
+    });
+    expect(report.find((r) => r.logicalFamily === 'Verdana')).toMatchObject({
       reason: 'category_fallback',
       missing: true,
     });

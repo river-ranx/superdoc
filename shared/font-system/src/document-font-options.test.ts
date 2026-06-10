@@ -146,6 +146,7 @@ describe('buildFontFamilyOptions (custom UI font picker rows)', () => {
       'Tahoma',
       'Times New Roman',
       'Trebuchet MS',
+      'Verdana',
     ]);
     expect(options.filter((option) => option.label === 'Calibri')).toHaveLength(1);
     expect(options.every((option) => !('status' in option))).toBe(true);

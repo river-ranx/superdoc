@@ -25,6 +25,7 @@ const DEFAULT_FONT_LABELS = [
   'Tahoma',
   'Times New Roman',
   'Trebuchet MS',
+  'Verdana',
 ];
 
 function expectedLabelsWithDocumentFonts(documentLabels: string[]): string[] {

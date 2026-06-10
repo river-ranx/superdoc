@@ -22,13 +22,16 @@ describe('font resolver', () => {
     expect(resolvePhysicalFamily('Cooper Black')).toBe('Caprasimo');
     expect(resolvePhysicalFamily('Baskerville Old Face')).toBe('Bacasime Antique');
     expect(resolvePhysicalFamily('Bookman Old Style')).toBe('TeX Gyre Bonum');
+    expect(resolvePhysicalFamily('ITC Bookman')).toBe('TeX Gyre Bonum');
     expect(resolvePhysicalFamily('Brush Script MT')).toBe('Oregano Italic');
     expect(resolvePhysicalFamily('Georgia')).toBe('Gelasio');
     expect(resolvePhysicalFamily('Garamond')).toBe('Cardo');
+    expect(resolvePhysicalFamily('Consolas')).toBe('Inconsolata SemiExpanded');
     expect(resolvePhysicalFamily('Comic Sans MS')).toBe('Comic Relief');
     expect(resolvePhysicalFamily('Lucida Console')).toBe('Noto Sans Mono');
     expect(resolvePhysicalFamily('Tahoma')).toBe('Noto Sans');
     expect(resolvePhysicalFamily('Trebuchet MS')).toBe('PT Sans');
+    expect(resolvePhysicalFamily('Verdana')).toBe('Noto Sans');
     expect(resolvePhysicalFamily('Gill Sans MT Condensed')).toBe('PT Sans Narrow');
   });
 
@@ -45,14 +48,13 @@ describe('font resolver', () => {
   });
 
   it('passes through a family with no known substitute', () => {
-    expect(resolvePhysicalFamily('Verdana, sans-serif')).toBe('Verdana, sans-serif');
-    expect(resolveFontFamily('Verdana')).toEqual({
-      logicalFamily: 'Verdana',
-      physicalFamily: 'Verdana',
-      reason: 'as_requested',
-    });
     // Aptos has no open clone, so it passes through unchanged.
     expect(resolvePhysicalFamily('Aptos')).toBe('Aptos');
+    expect(resolveFontFamily('Aptos')).toEqual({
+      logicalFamily: 'Aptos',
+      physicalFamily: 'Aptos',
+      reason: 'as_requested',
+    });
   });
 
   it('reports the substitution reason + preserves the logical family', () => {
@@ -73,6 +75,11 @@ describe('font resolver', () => {
     });
     expect(resolveFontFamily('Bookman Old Style')).toEqual({
       logicalFamily: 'Bookman Old Style',
+      physicalFamily: 'TeX Gyre Bonum',
+      reason: 'bundled_substitute',
+    });
+    expect(resolveFontFamily('ITC Bookman')).toEqual({
+      logicalFamily: 'ITC Bookman',
       physicalFamily: 'TeX Gyre Bonum',
       reason: 'bundled_substitute',
     });
@@ -106,6 +113,11 @@ describe('font resolver', () => {
       physicalFamily: 'Oregano Italic',
       reason: 'category_fallback',
     });
+    expect(resolveFontFamily('Consolas')).toEqual({
+      logicalFamily: 'Consolas',
+      physicalFamily: 'Inconsolata SemiExpanded',
+      reason: 'category_fallback',
+    });
     expect(resolveFontFamily('Lucida Console')).toEqual({
       logicalFamily: 'Lucida Console',
       physicalFamily: 'Noto Sans Mono',
@@ -114,6 +126,11 @@ describe('font resolver', () => {
     expect(resolveFontFamily('Gill Sans MT Condensed')).toEqual({
       logicalFamily: 'Gill Sans MT Condensed',
       physicalFamily: 'PT Sans Narrow',
+      reason: 'category_fallback',
+    });
+    expect(resolveFontFamily('Verdana')).toEqual({
+      logicalFamily: 'Verdana',
+      physicalFamily: 'Noto Sans',
       reason: 'category_fallback',
     });
     expect(resolveFontFamily('Calibri, sans-serif').logicalFamily).toBe('Calibri, sans-serif');
@@ -136,14 +153,14 @@ describe('font resolver', () => {
 
   it('extracts the bare physical face the gate must await', () => {
     expect(resolvePrimaryPhysicalFamily('Arial, sans-serif')).toBe('Liberation Sans');
-    expect(resolvePrimaryPhysicalFamily('Verdana, sans-serif')).toBe('Verdana');
+    expect(resolvePrimaryPhysicalFamily('Verdana, sans-serif')).toBe('Noto Sans');
   });
 
   it('resolvePhysicalFamilies dedupes to the loadable face names', () => {
     expect(resolvePhysicalFamilies(['Calibri, sans-serif', 'Cambria', 'Calibri', 'Verdana']).sort()).toEqual([
       'Caladea',
       'Carlito',
-      'Verdana',
+      'Noto Sans',
     ]);
   });
 });
@@ -315,7 +332,7 @@ describe('FontResolver (per-document context)', () => {
     resolver.map('Georgia', 'Gelasio'); // same after trim -> no bump
     expect(resolver.version).toBe(1);
     resolver.map('Verdana', '   '); // whitespace-only physical -> ignored
-    expect(resolver.resolvePrimaryPhysicalFamily('Verdana')).toBe('Verdana');
+    expect(resolver.resolvePrimaryPhysicalFamily('Verdana')).toBe('Noto Sans');
     expect(resolver.version).toBe(1);
   });
 });

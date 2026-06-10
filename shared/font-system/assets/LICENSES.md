@@ -9,9 +9,10 @@ was reviewed on 2026-06-03. Caprasimo was added from DocFonts' Google Fonts OFL
 provenance on 2026-06-08. Gelasio, Cardo, Comic Relief, Noto Sans, PT Sans,
 Bacasime Antique, Oregano Italic, and Noto Sans Mono were added from DocFonts'
 Google Fonts provenance on 2026-06-09. C059 and Liberation Sans Narrow were
-added from the legal-reviewed asset package on 2026-06-09. Archivo Black and PT
-Sans Narrow were added from DocFonts' Google Fonts provenance on 2026-06-10.
-TeX Gyre Bonum was added from CTAN TeX Gyre provenance on 2026-06-10._
+added from the legal-reviewed asset package on 2026-06-09. Archivo Black, PT
+Sans Narrow, and Inconsolata SemiExpanded were added from DocFonts' Google Fonts
+provenance on 2026-06-10. TeX Gyre Bonum was added from CTAN TeX Gyre
+provenance on 2026-06-10._
 
 ## Scope (read first)
 
@@ -59,6 +60,7 @@ Machine-readable asset metadata: `font-assets.manifest.json`.
 | Comic Relief | Comic Sans MS | OFL-1.1 | none | 1.200 | google/fonts c89741abbf4eeabce432c3ed2fd7dc28b022701e, ofl/comicrelief |
 | Noto Sans | Tahoma | OFL-1.1 | none | 2.015 | google/fonts c89741abbf4eeabce432c3ed2fd7dc28b022701e, ofl/notosans |
 | Noto Sans Mono | Lucida Console | OFL-1.1 | none | 2.014 | google/fonts c89741abbf4eeabce432c3ed2fd7dc28b022701e, ofl/notosansmono |
+| Inconsolata SemiExpanded | Consolas | OFL-1.1 | none | 3.001 | google/fonts c89741abbf4eeabce432c3ed2fd7dc28b022701e, ofl/inconsolata/static |
 | PT Sans | Trebuchet MS | OFL-1.1 | "PT Sans", "PT Serif", "ParaType" | 2.003W OFL | google/fonts c89741abbf4eeabce432c3ed2fd7dc28b022701e, ofl/ptsans |
 | PT Sans Narrow | Gill Sans MT Condensed | OFL-1.1 | "PT Sans", "PT Serif", "ParaType" | 2.003W OFL | google/fonts c89741abbf4eeabce432c3ed2fd7dc28b022701e, ofl/ptsansnarrow |
 | TeX Gyre Bonum | Bookman Old Style | LicenseRef-GUST-Font-License-1.0 | none | 2.004 | CTAN fonts/tex-gyre/opentype |
@@ -194,6 +196,15 @@ License description: This Font Software is licensed under the SIL Open Font Lice
 
 No OFL Reserved Font Name is declared in these files.
 
+**Inconsolata SemiExpanded** - OFL-1.1
+
+```text
+Copyright 2006 The Inconsolata Project Authors (https://github.com/cyrealtype/Inconsolata)
+License description: This Font Software is licensed under the SIL Open Font License, Version 1.1.
+```
+
+No OFL Reserved Font Name is declared in these files.
+
 **PT Sans** - OFL-1.1
 
 ```text
@@ -249,10 +260,10 @@ change.
 
 ## Verification evidence (current ship set)
 
-- **47 / 57 WOFF2 faces:** static-source WOFF2 flavor, WOFF2 metadata block
+- **49 / 59 WOFF2 faces:** static-source WOFF2 flavor, WOFF2 metadata block
   omitted, `name` table byte-identical to the source font, identical glyph count
   and `cmap`.
-- **10 / 57 WOFF2 faces:** static variable-font instances for Gelasio, Noto
+- **10 / 59 WOFF2 faces:** static variable-font instances for Gelasio, Noto
   Sans, and Noto Sans Mono, generated at regular and bold weights with no
   subsetting.
 - **Metrics:** `unitsPerEm`, `hhea` ascent/descent, selected OS/2 metrics,
@@ -262,9 +273,10 @@ change.
 ## Full license texts
 
 - OFL-1.1 (Carlito, Liberation, Caprasimo, Archivo Black, Bacasime Antique,
-  Oregano Italic, Gelasio, Cardo, Comic Relief, Noto Sans, Noto Sans Mono, PT
-  Sans, PT Sans Narrow): `OFL.txt` in this directory. The copyright notices
-  above are also stacked at the top of that file.
+  Oregano Italic, Gelasio, Cardo, Comic Relief, Noto Sans, Noto Sans Mono,
+  Inconsolata SemiExpanded, PT Sans, PT Sans Narrow): `OFL.txt` in this
+  directory. The copyright notices above are also stacked at the top of that
+  file.
 - Apache-2.0 (Caladea): `Apache-2.0.txt` in this directory.
 - AGPL-3.0-only WITH PS-or-PDF-font-exception-20170817 (C059): `AGPL-3.0.txt` in
   this directory.

@@ -55,6 +55,7 @@ unmodified upstream release pointers recorded in `shared/font-system/assets/LICE
 | Comic Relief | Comic Sans MS | OFL-1.1 | none | 1.200 |
 | Noto Sans | Tahoma | OFL-1.1 | none | 2.015 |
 | Noto Sans Mono | Lucida Console | OFL-1.1 | none | 2.014 |
+| Inconsolata SemiExpanded | Consolas | OFL-1.1 | none | 3.001 |
 | PT Sans | Trebuchet MS | OFL-1.1 | "PT Sans", "PT Serif", "ParaType" | 2.003W OFL |
 | PT Sans Narrow | Gill Sans MT Condensed | OFL-1.1 | "PT Sans", "PT Serif", "ParaType" | 2.003W OFL |
 | TeX Gyre Bonum | Bookman Old Style | LicenseRef-GUST-Font-License-1.0 | none | 2.004 |
@@ -75,6 +76,7 @@ unmodified upstream release pointers recorded in `shared/font-system/assets/LICE
 - **Comic Relief** (OFL-1.1): `Copyright 2013 The Comic Relief Project Authors (https://github.com/loudifier/Comic-Relief).` The v1.200 files declare no OFL Reserved Font Name.
 - **Noto Sans** (OFL-1.1): `Copyright 2022 The Noto Project Authors (https://github.com/notofonts/latin-greek-cyrillic).` Noto is a trademark of Google LLC. The v2.015 files declare no OFL Reserved Font Name.
 - **Noto Sans Mono** (OFL-1.1): `Copyright 2022 The Noto Project Authors (https://github.com/notofonts/latin-greek-cyrillic).` Noto is a trademark of Google LLC. The v2.014 files declare no OFL Reserved Font Name.
+- **Inconsolata SemiExpanded** (OFL-1.1): `Copyright 2006 The Inconsolata Project Authors (https://github.com/cyrealtype/Inconsolata).` These v3.001 files declare no OFL Reserved Font Name.
 - **PT Sans** (OFL-1.1): `Copyright (c) 2010, ParaType Ltd. (http://www.paratype.com/public), with Reserved Font Names "PT Sans", "PT Serif" and "ParaType".`
 - **PT Sans Narrow** (OFL-1.1): `Copyright (c) 2010, ParaType Ltd. (http://www.paratype.com/public), with Reserved Font Names "PT Sans", "PT Serif" and "ParaType".` PT Sans is a trademark of the ParaType Ltd.
 - **TeX Gyre Bonum** (LicenseRef-GUST-Font-License-1.0): `Copyright 2006, 2009 for TeX Gyre extensions by B. Jackowski and J.M. Nowacki (on behalf of TeX users groups).`
@@ -88,8 +90,8 @@ and Noto Sans Mono ship as static WOFF2 instances generated from upstream
 variable TrueType sources at the regular and bold weights; Noto Sans and Noto
 Sans Mono are also instanced at normal width.
 
-Verified for this ship set: 47 / 57 faces are static-source conversions with a
-WOFF2 `name` table byte-identical to their source font, and 10 / 57 faces are
+Verified for this ship set: 49 / 59 faces are static-source conversions with a
+WOFF2 `name` table byte-identical to their source font, and 10 / 59 faces are
 static variable-font instances with no subsetting. All metrics are preserved.
 Under OFL FAQ 2.2.1 the static-source conversions are not Modified Versions and
 retain the original font names. For Caladea, this also serves as the Apache-2.0

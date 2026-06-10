@@ -66,6 +66,7 @@ const ADVERTISED_BUILT_IN_TOOLBAR_FAMILIES: ReadonlySet<string> = new Set([
   'Lucida Console',
   'Tahoma',
   'Trebuchet MS',
+  'Verdana',
 ]);
 
 /** Classify one evidence row by its policy action, verdict, and whether its target is bundled. */
@@ -109,9 +110,9 @@ function compareLogicalFamily(a: FontOffering, b: FontOffering): number {
 /**
  * The metric-safe, bundled-backed offerings safe to treat as clean defaults, sorted by logical family.
  * Excludes qualified rows (Arial Black, Arial Narrow, Cambria, Century, Century Schoolbook,
- * Cooper Black, Georgia, Baskerville Old Face, Bookman Old Style), category fallbacks
+ * Cooper Black, Georgia, Baskerville Old Face, Bookman Old Style, ITC Bookman), category fallbacks
  * (Calibri Light, Tahoma, Trebuchet MS, Garamond, Comic Sans MS, Brush Script MT,
- * Gill Sans MT Condensed, Lucida Console), and not-yet-bundled candidates.
+ * Gill Sans MT Condensed, Lucida Console, Consolas, Verdana), and not-yet-bundled candidates.
  */
 export function getDefaultFontOfferings(): FontOffering[] {
   return FONT_OFFERINGS.filter((o) => o.offering === 'default').sort(compareLogicalFamily);

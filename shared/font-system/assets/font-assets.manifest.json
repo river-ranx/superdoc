@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "spdxExpression": "OFL-1.1 AND Apache-2.0 AND (AGPL-3.0-only WITH PS-or-PDF-font-exception-20170817) AND (GPL-2.0-only WITH Font-exception-2.0) AND LicenseRef-GUST-Font-License-1.0",
-  "generatedFrom": "Bundled font legal review, 2026-06-03; Caprasimo added from DocFonts Google Fonts OFL provenance, 2026-06-08; OFL fallback batch added from DocFonts Google Fonts provenance, 2026-06-09; Bacasime Antique, Oregano Italic, and Noto Sans Mono added from DocFonts Google Fonts provenance, 2026-06-09; C059 and Liberation Sans Narrow added from legal-reviewed asset package, 2026-06-09; Arial Black and PT Sans Narrow added from DocFonts Google Fonts provenance, 2026-06-10; TeX Gyre Bonum added from CTAN TeX Gyre provenance, 2026-06-10",
+  "generatedFrom": "Bundled font legal review, 2026-06-03; Caprasimo added from DocFonts Google Fonts OFL provenance, 2026-06-08; OFL fallback batch added from DocFonts Google Fonts provenance, 2026-06-09; Bacasime Antique, Oregano Italic, and Noto Sans Mono added from DocFonts Google Fonts provenance, 2026-06-09; C059 and Liberation Sans Narrow added from legal-reviewed asset package, 2026-06-09; Arial Black and PT Sans Narrow added from DocFonts Google Fonts provenance, 2026-06-10; TeX Gyre Bonum added from CTAN TeX Gyre provenance, 2026-06-10; Inconsolata SemiExpanded added from DocFonts Google Fonts provenance, 2026-06-10",
   "families": [
     {
       "family": "Carlito",
@@ -565,6 +565,41 @@
           "weight": "bold",
           "style": "normal",
           "sha256": "2f1dd33ccc68b2c455479ef2f09920b9d7728b3abacc591c8481f9c7472664b4"
+        }
+      ]
+    },
+    {
+      "family": "Inconsolata SemiExpanded",
+      "replaces": ["Consolas"],
+      "license": "OFL-1.1",
+      "licenseFiles": ["OFL.txt"],
+      "version": "3.001",
+      "upstreamSource": "google/fonts c89741abbf4eeabce432c3ed2fd7dc28b022701e, ofl/inconsolata/static",
+      "reservedFontName": null,
+      "copyrightNotice": "Copyright 2006 The Inconsolata Project Authors (https://github.com/cyrealtype/Inconsolata)",
+      "trademarkNotice": null,
+      "sourceFiles": [
+        {
+          "file": "Inconsolata-SemiExpandedRegular.ttf",
+          "sha256": "067b9f8aa2f00e301513f92e80e31c5ba670b4b401273d0ae9c0078dd83bc354"
+        },
+        {
+          "file": "Inconsolata-SemiExpandedBold.ttf",
+          "sha256": "05ba7a06a4da343ebad20a46c290202494c39d41c83b9acd941306722c6528b0"
+        }
+      ],
+      "faces": [
+        {
+          "file": "InconsolataSemiExpanded-Regular.woff2",
+          "weight": "normal",
+          "style": "normal",
+          "sha256": "168feaeacc8c08f9c7b0b70d57e93d9cfa960c5b295dbf4f7c25d136b9bd2a9a"
+        },
+        {
+          "file": "InconsolataSemiExpanded-Bold.woff2",
+          "weight": "bold",
+          "style": "normal",
+          "sha256": "a42613d2889857b5ac5b5f3ce8876f63991d695269fbeb3f38ffebbb4ed18d33"
         }
       ]
     },
