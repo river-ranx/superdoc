@@ -546,6 +546,10 @@ export interface ImageAttrs extends ShapeNodeAttributes {
   shouldCover?: boolean;
   /** @internal Clip-path value for srcRect image crops */
   clipPath?: string;
+  /** @internal Clip-path value for picture shape geometry masks */
+  shapeClipPath?: string;
+  /** @internal CSS object-fit value used by the layout renderer */
+  objectFit?: 'contain' | 'cover' | 'fill' | 'scale-down';
   /** @internal Raw a:srcRect element for lossless round-trip export */
   rawSrcRect?: Record<string, unknown> | null;
   /** @internal DrawingML luminance adjustment from a:lum */
@@ -818,6 +822,8 @@ export interface ShapeContainerAttrs extends BlockNodeAttributes {
   originalAttributes?: Record<string, unknown> | null;
   /** @internal Effect extent padding */
   effectExtent?: Record<string, unknown> | null;
+  /** Visual effects applied to the shape (e.g. DrawingML outer shadow) */
+  effects?: VectorShapeEffects | null;
   /** @internal Line end markers */
   lineEnds?: Record<string, unknown> | null;
   /** Whether the shape is hidden */
@@ -864,6 +870,8 @@ export interface ShapeGroupAttrs extends ShapeNodeAttributes {
   padding?: ShapeGroupPadding | null;
   /** Margin offset for anchored shape groups */
   marginOffset?: ShapeGroupMarginOffset | null;
+  /** Extra bounds around the shape group */
+  effectExtent?: VectorShapeEffectExtent | null;
   /** @internal Drawing content data */
   drawingContent?: unknown;
   /** Text wrapping configuration */
@@ -919,6 +927,27 @@ export interface VectorShapeEffectExtent {
   bottom?: number;
 }
 
+/** Vector shape outer shadow effect */
+export interface VectorShapeOuterShadowEffect {
+  type: 'outerShadow';
+  blurRadius: number;
+  distance: number;
+  direction: number;
+  color: string;
+  opacity: number;
+  alignment?: string;
+  rotateWithShape?: boolean;
+  scaleX?: number;
+  scaleY?: number;
+  skewX?: number;
+  skewY?: number;
+}
+
+/** Vector shape effects */
+export interface VectorShapeEffects {
+  outerShadow?: VectorShapeOuterShadowEffect;
+}
+
 /** Vector shape node attributes */
 export interface VectorShapeAttrs extends ShapeNodeAttributes {
   /** Shape kind (rect, ellipse, etc.) */
@@ -937,6 +966,8 @@ export interface VectorShapeAttrs extends ShapeNodeAttributes {
   lineEnds?: VectorShapeLineEnds | null;
   /** Extra bounds around the shape */
   effectExtent?: VectorShapeEffectExtent | null;
+  /** Visual effects applied to the shape */
+  effects?: VectorShapeEffects | null;
   /** Rotation in degrees */
   rotation?: number;
   /** Horizontal flip */

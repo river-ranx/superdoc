@@ -158,6 +158,8 @@ type ParagraphBlockAttrs = {
   keepLines?: boolean;
   /** Border attributes for the paragraph */
   borders?: ParagraphBorders;
+  /** Marks an empty paragraph that only exists to carry section properties. */
+  sectPrMarker?: boolean;
 };
 
 const spacingDebugLog = (..._args: unknown[]): void => {
@@ -411,12 +413,31 @@ export type AnchoredDrawingEntry = {
   measure: ImageMeasure | DrawingMeasure;
 };
 
+function getSuppressedMarkerImageGroupAnchorOffset(
+  entry: AnchoredDrawingEntry,
+  suppressVisibleSectPrMarkerParagraph: boolean,
+  hasPageRelativeAnchorForParagraph: boolean,
+  markerSpacingBefore: number,
+): number {
+  if (!suppressVisibleSectPrMarkerParagraph || !hasPageRelativeAnchorForParagraph) return 0;
+  if (entry.block.kind !== 'drawing' || entry.block.drawingKind !== 'shapeGroup') return 0;
+  if (!entry.block.shapes?.some((child) => child.shapeType === 'image')) return 0;
+  if ((entry.block.anchor?.vRelativeFrom ?? 'paragraph') !== 'paragraph') return 0;
+  if (entry.block.anchor?.alignV && entry.block.anchor.alignV !== 'top') return 0;
+  // Word keeps a half-spacing paragraph origin for image groups paired with
+  // page-relative vector masks on suppressed section marker paragraphs.
+  return Math.max(0, markerSpacingBefore / 2);
+}
+
 export type ParagraphAnchorsContext = {
   anchoredDrawings?: AnchoredDrawingEntry[];
   anchoredTables?: AnchoredTable[];
   columnWidth: number;
   pageWidth: number;
   pageMargins: PageMargins;
+  sectionBaseTopMargin?: number;
+  sectionHeaderDistance?: number;
+  hasPageRelativeAnchorForParagraph?: boolean;
   columns: { width: number; gap: number; count: number };
   placedAnchoredIds: Set<string>;
 };
@@ -478,6 +499,13 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
     if (!spacingExplicit.before) spacingBefore = 0;
     if (!spacingExplicit.after) spacingAfter = 0;
   }
+  const markerSpacingBefore = spacingBefore;
+  const hasAnchoredObjects = Boolean(anchors?.anchoredDrawings?.length || anchors?.anchoredTables?.length);
+  const suppressVisibleSectPrMarkerParagraph = attrs?.sectPrMarker === true && emptyTextParagraph && hasAnchoredObjects;
+  if (suppressVisibleSectPrMarkerParagraph) {
+    spacingBefore = 0;
+    spacingAfter = 0;
+  }
   /** Original spacing before value, preserved for blank page calculations where no trailing collapse occurs. */
   const baseSpacingBefore = spacingBefore;
   let appliedSpacingBefore = spacingBefore === 0;
@@ -516,7 +544,26 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
   });
   const paragraphAnchorBaseY =
     floatScanParagraphStartY + borderExpansion.top - (inBorderGroup ? rawBorderExpansion.bottom : 0);
+  const sectionBaseTopMargin = anchors?.sectionBaseTopMargin;
+  const sectionHeaderDistance =
+    typeof anchors?.sectionHeaderDistance === 'number' ? Math.max(0, anchors.sectionHeaderDistance) : 0;
+  // Word anchors decorative section-marker shape groups from the section's raw top
+  // margin plus header distance, not from the header-inflated body top. This is
+  // a correction for inflated header content; never use it to push below the
+  // effective body top when the header does not inflate the margin. Mixed marker
+  // groups that also own page-relative anchors keep the effective top so companion
+  // lines remain aligned with their page-relative title art.
+  const suppressedMarkerStartsPage =
+    suppressVisibleSectPrMarkerParagraph &&
+    typeof sectionBaseTopMargin === 'number' &&
+    anchors?.hasPageRelativeAnchorForParagraph !== true &&
+    Math.abs(previewState.cursorY - previewState.topMargin) < 0.001 &&
+    Math.abs(paragraphAnchorBaseY - previewState.topMargin) < 0.001;
+  const effectiveParagraphAnchorBaseY = suppressedMarkerStartsPage
+    ? Math.min(sectionBaseTopMargin + sectionHeaderDistance, paragraphAnchorBaseY)
+    : paragraphAnchorBaseY;
   let paragraphContentEndY = paragraphAnchorBaseY;
+  const anchorFirstLineHeight = suppressVisibleSectPrMarkerParagraph ? 0 : (measure.lines?.[0]?.lineHeight ?? 0);
 
   const registerAnchoredDrawingsAt = (paragraphContentStartY: number) => {
     if (!anchors?.anchoredDrawings?.length) return;
@@ -526,14 +573,22 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
 
       const contentTop = state.topMargin;
       const contentBottom = state.contentBottom;
+      const anchorParagraphY =
+        paragraphContentStartY +
+        getSuppressedMarkerImageGroupAnchorOffset(
+          entry,
+          suppressVisibleSectPrMarkerParagraph,
+          anchors.hasPageRelativeAnchorForParagraph === true,
+          markerSpacingBefore,
+        );
       const anchorY = resolveAnchoredGraphicY({
         anchor: entry.block.anchor,
         objectHeight: entry.measure.height,
         contentTop,
         contentBottom,
         pageBottomMargin: anchors.pageMargins.bottom ?? 0,
-        anchorParagraphY: paragraphContentStartY,
-        firstLineHeight: measure.lines?.[0]?.lineHeight ?? 0,
+        anchorParagraphY,
+        firstLineHeight: anchorFirstLineHeight,
       });
 
       floatManager.registerDrawing(entry.block, entry.measure, anchorY, state.columnIndex, state.page.number);
@@ -628,7 +683,7 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
     }
   };
 
-  registerAnchoredDrawingsAt(paragraphAnchorBaseY);
+  registerAnchoredDrawingsAt(effectiveParagraphAnchorBaseY);
 
   const registerAnchoredTablesAt = (paragraphContentStartY: number, entries: AnchoredTable[]) => {
     if (!entries.length) return;
@@ -645,7 +700,7 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
       const contentTop = state.topMargin;
       const contentBottom = state.contentBottom;
       const layoutOffsetV = entry.layoutOffsetV;
-      const firstLineHeight = measure.lines?.[0]?.lineHeight ?? 0;
+      const firstLineHeight = anchorFirstLineHeight;
       const wrapType = entry.block.wrap?.type ?? 'None';
       const anchorForY = anchorForLineScopedFormField(
         layoutOffsetV != null && entry.block.anchor
@@ -664,7 +719,7 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
         contentBottom,
         pageBottomMargin: anchors!.pageMargins.bottom ?? 0,
         anchorParagraphY: nextStackY,
-        firstLineHeight: measure.lines?.[0]?.lineHeight ?? 0,
+        firstLineHeight: anchorFirstLineHeight,
       });
 
       floatManager.registerTable(entry.block, entry.measure, anchorY, state.columnIndex, state.page.number);
@@ -703,7 +758,13 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
     if (wrapType === 'None') return true;
     return shouldPreLayoutSquareTable(entry);
   });
-  registerAnchoredTablesAt(paragraphAnchorBaseY, preLayoutAnchoredTables);
+  registerAnchoredTablesAt(effectiveParagraphAnchorBaseY, preLayoutAnchoredTables);
+
+  if (suppressVisibleSectPrMarkerParagraph) {
+    // Re-register post-layout tables at the marker origin; pre-layout ones dedupe via placedAnchoredIds.
+    registerAnchoredTablesAt(effectiveParagraphAnchorBaseY, anchors?.anchoredTables ?? []);
+    return;
+  }
 
   const isPositionedFrame = frame?.wrap === 'none';
   if (isPositionedFrame) {

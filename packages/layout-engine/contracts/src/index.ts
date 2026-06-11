@@ -63,6 +63,14 @@ export {
   getFragmentZIndex,
 } from './ooxml-z-index.js';
 
+export {
+  resolveOuterShadowOffset,
+  getOuterShadowStdDeviation,
+  getOuterShadowPaintExtent,
+  type OuterShadowPaintEffect,
+  type PaintEffectExtent,
+} from './shape-effects.js';
+
 // Export justify utilities
 export {
   shouldApplyJustify,
@@ -585,6 +593,9 @@ export type ImageAlphaModFix = {
 /** Hyperlink metadata from OOXML a:hlinkClick on a DrawingML image. */
 export type ImageHyperlink = { url: string; tooltip?: string };
 
+/** CSS object-fit values supported by SuperDoc image rendering paths. */
+export type ObjectFit = 'contain' | 'cover' | 'fill' | 'scale-down';
+
 /**
  * Inline image run for images that flow with text on the same line.
  * Unlike ImageBlock (anchored/floating images), ImageRun is part of the paragraph's run array
@@ -617,6 +628,10 @@ export type ImageRun = {
   title?: string;
   /** Clip-path value for cropped images. */
   clipPath?: string;
+  /** Clip-path value for preset shape masks applied around the image box. */
+  shapeClipPath?: string;
+  /** CSS object-fit behavior for the painted image inside its layout box. */
+  objectFit?: ObjectFit;
 
   /**
    * Spacing around the image (from DOCX distT/distB/distL/distR attributes).
@@ -963,7 +978,7 @@ export type ImageBlock = {
   height?: number;
   alt?: string;
   title?: string;
-  objectFit?: 'contain' | 'cover' | 'fill' | 'scale-down';
+  objectFit?: ObjectFit;
   display?: 'inline' | 'block';
   padding?: BoxSpacing;
   margin?: BoxSpacing;
@@ -1080,6 +1095,11 @@ export type TextPart = {
   /** Indicates this line break follows an empty paragraph (creates extra spacing). */
   isEmptyParagraph?: boolean;
   /**
+   * True only on the line-break part that separates two logical paragraphs.
+   * Intra-paragraph <w:br> line breaks do not set this flag.
+   */
+  isParagraphBoundary?: boolean;
+  /**
    * SD-2804: ECMA-376 §20.4.2.38 lets a textbox hold full body-level
    * content, including paragraphs whose runs carry inline w:drawing
    * images. When the importer encounters such a drawing it appends a
@@ -1097,12 +1117,23 @@ export type TextPart = {
   alt?: string;
 };
 
+export type ShapeTextParagraph = {
+  spacing?: {
+    /** CSS pixels. */
+    before?: number;
+    /** CSS pixels. */
+    after?: number;
+  };
+};
+
 /** Text content configuration for shapes. */
 export type ShapeTextContent = {
   /** Array of text parts with individual formatting. */
   parts: TextPart[];
   /** Horizontal text alignment within the shape. */
   horizontalAlign?: 'left' | 'center' | 'right';
+  /** Paragraph metadata aligned to the logical paragraphs in `parts`. */
+  paragraphs?: ShapeTextParagraph[];
 };
 
 export type LineEnd = {
@@ -1123,11 +1154,25 @@ export type EffectExtent = {
   bottom: number;
 };
 
+export type ShapeOuterShadowEffect = {
+  type: 'outerShadow';
+  blurRadius: number;
+  distance: number;
+  direction: number;
+  color: string;
+  opacity: number;
+};
+
+export type ShapeEffects = {
+  outerShadow?: ShapeOuterShadowEffect;
+};
+
 export type VectorShapeStyle = {
   fillColor?: FillColor;
   strokeColor?: StrokeColor;
   strokeWidth?: number;
   lineEnds?: LineEnds;
+  effects?: ShapeEffects;
   textContent?: ShapeTextContent;
   textAlign?: string;
   textVerticalAlign?: 'top' | 'center' | 'bottom';
@@ -1150,6 +1195,9 @@ export type ShapeGroupTransform = {
   childHeight?: number;
   childOriginXEmu?: number;
   childOriginYEmu?: number;
+  rotation?: number;
+  flipH?: boolean;
+  flipV?: boolean;
 };
 
 export type ShapeGroupVectorChild = {
@@ -1170,6 +1218,8 @@ export type ShapeGroupImageChild = {
     alt?: string;
     clipPath?: string;
     alphaModFix?: ImageAlphaModFix;
+    shapeClipPath?: string;
+    objectFit?: ObjectFit;
     imageId?: string;
     imageName?: string;
   };
@@ -1221,6 +1271,7 @@ export type VectorShapeDrawing = DrawingBlockBase & {
   strokeColor?: StrokeColor;
   strokeWidth?: number;
   lineEnds?: LineEnds;
+  effects?: ShapeEffects;
   effectExtent?: EffectExtent;
   textContent?: ShapeTextContent;
   textAlign?: string;
@@ -1242,6 +1293,7 @@ export type TextboxDrawing = DrawingBlockBase & {
   strokeColor?: StrokeColor;
   strokeWidth?: number;
   lineEnds?: LineEnds;
+  effects?: ShapeEffects;
   effectExtent?: EffectExtent;
   textContent?: ShapeTextContent;
   textAlign?: string;
@@ -1260,6 +1312,7 @@ export type TextboxDrawing = DrawingBlockBase & {
 export type ShapeGroupDrawing = DrawingBlockBase & {
   drawingKind: 'shapeGroup';
   geometry: DrawingGeometry;
+  effectExtent?: EffectExtent;
   groupTransform?: ShapeGroupTransform;
   shapes: ShapeGroupChild[];
   size?: {

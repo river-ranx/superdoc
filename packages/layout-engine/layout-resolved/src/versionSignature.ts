@@ -105,10 +105,22 @@ const resolveClipPathFromAttrs = (attrs: unknown): string => {
   return readClipPathValue(record.clipPath);
 };
 
+const resolveShapeClipPathFromAttrs = (attrs: unknown): string => {
+  if (!attrs || typeof attrs !== 'object') return '';
+  const record = attrs as Record<string, unknown>;
+  return readClipPathValue(record.shapeClipPath);
+};
+
 const resolveBlockClipPath = (block: unknown): string => {
   if (!block || typeof block !== 'object') return '';
   const record = block as Record<string, unknown>;
   return readClipPathValue(record.clipPath) || resolveClipPathFromAttrs(record.attrs);
+};
+
+const resolveBlockShapeClipPath = (block: unknown): string => {
+  if (!block || typeof block !== 'object') return '';
+  const record = block as Record<string, unknown>;
+  return readClipPathValue(record.shapeClipPath) || resolveShapeClipPathFromAttrs(record.attrs);
 };
 
 const imageHyperlinkVersion = (hyperlink: ImageBlock['hyperlink'] | undefined): string => {
@@ -160,6 +172,7 @@ const renderedBlockImageVersion = (image: ImageBlock | ImageDrawing): string =>
     image.flipV ? 1 : 0,
     imageHyperlinkVersion(image.hyperlink),
     resolveBlockClipPath(image),
+    resolveBlockShapeClipPath(image),
   ].join('|');
 
 const renderedInlineImageRunVersion = (image: ImageRun): string =>
@@ -171,6 +184,8 @@ const renderedInlineImageRunVersion = (image: ImageRun): string =>
     image.alt ?? '',
     image.title ?? '',
     typeof image.clipPath === 'string' ? image.clipPath.trim() : '',
+    typeof image.shapeClipPath === 'string' ? image.shapeClipPath.trim() : '',
+    image.objectFit ?? '',
     image.distTop ?? '',
     image.distBottom ?? '',
     image.distLeft ?? '',
@@ -459,7 +474,7 @@ export const deriveBlockVersion = (block: FlowBlock): string => {
       return ['drawing:image', renderedBlockImageVersion(imageLike)].join('|');
     }
     if (block.drawingKind === 'vectorShape' || block.drawingKind === 'textboxShape') {
-      const vector = block as VectorShapeDrawing;
+      const vector = block as VectorShapeDrawing | TextboxDrawing;
       return [
         block.drawingKind === 'textboxShape' ? 'drawing:textbox' : 'drawing:vector',
         vector.shapeKind ?? '',
@@ -474,6 +489,8 @@ export const deriveBlockVersion = (block: FlowBlock): string => {
         drawingTextVersion(vector),
         block.anchor?.offsetH ?? '',
         block.anchor?.offsetV ?? '',
+        vector.effects ? JSON.stringify(vector.effects) : '',
+        vector.effectExtent ? JSON.stringify(vector.effectExtent) : '',
       ].join('|');
     }
     if (block.drawingKind === 'shapeGroup') {
@@ -485,6 +502,7 @@ export const deriveBlockVersion = (block: FlowBlock): string => {
         'drawing:group',
         group.geometry.width,
         group.geometry.height,
+        group.effectExtent ? JSON.stringify(group.effectExtent) : '',
         group.groupTransform ? JSON.stringify(group.groupTransform) : '',
         childSignature,
       ].join('|');

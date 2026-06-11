@@ -392,6 +392,46 @@ export function resolveParagraphPropertiesForTextBox(paragraph, params) {
 }
 
 /**
+ * Converts resolved textbox paragraph spacing from twips to CSS pixels.
+ *
+ * @param {Object|null|undefined} paragraphProperties - Resolved paragraph properties
+ * @param {Object} options - Paragraph context
+ * @param {number} options.paragraphIndex - Logical paragraph index
+ * @param {number} options.paragraphCount - Logical paragraph count
+ * @param {string|number|boolean|undefined} options.spcFirstLastPara - Raw wps:bodyPr spcFirstLastPara value
+ * @returns {{ before?: number, after?: number }|undefined} Paragraph spacing in CSS px
+ */
+export function extractTextBoxParagraphSpacing(
+  paragraphProperties,
+  { paragraphIndex, paragraphCount, spcFirstLastPara } = {},
+) {
+  const spacing = paragraphProperties?.spacing;
+  if (!spacing) return undefined;
+
+  // ECMA-376 §21.1.2.1.1: an omitted spcFirstLastPara implies false, so edge
+  // spacing is suppressed unless the attribute explicitly enables it.
+  const honorFirstLast =
+    spcFirstLastPara === '1' ||
+    spcFirstLastPara === 1 ||
+    spcFirstLastPara === true ||
+    spcFirstLastPara === 'true' ||
+    spcFirstLastPara === 'on';
+  const isFirst = paragraphIndex === 0;
+  const isLast = paragraphCount != null && paragraphIndex === paragraphCount - 1;
+
+  const result = {};
+  if (typeof spacing.before === 'number' && !(isFirst && !honorFirstLast)) {
+    const px = twipsToPixels(spacing.before);
+    if (typeof px === 'number') result.before = px;
+  }
+  if (typeof spacing.after === 'number' && !(isLast && !honorFirstLast)) {
+    const px = twipsToPixels(spacing.after);
+    if (typeof px === 'number') result.after = px;
+  }
+  return result.before === undefined && result.after === undefined ? undefined : result;
+}
+
+/**
  * Extracts formatting properties from a run's w:rPr element.
  *
  * @param {Object|null|undefined} rPr - The w:rPr element containing run properties
@@ -486,6 +526,7 @@ export function extractBodyPrProperties(bodyPr) {
 
   // Extract wrap mode (default to 'square' if not specified)
   const wrap = bodyPrAttrs['wrap'] || 'square';
+  const spcFirstLastPara = bodyPrAttrs['spcFirstLastPara'];
 
-  return { verticalAlign, insets, wrap };
+  return { verticalAlign, insets, wrap, spcFirstLastPara };
 }

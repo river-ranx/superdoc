@@ -19,6 +19,7 @@ import type {
   ShapeTextContent,
   TextPart,
 } from '@superdoc/contracts';
+import { getOuterShadowPaintExtent as getSharedOuterShadowPaintExtent } from '@superdoc/contracts';
 import type { PMNode, NodeHandlerContext, BlockIdGenerator, PositionMap } from '../types.js';
 import type { EffectExtent, LineEnds } from '../utilities.js';
 import {
@@ -37,6 +38,7 @@ import {
   normalizeStrokeColor,
   normalizeLineEnds,
   normalizeEffectExtent,
+  normalizeShapeEffects,
   normalizeTextContent,
   normalizeTextVerticalAlign,
   normalizeTextInsets,
@@ -81,6 +83,7 @@ const isHiddenDrawing = (attrs: Record<string, unknown>): boolean => {
 
 type ShapeDrawingBlock = VectorShapeDrawing | TextboxDrawing | ShapeGroupDrawing;
 type ShapeDrawingGeometry = ShapeDrawingBlock['geometry'];
+type ShapeGroupChild = ShapeGroupDrawing['shapes'][number];
 
 type TextboxAttrsPayload = {
   attributes?: Record<string, unknown>;
@@ -638,6 +641,7 @@ export const buildDrawingBlock = (
     fillColor: normalizeFillColor(rawAttrs.fillColor),
     strokeColor: normalizeStrokeColor(rawAttrs.strokeColor),
     strokeWidth: coerceNumber(rawAttrs.strokeWidth),
+    effects: normalizeShapeEffects(rawAttrs.effects),
     textContent: normalizeTextContent(rawAttrs.textContent),
     textAlign: typeof rawAttrs.textAlign === 'string' ? rawAttrs.textAlign : undefined,
     textVerticalAlign: normalizeTextVerticalAlign(rawAttrs.textVerticalAlign),
@@ -650,6 +654,101 @@ export const buildDrawingBlock = (
 // ============================================================================
 // Shape Converter Functions
 // ============================================================================
+
+const mergeEffectExtents = (
+  base: EffectExtent | undefined,
+  supplement: EffectExtent | undefined,
+): EffectExtent | undefined => {
+  if (!base) return supplement;
+  if (!supplement) return base;
+  return {
+    left: Math.max(base.left, supplement.left),
+    top: Math.max(base.top, supplement.top),
+    right: Math.max(base.right, supplement.right),
+    bottom: Math.max(base.bottom, supplement.bottom),
+  };
+};
+
+const hasEffectExtent = (extent: EffectExtent | undefined): extent is EffectExtent => {
+  return !!extent && (extent.left > 0 || extent.top > 0 || extent.right > 0 || extent.bottom > 0);
+};
+
+const getCenteredStrokeHalfExtent = (attrs: Record<string, unknown>): number => {
+  if (!('fillColor' in attrs)) return 0;
+  if ('lineEnds' in attrs && attrs.lineEnds) return 0;
+  if (attrs.strokeColor === null) return 0;
+
+  const strokeWidth = pickNumber(attrs.strokeWidth) ?? 1;
+  return strokeWidth > 0 ? strokeWidth / 2 : 0;
+};
+
+const getShapeGroupChildStrokeExtent = (child: ShapeGroupChild): number => {
+  if (child.shapeType !== 'vectorShape' || !isPlainObject(child.attrs)) return 0;
+  return getCenteredStrokeHalfExtent(child.attrs);
+};
+
+const getOuterShadowPaintExtent = (attrs: Record<string, unknown>): EffectExtent | undefined => {
+  if ('lineEnds' in attrs && attrs.lineEnds) return undefined;
+
+  const shadow = normalizeShapeEffects(attrs.effects)?.outerShadow;
+  if (!shadow) return undefined;
+
+  const extent = getSharedOuterShadowPaintExtent(shadow);
+
+  return hasEffectExtent(extent) ? extent : undefined;
+};
+
+const getRequiredVectorShapeEffectExtent = (attrs: Record<string, unknown>): EffectExtent | undefined => {
+  const strokeExtent = getCenteredStrokeHalfExtent(attrs);
+  const strokeEffectExtent =
+    strokeExtent > 0
+      ? {
+          left: strokeExtent,
+          top: strokeExtent,
+          right: strokeExtent,
+          bottom: strokeExtent,
+        }
+      : undefined;
+
+  return mergeEffectExtents(strokeEffectExtent, getOuterShadowPaintExtent(attrs));
+};
+
+const getRequiredGroupEffectExtentFromChildren = (
+  children: ShapeGroupChild[],
+  width: number,
+  height: number,
+): EffectExtent | undefined => {
+  const required: EffectExtent = { left: 0, top: 0, right: 0, bottom: 0 };
+
+  for (const child of children) {
+    if (child.shapeType !== 'vectorShape' || !isPlainObject(child.attrs)) continue;
+
+    const strokeExtent = getShapeGroupChildStrokeExtent(child);
+    const strokeEffectExtent =
+      strokeExtent > 0
+        ? {
+            left: strokeExtent,
+            top: strokeExtent,
+            right: strokeExtent,
+            bottom: strokeExtent,
+          }
+        : undefined;
+    const paintExtent = mergeEffectExtents(strokeEffectExtent, getOuterShadowPaintExtent(child.attrs));
+    if (!paintExtent) continue;
+
+    const childX = pickNumber(child.attrs.x) ?? 0;
+    const childY = pickNumber(child.attrs.y) ?? 0;
+    const childWidth = pickNumber(child.attrs.width) ?? 0;
+    const childHeight = pickNumber(child.attrs.height) ?? 0;
+
+    required.left = Math.max(required.left, Math.max(0, paintExtent.left - childX));
+    required.top = Math.max(required.top, Math.max(0, paintExtent.top - childY));
+    required.right = Math.max(required.right, Math.max(0, childX + childWidth + paintExtent.right - width));
+    required.bottom = Math.max(required.bottom, Math.max(0, childY + childHeight + paintExtent.bottom - height));
+  }
+
+  return hasEffectExtent(required) ? required : undefined;
+};
 
 /**
  * Convert a ProseMirror vectorShape node to a DrawingBlock
@@ -668,7 +767,10 @@ export function vectorShapeNodeToDrawingBlock(
   if (isHiddenDrawing(rawAttrs)) {
     return null;
   }
-  const effectExtent = normalizeEffectExtent(rawAttrs.effectExtent);
+  const effectExtent = mergeEffectExtents(
+    normalizeEffectExtent(rawAttrs.effectExtent),
+    getRequiredVectorShapeEffectExtent(rawAttrs),
+  );
   const baseWidth = coercePositiveNumber(rawAttrs.width, 1);
   const baseHeight = coercePositiveNumber(rawAttrs.height, 1);
   const extraWidth = (effectExtent?.left ?? 0) + (effectExtent?.right ?? 0);
@@ -709,10 +811,19 @@ export function shapeGroupNodeToDrawingBlock(
   const size = normalizeShapeSize(rawAttrs.size);
   const width = size?.width ?? groupTransform?.width ?? 1;
   const height = size?.height ?? groupTransform?.height ?? 1;
+  const childCoordinateWidth = groupTransform?.width ?? width;
+  const childCoordinateHeight = groupTransform?.height ?? height;
+  const shapes = normalizeShapeGroupChildren(rawAttrs.shapes);
+  const effectExtent = mergeEffectExtents(
+    normalizeEffectExtent(rawAttrs.effectExtent),
+    getRequiredGroupEffectExtentFromChildren(shapes, childCoordinateWidth, childCoordinateHeight),
+  );
+  const extraWidth = (effectExtent?.left ?? 0) + (effectExtent?.right ?? 0);
+  const extraHeight = (effectExtent?.top ?? 0) + (effectExtent?.bottom ?? 0);
 
   const geometry: ShapeDrawingGeometry = {
-    width: coercePositiveNumber(width, 1),
-    height: coercePositiveNumber(height, 1),
+    width: coercePositiveNumber(width + extraWidth, 1),
+    height: coercePositiveNumber(height + extraHeight, 1),
     rotation: coerceNumber(rawAttrs.rotation) ?? 0,
     flipH: coerceBoolean(rawAttrs.flipH) ?? false,
     flipV: coerceBoolean(rawAttrs.flipV) ?? false,
@@ -720,8 +831,9 @@ export function shapeGroupNodeToDrawingBlock(
 
   return buildDrawingBlock(rawAttrs, nextBlockId, positions, node, geometry, 'shapeGroup', {
     groupTransform,
-    shapes: normalizeShapeGroupChildren(rawAttrs.shapes),
+    shapes,
     size,
+    effectExtent,
   });
 }
 

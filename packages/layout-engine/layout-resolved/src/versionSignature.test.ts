@@ -9,6 +9,7 @@ import type {
   TableBlock,
   TabRun,
   TextRun,
+  VectorShapeDrawing,
 } from '@superdoc/contracts';
 
 describe('sourceAnchorSignature', () => {
@@ -200,6 +201,50 @@ describe('deriveBlockVersion - tab underline', () => {
   });
 });
 
+describe('deriveBlockVersion - vector shape effects', () => {
+  const makeVectorShape = (
+    overrides: Partial<VectorShapeDrawing['effects']['outerShadow']> = {},
+  ): VectorShapeDrawing => ({
+    kind: 'drawing',
+    id: 'shadow-shape',
+    drawingKind: 'vectorShape',
+    geometry: { width: 100, height: 50, rotation: 0, flipH: false, flipV: false },
+    shapeKind: 'rect',
+    fillColor: '#ffffff',
+    strokeColor: '#000000',
+    strokeWidth: 1,
+    effects: {
+      outerShadow: {
+        type: 'outerShadow',
+        blurRadius: 6,
+        distance: 4,
+        direction: 45,
+        color: '#a6a6a6',
+        opacity: 0.4,
+        ...overrides,
+      },
+    },
+  });
+
+  it.each([
+    ['blurRadius', { blurRadius: 7 }],
+    ['distance', { distance: 5 }],
+    ['direction', { direction: 90 }],
+    ['color', { color: '#000000' }],
+    ['opacity', { opacity: 0.8 }],
+  ] as const)('changes when outer shadow %s changes', (_field, overrides) => {
+    expect(deriveBlockVersion(makeVectorShape(overrides))).not.toBe(deriveBlockVersion(makeVectorShape()));
+  });
+
+  it('changes when the vector shape effect extent changes', () => {
+    const base = makeVectorShape();
+    const withExtent = makeVectorShape();
+    withExtent.effectExtent = { left: 2, top: 2, right: 14, bottom: 14 };
+
+    expect(deriveBlockVersion(withExtent)).not.toBe(deriveBlockVersion(base));
+  });
+});
+
 describe('deriveBlockVersion - table image content', () => {
   const makeTableWithImage = (image: ImageBlock): TableBlock => ({
     kind: 'table',
@@ -266,6 +311,33 @@ describe('deriveBlockVersion - table image content', () => {
     );
 
     expect(second).not.toBe(first);
+  });
+
+  it('changes when a table image shape clip path changes', () => {
+    const ellipse = deriveBlockVersion(
+      makeTableWithImage({ ...baseImage, shapeClipPath: 'ellipse(50% 50% at 50% 50%)' }),
+    );
+    const circle = deriveBlockVersion(makeTableWithImage({ ...baseImage, shapeClipPath: 'circle(50% at 50% 50%)' }));
+
+    expect(circle).not.toBe(ellipse);
+  });
+
+  it('changes when a table image attrs shape clip path changes', () => {
+    const ellipse = deriveBlockVersion(
+      makeTableWithImage({ ...baseImage, attrs: { shapeClipPath: 'ellipse(50% 50% at 50% 50%)' } }),
+    );
+    const circle = deriveBlockVersion(
+      makeTableWithImage({ ...baseImage, attrs: { shapeClipPath: 'circle(50% at 50% 50%)' } }),
+    );
+
+    expect(circle).not.toBe(ellipse);
+  });
+
+  it('changes when a block image objectFit changes', () => {
+    const contain = deriveBlockVersion({ ...baseImage, objectFit: 'contain' });
+    const cover = deriveBlockVersion({ ...baseImage, objectFit: 'cover' });
+
+    expect(cover).not.toBe(contain);
   });
 });
 
@@ -402,6 +474,30 @@ describe('deriveBlockVersion - inline image runs', () => {
       deriveBlockVersion(makeParagraphWithImageRun(clipB)),
     );
     expect(deriveBlockVersion(makeTableWithImageRun(clipA))).not.toBe(deriveBlockVersion(makeTableWithImageRun(clipB)));
+  });
+
+  it('changes when inline image shape mask changes', () => {
+    const ellipse = {
+      ...baseImageRun,
+      shapeClipPath: 'ellipse(50% 50% at 50% 50%)',
+    } as ImageRun;
+    const circle = {
+      ...baseImageRun,
+      shapeClipPath: 'circle(50% at 50% 50%)',
+    } as ImageRun;
+
+    expect(deriveBlockVersion(makeParagraphWithImageRun(circle))).not.toBe(
+      deriveBlockVersion(makeParagraphWithImageRun(ellipse)),
+    );
+  });
+
+  it('changes when inline image object fit changes', () => {
+    const cover = { ...baseImageRun, objectFit: 'cover' } as ImageRun;
+    const fill = { ...baseImageRun, objectFit: 'fill' } as ImageRun;
+
+    expect(deriveBlockVersion(makeParagraphWithImageRun(fill))).not.toBe(
+      deriveBlockVersion(makeParagraphWithImageRun(cover)),
+    );
   });
 
   it('changes when a table-cell inline image visual property changes', () => {

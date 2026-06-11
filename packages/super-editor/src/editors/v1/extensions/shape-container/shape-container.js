@@ -148,6 +148,10 @@ export const ShapeContainer = Node.create({
         default: null,
         rendered: false,
       },
+      effects: {
+        default: null,
+        rendered: false,
+      },
       lineEnds: {
         default: null,
         rendered: false,

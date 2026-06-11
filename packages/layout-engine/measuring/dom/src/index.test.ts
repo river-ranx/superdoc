@@ -3545,6 +3545,65 @@ describe('measureBlock', () => {
       expect(measure.scale).toBe(1);
     });
 
+    it('honors shape group transforms when measuring rotated bounds', async () => {
+      const block: DrawingBlock = {
+        kind: 'drawing',
+        id: 'shape-group-rotated-transform',
+        drawingKind: 'shapeGroup',
+        geometry: {
+          width: 200,
+          height: 100,
+          rotation: 0,
+        },
+        groupTransform: {
+          width: 200,
+          height: 100,
+          rotation: 90,
+        },
+        shapes: [],
+      };
+
+      const measure = expectDrawingMeasure(await measureBlock(block, { maxWidth: 500 }));
+      expect(measure.width).toBeCloseTo(100);
+      expect(measure.height).toBeCloseTo(200);
+      expect(measure.geometry.width).toBe(200);
+      expect(measure.geometry.height).toBe(100);
+      expect(measure.geometry.rotation).toBe(90);
+      expect(measure.groupTransform?.rotation).toBe(90);
+    });
+
+    it('preserves shape group effect extent when group transform is present', async () => {
+      const block: DrawingBlock = {
+        kind: 'drawing',
+        id: 'shape-group-effect-extent',
+        drawingKind: 'shapeGroup',
+        geometry: {
+          width: 105,
+          height: 59,
+          rotation: 0,
+        },
+        groupTransform: {
+          width: 100,
+          height: 50,
+        },
+        effectExtent: {
+          left: 2,
+          top: 4,
+          right: 3,
+          bottom: 5,
+        },
+        shapes: [],
+      };
+
+      const measure = expectDrawingMeasure(await measureBlock(block, { maxWidth: 500 }));
+      expect(measure.width).toBe(105);
+      expect(measure.height).toBe(59);
+      expect(measure.geometry.width).toBe(105);
+      expect(measure.geometry.height).toBe(59);
+      expect(measure.groupTransform?.width).toBe(100);
+      expect(measure.groupTransform?.height).toBe(50);
+    });
+
     it('resolves full-width drawings using maxWidth constraints and indents', async () => {
       const block: DrawingBlock = {
         kind: 'drawing',
@@ -3604,6 +3663,64 @@ describe('measureBlock', () => {
       expect(measure.geometry.rotation).toBe(270);
     });
 
+    it('bypasses maxHeight for behindDoc wrapNone anchored drawings with positive page-relative offsets', async () => {
+      const block: DrawingBlock = {
+        kind: 'drawing',
+        id: 'drawing-behind-doc-page-overlay',
+        drawingKind: 'vectorShape',
+        geometry: {
+          width: 961.3333333333334,
+          height: 568,
+          rotation: 0,
+          flipH: false,
+          flipV: false,
+        },
+        anchor: {
+          isAnchored: true,
+          hRelativeFrom: 'column',
+          vRelativeFrom: 'page',
+          offsetH: -43.76472440944882,
+          offsetV: 0.6,
+          behindDoc: true,
+        },
+        wrap: {
+          type: 'None',
+          behindDoc: true,
+        },
+      };
+
+      const measure = expectDrawingMeasure(
+        await measureBlock(block, { maxWidth: 909.1333333333333, maxHeight: 461.26666666666665 }),
+      );
+      expect(measure.width).toBeCloseTo(961.3333333333334);
+      expect(measure.height).toBeCloseTo(568);
+      expect(measure.scale).toBe(1);
+    });
+
+    it('bypasses maxHeight for behindDoc wrapNone image drawings', async () => {
+      const block: DrawingBlock = {
+        kind: 'drawing',
+        id: 'drawing-image-behind-doc',
+        drawingKind: 'image',
+        src: 'data:image/png;base64,iVBORw0KGgo=',
+        width: 960,
+        height: 566,
+        anchor: {
+          isAnchored: true,
+          behindDoc: true,
+        },
+        wrap: {
+          type: 'None',
+          behindDoc: true,
+        },
+      };
+
+      const measure = expectDrawingMeasure(await measureBlock(block, { maxWidth: 909, maxHeight: 461 }));
+      expect(measure.width).toBeCloseTo(960);
+      expect(measure.height).toBeCloseTo(566);
+      expect(measure.scale).toBe(1);
+    });
+
     describe('negative positioning bypass logic', () => {
       it('bypasses maxHeight when anchored drawing has offsetV < 0', async () => {
         const block: DrawingBlock = {
@@ -3625,6 +3742,38 @@ describe('measureBlock', () => {
         // Should NOT scale height due to negative offsetV bypass
         expect(measure.height).toBe(200);
         expect(measure.width).toBe(100);
+        expect(measure.scale).toBe(1);
+      });
+
+      it('bypasses maxHeight for behindDoc wrapNone anchored drawings with negative paragraph-relative offsets', async () => {
+        const block: DrawingBlock = {
+          kind: 'drawing',
+          id: 'drawing-behind-doc-negative-paragraph-overlay',
+          drawingKind: 'vectorShape',
+          geometry: {
+            width: 969.3333333333334,
+            height: 568.0215223097113,
+            rotation: 0,
+            flipH: false,
+            flipV: false,
+          },
+          anchor: {
+            isAnchored: true,
+            hRelativeFrom: 'column',
+            vRelativeFrom: 'paragraph',
+            offsetH: -51.577952755905514,
+            offsetV: -40.00262467191601,
+            behindDoc: true,
+          },
+          wrap: {
+            type: 'None',
+            behindDoc: true,
+          },
+        };
+
+        const measure = expectDrawingMeasure(await measureBlock(block, { maxWidth: 909, maxHeight: 461 }));
+        expect(measure.width).toBeCloseTo(969.3333333333334);
+        expect(measure.height).toBeCloseTo(568.0215223097113);
         expect(measure.scale).toBe(1);
       });
 

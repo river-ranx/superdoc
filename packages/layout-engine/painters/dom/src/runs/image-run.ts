@@ -2,6 +2,7 @@ import type { ImageBlock, ImageRun } from '@superdoc/contracts';
 import { DOM_CLASS_NAMES } from '../constants.js';
 import { assertPmPositions } from '../pm-position-validation.js';
 import { applyImageClipPath, readImageClipPathValue } from '../images/image-clip-path.js';
+import { applyImageObjectFit } from '../images/object-fit.js';
 import type { RunRenderContext } from './types.js';
 import { applyRunDataAttributes } from './hash.js';
 import { sanitizeUrl } from './links.js';
@@ -135,7 +136,10 @@ export const renderImageRun = (run: ImageRun, context: RunRenderContext): HTMLEl
     return null;
   }
 
-  const hasClipPath = typeof run.clipPath === 'string' && run.clipPath.trim().length > 0;
+  const runClipPath = readImageClipPathValue(run.clipPath);
+  const shapeClipPath = readImageClipPathValue(run.shapeClipPath);
+  const hasClipPath = runClipPath.length > 0;
+  const hasShapeClipPath = shapeClipPath.length > 0;
 
   // Create img element
   const img = context.doc.createElement('img');
@@ -161,8 +165,8 @@ export const renderImageRun = (run: ImageRun, context: RunRenderContext): HTMLEl
     }
   }
 
-  // Set dimensions: when we have clipPath we put img in a wrapper that has the layout size and overflow:hidden; img fills wrapper so cropped portion stays within after resize
-  if (!hasClipPath) {
+  // Set dimensions: clipped or shape-masked images use a wrapper that owns the layout box.
+  if (!hasClipPath && !hasShapeClipPath) {
     img.width = run.width;
     img.height = run.height;
   } else {
@@ -176,7 +180,10 @@ export const renderImageRun = (run: ImageRun, context: RunRenderContext): HTMLEl
       minHeight: '0',
     });
   }
-  applyImageClipPath(img, run.clipPath);
+  applyImageClipPath(img, runClipPath);
+  if (run.objectFit) {
+    applyImageObjectFit(img, run.objectFit);
+  }
 
   // Add metadata for interactive image resizing (inline images)
   // Only add metadata if dimensions are valid (positive, non-zero values)
@@ -211,7 +218,7 @@ export const renderImageRun = (run: ImageRun, context: RunRenderContext): HTMLEl
 
   // When we use a wrapper (clipPath + positive dimensions), margins/verticalAlign/position/zIndex go on the wrapper only.
   // When we don't use a wrapper (no clipPath, or clipPath with width/height 0), apply them on the img so layout is correct.
-  const useWrapper = hasClipPath && run.width > 0 && run.height > 0;
+  const useWrapper = (hasClipPath || hasShapeClipPath) && run.width > 0 && run.height > 0;
   if (!useWrapper) {
     img.style.verticalAlign = run.verticalAlign ?? 'top';
 
@@ -301,6 +308,7 @@ export const renderImageRun = (run: ImageRun, context: RunRenderContext): HTMLEl
     if (run.distRight) wrapper.style.marginRight = `${run.distRight}px`;
     wrapper.style.position = 'relative';
     wrapper.style.zIndex = '1';
+    if (shapeClipPath) wrapper.style.clipPath = shapeClipPath;
     if (run.pmStart != null) wrapper.dataset.pmStart = String(run.pmStart);
     if (run.pmEnd != null) wrapper.dataset.pmEnd = String(run.pmEnd);
     wrapper.dataset.layoutEpoch = String(context.layoutEpoch);
@@ -327,7 +335,6 @@ export const renderImageRun = (run: ImageRun, context: RunRenderContext): HTMLEl
     applyRunDataAttributes(img, run.dataAttrs);
   }
 
-  const runClipPath = readImageClipPathValue((run as { clipPath?: unknown }).clipPath);
   if (runClipPath) {
     img.style.clipPath = runClipPath;
     img.style.display = 'block';

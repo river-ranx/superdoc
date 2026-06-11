@@ -1,7 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { handleImageNode, getVectorShape } from './encode-image-node-helpers.js';
 import { emuToPixels, polygonToObj, rotToDegrees } from '@converter/helpers.js';
-import { extractFillColor, extractStrokeColor, extractStrokeWidth, extractLineEnds } from './vector-shape-helpers.js';
+import {
+  extractFillColor,
+  extractStrokeColor,
+  extractStrokeWidth,
+  extractLineEnds,
+  extractShapeEffects,
+} from './vector-shape-helpers.js';
 import { convertTiffToPng } from './tiff-converter.js';
 
 vi.mock('@converter/helpers.js', async (importOriginal) => {
@@ -19,6 +25,7 @@ vi.mock('./vector-shape-helpers.js', () => ({
   extractStrokeColor: vi.fn(),
   extractStrokeWidth: vi.fn(),
   extractLineEnds: vi.fn(),
+  extractShapeEffects: vi.fn(),
   extractCustomGeometry: vi.fn(),
 }));
 
@@ -34,6 +41,7 @@ describe('handleImageNode', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     emuToPixels.mockImplementation((emu) => (emu ? parseInt(emu, 10) / 1000 : 0));
+    extractShapeEffects.mockReturnValue(null);
     polygonToObj.mockImplementation((polygon) => {
       if (!polygon) return null;
       const points = [];
@@ -632,6 +640,484 @@ describe('handleImageNode', () => {
     expect(result.attrs.textContent).toBeDefined();
   });
 
+  it('keeps shape group rotation and flips on the group instead of each child', () => {
+    rotToDegrees.mockImplementation((rot) => parseInt(rot, 10) / 60000);
+    extractFillColor.mockReturnValue('#ffffff');
+    extractStrokeColor.mockReturnValue(null);
+    extractStrokeWidth.mockReturnValue(0);
+
+    const makeGroupedShape = ({ x, id }) => ({
+      name: 'wps:wsp',
+      elements: [
+        {
+          name: 'wps:spPr',
+          elements: [
+            { name: 'a:prstGeom', attributes: { prst: 'rect' } },
+            {
+              name: 'a:xfrm',
+              elements: [
+                { name: 'a:off', attributes: { x: String(x), y: '0' } },
+                { name: 'a:ext', attributes: { cx: '50000', cy: '50000' } },
+              ],
+            },
+          ],
+        },
+        { name: 'wps:cNvPr', attributes: { id, name: `Shape ${id}` } },
+      ],
+    });
+
+    const node = {
+      attributes: {},
+      elements: [
+        { name: 'wp:extent', attributes: { cx: '200000', cy: '100000' } },
+        {
+          name: 'a:graphic',
+          elements: [
+            {
+              name: 'a:graphicData',
+              attributes: { uri: 'http://schemas.microsoft.com/office/word/2010/wordprocessingGroup' },
+              elements: [
+                {
+                  name: 'wpg:wgp',
+                  elements: [
+                    {
+                      name: 'wpg:grpSpPr',
+                      elements: [
+                        {
+                          name: 'a:xfrm',
+                          attributes: { rot: '5400000', flipH: '1', flipV: '1' },
+                          elements: [
+                            { name: 'a:off', attributes: { x: '0', y: '0' } },
+                            { name: 'a:ext', attributes: { cx: '200000', cy: '100000' } },
+                            { name: 'a:chOff', attributes: { x: '0', y: '0' } },
+                            { name: 'a:chExt', attributes: { cx: '200000', cy: '100000' } },
+                          ],
+                        },
+                      ],
+                    },
+                    makeGroupedShape({ x: 0, id: '1' }),
+                    makeGroupedShape({ x: 100000, id: '2' }),
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = handleImageNode(node, makeParams(), false);
+
+    expect(result.type).toBe('shapeGroup');
+    expect(result.attrs.groupTransform).toMatchObject({
+      rotation: 90,
+      flipH: true,
+      flipV: true,
+      width: 200,
+      height: 100,
+    });
+    expect(result.attrs.shapes).toHaveLength(2);
+    expect(result.attrs.shapes.map((shape) => shape.attrs.x)).toEqual([0, 100]);
+    expect(result.attrs.shapes.map((shape) => shape.attrs.rotation)).toEqual([0, 0]);
+    expect(result.attrs.shapes.map((shape) => shape.attrs.flipH)).toEqual([false, false]);
+    expect(result.attrs.shapes.map((shape) => shape.attrs.flipV)).toEqual([false, false]);
+  });
+
+  it('applies nested shape group flips to flattened child positions', () => {
+    const makeGroupedShape = ({ x, id }) => ({
+      name: 'wps:wsp',
+      elements: [
+        {
+          name: 'wps:spPr',
+          elements: [
+            { name: 'a:prstGeom', attributes: { prst: 'rect' } },
+            {
+              name: 'a:xfrm',
+              elements: [
+                { name: 'a:off', attributes: { x: String(x), y: '0' } },
+                { name: 'a:ext', attributes: { cx: '50000', cy: '50000' } },
+              ],
+            },
+          ],
+        },
+        { name: 'wps:cNvPr', attributes: { id, name: `Shape ${id}` } },
+      ],
+    });
+
+    const node = {
+      attributes: {},
+      elements: [
+        { name: 'wp:extent', attributes: { cx: '200000', cy: '100000' } },
+        {
+          name: 'a:graphic',
+          elements: [
+            {
+              name: 'a:graphicData',
+              attributes: { uri: 'http://schemas.microsoft.com/office/word/2010/wordprocessingGroup' },
+              elements: [
+                {
+                  name: 'wpg:wgp',
+                  elements: [
+                    {
+                      name: 'wpg:grpSpPr',
+                      elements: [
+                        {
+                          name: 'a:xfrm',
+                          elements: [
+                            { name: 'a:off', attributes: { x: '0', y: '0' } },
+                            { name: 'a:ext', attributes: { cx: '200000', cy: '100000' } },
+                            { name: 'a:chOff', attributes: { x: '0', y: '0' } },
+                            { name: 'a:chExt', attributes: { cx: '200000', cy: '100000' } },
+                          ],
+                        },
+                      ],
+                    },
+                    {
+                      name: 'wpg:grpSp',
+                      elements: [
+                        {
+                          name: 'wpg:grpSpPr',
+                          elements: [
+                            {
+                              name: 'a:xfrm',
+                              attributes: { flipH: '1' },
+                              elements: [
+                                { name: 'a:off', attributes: { x: '0', y: '0' } },
+                                { name: 'a:ext', attributes: { cx: '200000', cy: '100000' } },
+                                { name: 'a:chOff', attributes: { x: '0', y: '0' } },
+                                { name: 'a:chExt', attributes: { cx: '200000', cy: '100000' } },
+                              ],
+                            },
+                          ],
+                        },
+                        makeGroupedShape({ x: 0, id: '1' }),
+                        makeGroupedShape({ x: 100000, id: '2' }),
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = handleImageNode(node, makeParams(), false);
+
+    expect(result.attrs.groupTransform.flipH).toBeUndefined();
+    expect(result.attrs.shapes.map((shape) => shape.attrs.x)).toEqual([150, 50]);
+    expect(result.attrs.shapes.map((shape) => shape.attrs.flipH)).toEqual([true, true]);
+  });
+
+  it('composes nested shape group flip and rotation for flattened child orientation', () => {
+    rotToDegrees.mockImplementation((rot) => parseInt(rot, 10) / 60000);
+    const shape = {
+      name: 'wps:wsp',
+      elements: [
+        {
+          name: 'wps:spPr',
+          elements: [
+            { name: 'a:prstGeom', attributes: { prst: 'rect' } },
+            {
+              name: 'a:xfrm',
+              elements: [
+                { name: 'a:off', attributes: { x: '0', y: '0' } },
+                { name: 'a:ext', attributes: { cx: '50000', cy: '50000' } },
+              ],
+            },
+          ],
+        },
+        { name: 'wps:cNvPr', attributes: { id: '1', name: 'Shape 1' } },
+      ],
+    };
+
+    const node = {
+      attributes: {},
+      elements: [
+        { name: 'wp:extent', attributes: { cx: '200000', cy: '100000' } },
+        {
+          name: 'a:graphic',
+          elements: [
+            {
+              name: 'a:graphicData',
+              attributes: { uri: 'http://schemas.microsoft.com/office/word/2010/wordprocessingGroup' },
+              elements: [
+                {
+                  name: 'wpg:wgp',
+                  elements: [
+                    {
+                      name: 'wpg:grpSpPr',
+                      elements: [
+                        {
+                          name: 'a:xfrm',
+                          elements: [
+                            { name: 'a:off', attributes: { x: '0', y: '0' } },
+                            { name: 'a:ext', attributes: { cx: '200000', cy: '100000' } },
+                            { name: 'a:chOff', attributes: { x: '0', y: '0' } },
+                            { name: 'a:chExt', attributes: { cx: '200000', cy: '100000' } },
+                          ],
+                        },
+                      ],
+                    },
+                    {
+                      name: 'wpg:grpSp',
+                      elements: [
+                        {
+                          name: 'wpg:grpSpPr',
+                          elements: [
+                            {
+                              name: 'a:xfrm',
+                              attributes: { flipH: '1' },
+                              elements: [
+                                { name: 'a:off', attributes: { x: '0', y: '0' } },
+                                { name: 'a:ext', attributes: { cx: '200000', cy: '100000' } },
+                                { name: 'a:chOff', attributes: { x: '0', y: '0' } },
+                                { name: 'a:chExt', attributes: { cx: '200000', cy: '100000' } },
+                              ],
+                            },
+                          ],
+                        },
+                        {
+                          name: 'wpg:grpSp',
+                          elements: [
+                            {
+                              name: 'wpg:grpSpPr',
+                              elements: [
+                                {
+                                  name: 'a:xfrm',
+                                  attributes: { rot: '5400000' },
+                                  elements: [
+                                    { name: 'a:off', attributes: { x: '0', y: '0' } },
+                                    { name: 'a:ext', attributes: { cx: '200000', cy: '100000' } },
+                                    { name: 'a:chOff', attributes: { x: '0', y: '0' } },
+                                    { name: 'a:chExt', attributes: { cx: '200000', cy: '100000' } },
+                                  ],
+                                },
+                              ],
+                            },
+                            shape,
+                          ],
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = handleImageNode(node, makeParams(), false);
+    const importedShape = result.attrs.shapes[0];
+
+    expect(importedShape.attrs.rotation).toBe(270);
+    expect(importedShape.attrs.flipH).toBe(true);
+    expect(importedShape.attrs.flipV).toBe(false);
+  });
+
+  it('composes nested group reflection with child-local rotations', () => {
+    rotToDegrees.mockImplementation((rot) => parseInt(rot, 10) / 60000);
+    const shape = {
+      name: 'wps:wsp',
+      elements: [
+        {
+          name: 'wps:spPr',
+          elements: [
+            { name: 'a:prstGeom', attributes: { prst: 'rect' } },
+            {
+              name: 'a:xfrm',
+              attributes: { rot: '5400000' },
+              elements: [
+                { name: 'a:off', attributes: { x: '0', y: '0' } },
+                { name: 'a:ext', attributes: { cx: '50000', cy: '50000' } },
+              ],
+            },
+          ],
+        },
+        { name: 'wps:cNvPr', attributes: { id: '1', name: 'Shape 1' } },
+      ],
+    };
+    const picture = {
+      name: 'pic:pic',
+      elements: [
+        {
+          name: 'pic:blipFill',
+          elements: [{ name: 'a:blip', attributes: { 'r:embed': 'rId1' } }],
+        },
+        {
+          name: 'pic:spPr',
+          elements: [
+            {
+              name: 'a:xfrm',
+              attributes: { rot: '5400000' },
+              elements: [
+                { name: 'a:off', attributes: { x: '100000', y: '0' } },
+                { name: 'a:ext', attributes: { cx: '50000', cy: '50000' } },
+              ],
+            },
+          ],
+        },
+        {
+          name: 'pic:nvPicPr',
+          elements: [{ name: 'pic:cNvPr', attributes: { id: '2', name: 'Picture 2' } }],
+        },
+      ],
+    };
+
+    const node = {
+      attributes: {},
+      elements: [
+        { name: 'wp:extent', attributes: { cx: '200000', cy: '100000' } },
+        {
+          name: 'a:graphic',
+          elements: [
+            {
+              name: 'a:graphicData',
+              attributes: { uri: 'http://schemas.microsoft.com/office/word/2010/wordprocessingGroup' },
+              elements: [
+                {
+                  name: 'wpg:wgp',
+                  elements: [
+                    {
+                      name: 'wpg:grpSpPr',
+                      elements: [
+                        {
+                          name: 'a:xfrm',
+                          elements: [
+                            { name: 'a:off', attributes: { x: '0', y: '0' } },
+                            { name: 'a:ext', attributes: { cx: '200000', cy: '100000' } },
+                            { name: 'a:chOff', attributes: { x: '0', y: '0' } },
+                            { name: 'a:chExt', attributes: { cx: '200000', cy: '100000' } },
+                          ],
+                        },
+                      ],
+                    },
+                    {
+                      name: 'wpg:grpSp',
+                      elements: [
+                        {
+                          name: 'wpg:grpSpPr',
+                          elements: [
+                            {
+                              name: 'a:xfrm',
+                              attributes: { flipH: '1' },
+                              elements: [
+                                { name: 'a:off', attributes: { x: '0', y: '0' } },
+                                { name: 'a:ext', attributes: { cx: '200000', cy: '100000' } },
+                                { name: 'a:chOff', attributes: { x: '0', y: '0' } },
+                                { name: 'a:chExt', attributes: { cx: '200000', cy: '100000' } },
+                              ],
+                            },
+                          ],
+                        },
+                        shape,
+                        picture,
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = handleImageNode(node, makeParams(), false);
+    const [importedShape, importedPicture] = result.attrs.shapes;
+
+    expect(importedShape.attrs.rotation).toBe(270);
+    expect(importedShape.attrs.flipH).toBe(true);
+    expect(importedShape.attrs.flipV).toBe(false);
+    expect(importedPicture.attrs.rotation).toBe(270);
+    expect(importedPicture.attrs.flipH).toBe(true);
+    expect(importedPicture.attrs.flipV).toBe(false);
+  });
+
+  it('fills grouped picture ellipse geometry for negative srcRect stretch', () => {
+    const picture = {
+      name: 'pic:pic',
+      elements: [
+        {
+          name: 'pic:blipFill',
+          elements: [
+            { name: 'a:blip', attributes: { 'r:embed': 'rId1' } },
+            { name: 'a:stretch', elements: [{ name: 'a:fillRect' }] },
+            { name: 'a:srcRect', attributes: { l: '398', t: '6700', r: '-398', b: '15436' } },
+          ],
+        },
+        {
+          name: 'pic:spPr',
+          elements: [
+            {
+              name: 'a:xfrm',
+              elements: [
+                { name: 'a:off', attributes: { x: '0', y: '0' } },
+                { name: 'a:ext', attributes: { cx: '50000', cy: '50000' } },
+              ],
+            },
+            {
+              name: 'a:prstGeom',
+              attributes: { prst: 'ellipse' },
+            },
+          ],
+        },
+        {
+          name: 'pic:nvPicPr',
+          elements: [{ name: 'pic:cNvPr', attributes: { id: '2', name: 'Picture 2' } }],
+        },
+      ],
+    };
+
+    const node = {
+      attributes: {},
+      elements: [
+        { name: 'wp:extent', attributes: { cx: '100000', cy: '100000' } },
+        {
+          name: 'a:graphic',
+          elements: [
+            {
+              name: 'a:graphicData',
+              attributes: { uri: 'http://schemas.microsoft.com/office/word/2010/wordprocessingGroup' },
+              elements: [
+                {
+                  name: 'wpg:wgp',
+                  elements: [
+                    {
+                      name: 'wpg:grpSpPr',
+                      elements: [
+                        {
+                          name: 'a:xfrm',
+                          elements: [
+                            { name: 'a:off', attributes: { x: '0', y: '0' } },
+                            { name: 'a:ext', attributes: { cx: '100000', cy: '100000' } },
+                            { name: 'a:chOff', attributes: { x: '0', y: '0' } },
+                            { name: 'a:chExt', attributes: { cx: '100000', cy: '100000' } },
+                          ],
+                        },
+                      ],
+                    },
+                    picture,
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = handleImageNode(node, makeParams(), false);
+    const importedPicture = result.attrs.shapes[0];
+
+    expect(importedPicture.attrs.clipPath).toBeUndefined();
+    expect(importedPicture.attrs.shapeClipPath).toBe('ellipse(50% 50% at 50% 50%)');
+    expect(importedPicture.attrs.objectFit).toBe('cover');
+  });
+
   describe('wrap types', () => {
     it('handles wrap type None', () => {
       const node = makeNode();
@@ -925,7 +1411,7 @@ describe('handleImageNode', () => {
    * - certn_logo_left/word/header2.xml: <a:srcRect b="-3978"/> → shouldCover=false
    */
   describe('srcRect/shouldCover behavior', () => {
-    const makeNodeWithBlipFill = (blipFillElements) => ({
+    const makeNodeWithBlipFill = (blipFillElements, pictureElements = []) => ({
       attributes: {
         distT: '1000',
         distB: '2000',
@@ -948,6 +1434,7 @@ describe('handleImageNode', () => {
                       name: 'pic:blipFill',
                       elements: [{ name: 'a:blip', attributes: { 'r:embed': 'rId1' } }, ...blipFillElements],
                     },
+                    ...pictureElements,
                   ],
                 },
               ],
@@ -1032,6 +1519,39 @@ describe('handleImageNode', () => {
       expect(result.attrs.clipPath).toBe('inset(0% 84.8% 0% 0%)');
     });
 
+    it('fills standalone picture ellipse geometry for negative srcRect stretch', () => {
+      const node = makeNodeWithBlipFill(
+        [
+          {
+            name: 'a:stretch',
+            elements: [{ name: 'a:fillRect' }],
+          },
+          {
+            name: 'a:srcRect',
+            attributes: { l: '398', t: '6700', r: '-398', b: '15436' },
+          },
+        ],
+        [
+          {
+            name: 'pic:spPr',
+            elements: [
+              {
+                name: 'a:prstGeom',
+                attributes: { prst: 'ellipse' },
+              },
+            ],
+          },
+        ],
+      );
+
+      const result = handleImageNode(node, makeParams(), false);
+
+      expect(result).not.toBeNull();
+      expect(result.attrs.clipPath).toBeUndefined();
+      expect(result.attrs.shapeClipPath).toBe('ellipse(50% 50% at 50% 50%)');
+      expect(result.attrs.objectFit).toBe('cover');
+    });
+
     it('disables shouldCover when srcRect emits clipPath cropping', () => {
       const node = makeNodeWithBlipFill([
         {
@@ -1068,6 +1588,7 @@ describe('handleImageNode', () => {
 
       expect(result).not.toBeNull();
       expect(result.attrs.clipPath).toBeUndefined();
+      expect(result.attrs.objectFit).toBeUndefined();
     });
 
     it('sets shouldCover=false when stretch+fillRect with multiple positive srcRect values', () => {
@@ -1469,6 +1990,7 @@ describe('getVectorShape', () => {
     extractStrokeColor.mockReturnValue('#000000');
     extractStrokeWidth.mockReturnValue(1);
     extractLineEnds.mockReturnValue(null);
+    extractShapeEffects.mockReturnValue(null);
   });
 
   const makeGraphicData = (overrides = {}) => ({
@@ -1588,6 +2110,32 @@ describe('getVectorShape', () => {
     expect(result.attrs.lineEnds).toEqual({
       tail: { type: 'triangle', width: 'med', length: 'lg' },
     });
+  });
+
+  it('adds shape effects from helper extraction', () => {
+    const effects = {
+      outerShadow: {
+        type: 'outerShadow',
+        blurRadius: 6.6667,
+        distance: 6.6667,
+        direction: 45,
+        color: '#a6a6a6',
+        opacity: 0.4,
+      },
+    };
+    extractShapeEffects.mockReturnValue(effects);
+    const graphicData = makeGraphicData();
+    const spPr = graphicData.elements[0].elements[0];
+
+    const result = getVectorShape({
+      params: makeParams(),
+      node: {},
+      graphicData,
+      size: { width: 72, height: 72 },
+    });
+
+    expect(extractShapeEffects).toHaveBeenCalledWith(spPr);
+    expect(result.attrs.effects).toEqual(effects);
   });
 
   it('extracts effectExtent from wp:effectExtent', () => {
@@ -1762,11 +2310,42 @@ describe('getVectorShape', () => {
   });
 
   describe('[[sdspace]] placeholder replacement', () => {
-    const makeGraphicDataWithTextbox = (text) => ({
+    const makeParagraph = ({ text = '', pPrElements = [], runElements } = {}) => ({
+      name: 'w:p',
+      elements: [
+        ...(pPrElements.length
+          ? [
+              {
+                name: 'w:pPr',
+                elements: pPrElements,
+              },
+            ]
+          : []),
+        {
+          name: 'w:r',
+          elements: runElements || [
+            {
+              name: 'w:t',
+              elements: [{ type: 'text', text }],
+            },
+          ],
+        },
+      ],
+    });
+
+    const makeGraphicDataWithTextbox = (text, options = {}) => ({
       elements: [
         {
           name: 'wps:wsp',
           elements: [
+            ...(options.bodyPrAttributes
+              ? [
+                  {
+                    name: 'wps:bodyPr',
+                    attributes: options.bodyPrAttributes,
+                  },
+                ]
+              : []),
             {
               name: 'wps:spPr',
               elements: [
@@ -1795,21 +2374,12 @@ describe('getVectorShape', () => {
               elements: [
                 {
                   name: 'w:txbxContent',
-                  elements: [
-                    {
-                      name: 'w:p',
-                      elements: [
-                        {
-                          name: 'w:r',
-                          elements: [
-                            {
-                              name: 'w:t',
-                              elements: [{ type: 'text', text }],
-                            },
-                          ],
-                        },
-                      ],
-                    },
+                  elements: options.paragraphs || [
+                    makeParagraph({
+                      text,
+                      pPrElements: options.pPrElements || [],
+                      runElements: options.runElements,
+                    }),
                   ],
                 },
               ],
@@ -1954,6 +2524,95 @@ describe('getVectorShape', () => {
       });
 
       expect(result.attrs.textContent.parts[0].text).toBe('[[notspace]] [other]');
+    });
+
+    it('extracts textbox paragraph spacing in CSS pixels', () => {
+      const graphicData = makeGraphicDataWithTextbox('Hello', {
+        bodyPrAttributes: { spcFirstLastPara: '1' },
+        pPrElements: [{ name: 'w:spacing', attributes: { 'w:before': '360', 'w:after': '80' } }],
+      });
+
+      const result = getVectorShape({
+        params: makeParams(),
+        node: {},
+        graphicData,
+        size: { width: 100, height: 100 },
+      });
+
+      expect(result.attrs.textContent.paragraphs[0].spacing.before).toBe(24);
+      expect(result.attrs.textContent.paragraphs[0].spacing.after).toBeCloseTo(5.333, 3);
+    });
+
+    it('suppresses first and last paragraph spacing when spcFirstLastPara is absent', () => {
+      const spacing = { name: 'w:spacing', attributes: { 'w:before': '360', 'w:after': '80' } };
+      const graphicData = makeGraphicDataWithTextbox('', {
+        paragraphs: [
+          makeParagraph({ text: 'First', pPrElements: [spacing] }),
+          makeParagraph({ text: 'Second', pPrElements: [spacing] }),
+        ],
+      });
+
+      const result = getVectorShape({
+        params: makeParams(),
+        node: {},
+        graphicData,
+        size: { width: 100, height: 100 },
+      });
+
+      expect(result.attrs.textContent.paragraphs[0].spacing.before).toBeUndefined();
+      expect(result.attrs.textContent.paragraphs[0].spacing.after).toBeCloseTo(5.333, 3);
+      expect(result.attrs.textContent.paragraphs[1].spacing.before).toBe(24);
+      expect(result.attrs.textContent.paragraphs[1].spacing.after).toBeUndefined();
+    });
+
+    it('marks paragraph separators without marking intra-paragraph line breaks', () => {
+      const graphicData = makeGraphicDataWithTextbox('', {
+        paragraphs: [
+          makeParagraph({
+            runElements: [
+              { name: 'w:t', elements: [{ type: 'text', text: 'First' }] },
+              { name: 'w:br' },
+              { name: 'w:t', elements: [{ type: 'text', text: 'line' }] },
+            ],
+          }),
+          makeParagraph({ text: 'Second' }),
+        ],
+      });
+
+      const result = getVectorShape({
+        params: makeParams(),
+        node: {},
+        graphicData,
+        size: { width: 100, height: 100 },
+      });
+
+      const lineBreakParts = result.attrs.textContent.parts.filter((part) => part.isLineBreak);
+      expect(lineBreakParts).toHaveLength(2);
+      expect(lineBreakParts[0].isParagraphBoundary).toBeUndefined();
+      expect(lineBreakParts[1].isParagraphBoundary).toBe(true);
+    });
+
+    it('suppresses first and last paragraph spacing when spcFirstLastPara is disabled', () => {
+      const spacing = { name: 'w:spacing', attributes: { 'w:before': '360', 'w:after': '80' } };
+      const graphicData = makeGraphicDataWithTextbox('', {
+        bodyPrAttributes: { spcFirstLastPara: '0' },
+        paragraphs: [
+          makeParagraph({ text: 'First', pPrElements: [spacing] }),
+          makeParagraph({ text: 'Second', pPrElements: [spacing] }),
+        ],
+      });
+
+      const result = getVectorShape({
+        params: makeParams(),
+        node: {},
+        graphicData,
+        size: { width: 100, height: 100 },
+      });
+
+      expect(result.attrs.textContent.paragraphs[0].spacing.after).toBeCloseTo(5.333, 3);
+      expect(result.attrs.textContent.paragraphs[0].spacing.before).toBeUndefined();
+      expect(result.attrs.textContent.paragraphs[1].spacing.before).toBe(24);
+      expect(result.attrs.textContent.paragraphs[1].spacing.after).toBeUndefined();
     });
   });
 
@@ -2333,6 +2992,31 @@ describe('getVectorShape', () => {
       });
 
       expect(result?.type).toBe('vectorShape');
+    });
+
+    it('carries extracted shape effects through the textbox shapeContainer branch', () => {
+      const effects = {
+        outerShadow: {
+          type: 'outerShadow',
+          blurRadius: 6.6667,
+          distance: 6.6667,
+          direction: 45,
+          color: '#a6a6a6',
+          opacity: 0.4,
+        },
+      };
+      extractShapeEffects.mockReturnValue(effects);
+
+      const result = getVectorShape({
+        params: { nodes: [{ name: 'w:drawing', elements: [] }], docx: {}, filename: 'document.xml' },
+        node: {},
+        graphicData: makeTxBoxGraphicData(true),
+        size: { width: 100, height: 50 },
+      });
+
+      expect(result?.type).toBe('shapeContainer');
+      // Without effects in the textbox baseAttrs, DrawingML textbox shadows are dropped.
+      expect(result?.attrs?.effects).toEqual(effects);
     });
   });
 });

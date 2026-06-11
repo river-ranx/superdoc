@@ -15,6 +15,7 @@ import type {
   ShapeGroupDrawing,
   ShapeGroupImageChild,
   ShapeGroupTransform,
+  ShapeEffects,
   TextPart,
   VectorShapeDrawing,
   FlowBlock,
@@ -643,8 +644,7 @@ export function toDrawingContentSnapshot(value: unknown): DrawingContentSnapshot
 /**
  * Type guard to check if a value is a ShapeGroupTransform.
  *
- * A valid ShapeGroupTransform must have at least one finite numeric property
- * among: x, y, width, height, childWidth, childHeight, childX, childY.
+ * A valid ShapeGroupTransform must have at least one recognized transform property.
  *
  * @param value - The value to check
  * @returns True if the value has at least one valid transform property
@@ -670,7 +670,10 @@ export function isShapeGroupTransform(value: unknown): value is ShapeGroupTransf
     isFiniteNumber(maybe.childWidth) ||
     isFiniteNumber(maybe.childHeight) ||
     isFiniteNumber(maybe.childX) ||
-    isFiniteNumber(maybe.childY)
+    isFiniteNumber(maybe.childY) ||
+    isFiniteNumber(maybe.rotation) ||
+    maybe.flipH === true ||
+    maybe.flipV === true
   );
 }
 
@@ -806,10 +809,55 @@ export function normalizeEffectExtent(value: unknown): EffectExtent | undefined 
   };
 }
 
+export function normalizeShapeEffects(value: unknown): ShapeEffects | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const maybe = value as Record<string, unknown>;
+  const outerShadow = normalizeOuterShadowEffect(maybe.outerShadow);
+  return outerShadow ? { outerShadow } : undefined;
+}
+
+function normalizeOuterShadowEffect(value: unknown): ShapeEffects['outerShadow'] | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const maybe = value as Record<string, unknown>;
+  if (maybe.type !== 'outerShadow') return undefined;
+
+  const blurRadius = coerceNumber(maybe.blurRadius);
+  const distance = coerceNumber(maybe.distance);
+  const direction = coerceNumber(maybe.direction);
+  const opacity = coerceNumber(maybe.opacity);
+
+  if (
+    blurRadius == null ||
+    blurRadius < 0 ||
+    distance == null ||
+    distance < 0 ||
+    direction == null ||
+    opacity == null ||
+    typeof maybe.color !== 'string'
+  ) {
+    return undefined;
+  }
+
+  const clamp = (val: number) => Math.max(0, Math.min(1, val));
+  const normalized = {
+    type: 'outerShadow' as const,
+    blurRadius,
+    distance,
+    direction,
+    color: maybe.color,
+    opacity: clamp(opacity),
+  };
+
+  return Object.fromEntries(
+    Object.entries(normalized).filter(([, fieldValue]) => fieldValue !== undefined),
+  ) as ShapeEffects['outerShadow'];
+}
+
 /**
  * Normalizes and validates shape group children from an array.
  *
- * Filters out invalid entries, keeping only objects that have a string 'shapeType' property.
+ * Filters out invalid entries, keeping only objects that have a string 'shapeType' property,
+ * and normalizes grouped vector shape attrs that are read directly by the painter.
  * Returns an empty array if input is not an array.
  *
  * @param value - Value to extract shape group children from
@@ -818,18 +866,18 @@ export function normalizeEffectExtent(value: unknown): EffectExtent | undefined 
  * @example
  * ```typescript
  * normalizeShapeGroupChildren([
- *   { shapeType: 'rect', x: 0, y: 0 },
- *   { shapeType: 'circle', cx: 50, cy: 50 }
+ *   { shapeType: 'vectorShape', attrs: { fillColor: '#FF0000' } },
+ *   { shapeType: 'image', attrs: { src: 'word/media/image1.png' } }
  * ]);
- * // [{ shapeType: 'rect', x: 0, y: 0 }, { shapeType: 'circle', cx: 50, cy: 50 }]
+ * // [{ shapeType: 'vectorShape', attrs: { fillColor: '#FF0000' } }, { shapeType: 'image', attrs: { src: 'word/media/image1.png' } }]
  *
  * normalizeShapeGroupChildren([
- *   { shapeType: 'rect' },
+ *   { shapeType: 'vectorShape' },
  *   null,
  *   { invalid: true },
- *   { shapeType: 'line' }
+ *   { shapeType: 'image' }
  * ]);
- * // [{ shapeType: 'rect' }, { shapeType: 'line' }]
+ * // [{ shapeType: 'vectorShape' }, { shapeType: 'image' }]
  *
  * normalizeShapeGroupChildren(null);
  * // []
@@ -840,9 +888,39 @@ export function normalizeEffectExtent(value: unknown): EffectExtent | undefined 
  */
 export function normalizeShapeGroupChildren(value: unknown): ShapeGroupChild[] {
   if (!Array.isArray(value)) return [];
-  return value.filter((child): child is ShapeGroupChild => {
-    if (!child || typeof child !== 'object') return false;
-    return typeof (child as { shapeType?: unknown }).shapeType === 'string';
+  return value.flatMap((child): ShapeGroupChild[] => {
+    if (!child || typeof child !== 'object') return [];
+    if (typeof (child as { shapeType?: unknown }).shapeType !== 'string') return [];
+
+    const shapeChild = child as ShapeGroupChild;
+    if (shapeChild.shapeType !== 'vectorShape') return [shapeChild];
+
+    const attrs = (shapeChild as { attrs?: unknown }).attrs;
+    if (!attrs || typeof attrs !== 'object') return [shapeChild];
+
+    const rawAttrs = attrs as Record<string, unknown>;
+    const normalizedAttrs = { ...rawAttrs };
+    const normalizeAttr = <T>(key: string, normalize: (value: unknown) => T | undefined) => {
+      if (!(key in rawAttrs)) return;
+      const normalized = normalize(rawAttrs[key]);
+      if (normalized !== undefined) {
+        normalizedAttrs[key] = normalized;
+      } else {
+        delete normalizedAttrs[key];
+      }
+    };
+
+    normalizeAttr('fillColor', normalizeFillColor);
+    normalizeAttr('strokeColor', normalizeStrokeColor);
+    normalizeAttr('strokeWidth', coerceNumber);
+    normalizeAttr('lineEnds', normalizeLineEnds);
+    normalizeAttr('effects', normalizeShapeEffects);
+    normalizeAttr('textContent', normalizeTextContent);
+    normalizeAttr('textAlign', (value) => (typeof value === 'string' ? value : undefined));
+    normalizeAttr('textVerticalAlign', normalizeTextVerticalAlign);
+    normalizeAttr('textInsets', normalizeTextInsets);
+
+    return [{ ...shapeChild, attrs: normalizedAttrs } as ShapeGroupChild];
   });
 }
 
@@ -1463,6 +1541,27 @@ export function normalizeTextContent(value: unknown): import('@superdoc/contract
   // Validate horizontal alignment
   if (['left', 'center', 'right'].includes(value.horizontalAlign as string)) {
     result.horizontalAlign = value.horizontalAlign as 'left' | 'center' | 'right';
+  }
+
+  if (Array.isArray(value.paragraphs)) {
+    const normalizedParagraphs = (value.paragraphs as unknown[]).map((paragraph) => {
+      if (!isPlainObject(paragraph)) return {};
+
+      const spacing = isPlainObject(paragraph.spacing) ? paragraph.spacing : undefined;
+      const before = Number.isFinite(spacing?.before) ? (spacing.before as number) : undefined;
+      const after = Number.isFinite(spacing?.after) ? (spacing.after as number) : undefined;
+
+      if (before === undefined && after === undefined) return {};
+
+      const out: { spacing: { before?: number; after?: number } } = { spacing: {} };
+      if (before !== undefined) out.spacing.before = before;
+      if (after !== undefined) out.spacing.after = after;
+      return out;
+    });
+
+    if (normalizedParagraphs.some((paragraph) => 'spacing' in paragraph)) {
+      result.paragraphs = normalizedParagraphs as import('@superdoc/contracts').ShapeTextParagraph[];
+    }
   }
 
   return result;

@@ -7,6 +7,7 @@ import {
   extractFillColor,
   extractLineEnds,
   extractCustomGeometry,
+  extractShapeEffects,
 } from './vector-shape-helpers';
 import { convertMetafileToSvg, isMetafileExtension, setMetafileDomEnvironment } from './metafile-converter.js';
 import { convertTiffToPng, isTiffExtension, setTiffDomEnvironment } from './tiff-converter.js';
@@ -17,10 +18,11 @@ import {
   extractRunFormatting,
   extractParagraphAlignment,
   extractBodyPrProperties,
+  extractTextBoxParagraphSpacing,
 } from './textbox-content-helpers.js';
 import { parseRelativeHeight } from './relative-height.js';
 import { CHART_URI, resolveChartPart, parseChartXml } from './chart-helpers.js';
-import { findChildByLocalName, someChildHasLocalName, hasLocalName } from './drawingml-utils.js';
+import { findChildByLocalName, someChildHasLocalName, hasLocalName, getLocalName } from './drawingml-utils.js';
 import { importDrawingMLTextbox } from './import-drawingml-textbox.js';
 
 const DRAWING_XML_TAG = 'w:drawing';
@@ -130,6 +132,41 @@ const extractAlphaModFix = (blip) => {
   const alphaModFix = findChildByLocalName(blip?.elements, 'alphaModFix');
   const amt = Number(alphaModFix?.attributes?.amt);
   return Number.isFinite(amt) ? { amt } : undefined;
+};
+
+const buildShapeClipPathFromPreset = (preset) => {
+  if (preset === 'ellipse') return 'ellipse(50% 50% at 50% 50%)';
+  return null;
+};
+
+const extractPicturePresentation = (picture) => {
+  const blipFill = picture?.elements?.find((el) => el.name === 'pic:blipFill');
+  const stretch = findChildByLocalName(blipFill?.elements, 'stretch');
+  const fillRect = findChildByLocalName(stretch?.elements, 'fillRect');
+  const srcRect = findChildByLocalName(blipFill?.elements, 'srcRect');
+  const srcRectAttrs = srcRect?.attributes || {};
+  const clipPath = buildClipPathFromSrcRect(srcRectAttrs);
+  const srcRectHasNegativeValues = ['l', 't', 'r', 'b'].some((attr) => {
+    const val = srcRectAttrs[attr];
+    return val != null && parseFloat(val) < 0;
+  });
+  const spPr = picture?.elements?.find((el) => el.name === 'pic:spPr');
+  const prstGeom = findChildByLocalName(spPr?.elements, 'prstGeom');
+  const shapeClipPath = buildShapeClipPathFromPreset(prstGeom?.attributes?.['prst']);
+
+  const shouldStretch = Boolean(stretch && fillRect);
+  const shouldCover = shouldStretch && !srcRectHasNegativeValues && !clipPath;
+  const shouldFillClippedStretch = shouldStretch && !srcRectHasNegativeValues && Boolean(clipPath);
+  const shouldCoverShapeStretch = shouldStretch && Boolean(shapeClipPath) && !clipPath;
+
+  return {
+    clipPath,
+    rawSrcRect: srcRect,
+    shouldCover,
+    shouldFillClippedStretch,
+    shouldCoverShapeStretch,
+    shapeClipPath,
+  };
 };
 
 /**
@@ -354,7 +391,18 @@ export function handleImageNode(node, params, isAnchor) {
       horizontal: positionHValue,
       top: positionVValue,
     };
-    return handleShapeGroup(params, node, graphicData, size, padding, shapeMarginOffset, anchorData, wrap, isHidden);
+    return handleShapeGroup(
+      params,
+      node,
+      graphicData,
+      size,
+      padding,
+      shapeMarginOffset,
+      anchorData,
+      wrap,
+      extractEffectExtent(node),
+      isHidden,
+    );
   }
 
   if (uri === CHART_URI) {
@@ -396,24 +444,8 @@ export function handleImageNode(node, params, isAnchor) {
   //
   // Skip cover mode when srcRect already emitted explicit clipping or when srcRect has
   // negative values (Word already adjusted the mapping).
-  const stretch = findChildByLocalName(blipFill?.elements, 'stretch');
-  const fillRect = findChildByLocalName(stretch?.elements, 'fillRect');
-  const srcRect = findChildByLocalName(blipFill?.elements, 'srcRect');
-  const srcRectAttrs = srcRect?.attributes || {};
-  const clipPath = buildClipPathFromSrcRect(srcRectAttrs);
-
-  // Check if srcRect has negative values (indicating Word extended/adjusted the image mapping)
-  const srcRectHasNegativeValues = ['l', 't', 'r', 'b'].some((attr) => {
-    const val = srcRectAttrs[attr];
-    return val != null && parseFloat(val) < 0;
-  });
-
-  const shouldStretch = Boolean(stretch && fillRect);
-  // Use cover mode for plain stretch/fillRect when there is no explicit srcRect clipping.
-  // When srcRect emits clipping, we set explicit objectFit='fill' so clip-path math applies
-  // to a fully filled extent box (avoids "thin strip" rendering for cropped anchors).
-  const shouldCover = shouldStretch && !srcRectHasNegativeValues && !clipPath;
-  const shouldFillClippedStretch = shouldStretch && !srcRectHasNegativeValues && Boolean(clipPath);
+  const { clipPath, rawSrcRect, shouldCover, shouldFillClippedStretch, shouldCoverShapeStretch, shapeClipPath } =
+    extractPicturePresentation(picture);
 
   const spPr = picture.elements.find((el) => el.name === 'pic:spPr');
   if (spPr) {
@@ -591,9 +623,10 @@ export function handleImageNode(node, params, isAnchor) {
       : {}),
     wrapTopAndBottom: wrap.type === 'TopAndBottom',
     shouldCover,
-    ...(shouldFillClippedStretch ? { objectFit: 'fill' } : {}),
+    ...(shouldFillClippedStretch ? { objectFit: 'fill' } : shouldCoverShapeStretch ? { objectFit: 'cover' } : {}),
     ...(clipPath ? { clipPath } : {}),
-    rawSrcRect: srcRect,
+    ...(shapeClipPath ? { shapeClipPath } : {}),
+    rawSrcRect,
     originalPadding: {
       distT: attributes['distT'],
       distB: attributes['distB'],
@@ -739,6 +772,349 @@ function collectPreservedDrawingChildren(node) {
   return { order, originalChildren: original };
 }
 
+const parseEmuNumber = (value, fallback = 0) => {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : fallback;
+};
+
+const getGroupXfrm = (groupNode) => {
+  const grpSpPr = findChildByLocalName(groupNode?.elements, 'grpSpPr');
+  return findChildByLocalName(grpSpPr?.elements, 'xfrm');
+};
+
+const buildShapeGroupTransformAttrs = (xfrm) => {
+  const groupTransform = {};
+  if (!xfrm) return groupTransform;
+
+  if (xfrm.attributes?.['rot']) {
+    groupTransform.rotation = rotToDegrees(xfrm.attributes['rot']);
+  }
+  if (xfrm.attributes?.['flipH'] === '1') {
+    groupTransform.flipH = true;
+  }
+  if (xfrm.attributes?.['flipV'] === '1') {
+    groupTransform.flipV = true;
+  }
+
+  const off = findChildByLocalName(xfrm.elements, 'off');
+  const ext = findChildByLocalName(xfrm.elements, 'ext');
+  const chOff = findChildByLocalName(xfrm.elements, 'chOff');
+  const chExt = findChildByLocalName(xfrm.elements, 'chExt');
+
+  if (off) {
+    groupTransform.x = emuToPixels(off.attributes?.['x'] || 0);
+    groupTransform.y = emuToPixels(off.attributes?.['y'] || 0);
+  }
+  if (ext) {
+    groupTransform.width = emuToPixels(ext.attributes?.['cx'] || 0);
+    groupTransform.height = emuToPixels(ext.attributes?.['cy'] || 0);
+  }
+  if (chOff) {
+    groupTransform.childX = emuToPixels(chOff.attributes?.['x'] || 0);
+    groupTransform.childY = emuToPixels(chOff.attributes?.['y'] || 0);
+    groupTransform.childOriginXEmu = parseEmuNumber(chOff.attributes?.['x']);
+    groupTransform.childOriginYEmu = parseEmuNumber(chOff.attributes?.['y']);
+  }
+  if (chExt) {
+    groupTransform.childWidth = emuToPixels(chExt.attributes?.['cx'] || 0);
+    groupTransform.childHeight = emuToPixels(chExt.attributes?.['cy'] || 0);
+  }
+
+  return groupTransform;
+};
+
+const identityMatrix = () => ({ a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 });
+
+const multiplyMatrix = (left, right) => ({
+  a: left.a * right.a + left.c * right.b,
+  b: left.b * right.a + left.d * right.b,
+  c: left.a * right.c + left.c * right.d,
+  d: left.b * right.c + left.d * right.d,
+  e: left.a * right.e + left.c * right.f + left.e,
+  f: left.b * right.e + left.d * right.f + left.f,
+});
+
+const transformPoint = (matrix, x, y) => ({
+  x: matrix.a * x + matrix.c * y + matrix.e,
+  y: matrix.b * x + matrix.d * y + matrix.f,
+});
+
+const normalizeDegrees = (degrees) => {
+  const normalized = ((degrees % 360) + 360) % 360;
+  return Object.is(normalized, -0) ? 0 : normalized;
+};
+
+const decomposeMatrixOrientation = (matrix) => {
+  const determinant = matrix.a * matrix.d - matrix.b * matrix.c;
+  if (determinant < 0) {
+    return {
+      rotation: normalizeDegrees((Math.atan2(-matrix.b, -matrix.a) * 180) / Math.PI),
+      flipH: true,
+      flipV: false,
+    };
+  }
+
+  return {
+    rotation: normalizeDegrees((Math.atan2(matrix.b, matrix.a) * 180) / Math.PI),
+    flipH: false,
+    flipV: false,
+  };
+};
+
+const getVisualOrientationMatrix = ({ rotation = 0, flipH = false, flipV = false } = {}) => {
+  const radians = (rotation * Math.PI) / 180;
+  const cos = Math.cos(radians);
+  const sin = Math.sin(radians);
+  const flipScaleX = flipH ? -1 : 1;
+  const flipScaleY = flipV ? -1 : 1;
+
+  return {
+    a: cos * flipScaleX,
+    b: sin * flipScaleX,
+    c: -sin * flipScaleY,
+    d: cos * flipScaleY,
+    e: 0,
+    f: 0,
+  };
+};
+
+const getGroupAffineTransform = (xfrm, { includeVisualTransform = false } = {}) => {
+  if (!xfrm) {
+    return { matrix: identityMatrix(), rotation: 0, flipH: false, flipV: false };
+  }
+
+  const off = findChildByLocalName(xfrm.elements, 'off');
+  const ext = findChildByLocalName(xfrm.elements, 'ext');
+  const chOff = findChildByLocalName(xfrm.elements, 'chOff');
+  const chExt = findChildByLocalName(xfrm.elements, 'chExt');
+
+  const childWidth = parseEmuNumber(chExt?.attributes?.['cx']);
+  const childHeight = parseEmuNumber(chExt?.attributes?.['cy']);
+  const width = parseEmuNumber(ext?.attributes?.['cx'], childWidth || 0);
+  const height = parseEmuNumber(ext?.attributes?.['cy'], childHeight || 0);
+  const childX = parseEmuNumber(chOff?.attributes?.['x']);
+  const childY = parseEmuNumber(chOff?.attributes?.['y']);
+  const x = parseEmuNumber(off?.attributes?.['x']);
+  const y = parseEmuNumber(off?.attributes?.['y']);
+  const scaleX = childWidth !== 0 ? width / childWidth : 1;
+  const scaleY = childHeight !== 0 ? height / childHeight : 1;
+  const rotation = xfrm.attributes?.['rot'] ? rotToDegrees(xfrm.attributes['rot']) : 0;
+  const flipH = xfrm.attributes?.['flipH'] === '1';
+  const flipV = xfrm.attributes?.['flipV'] === '1';
+  const baseMatrix = {
+    a: scaleX,
+    b: 0,
+    c: 0,
+    d: scaleY,
+    e: x - childX * scaleX,
+    f: y - childY * scaleY,
+  };
+
+  if (!includeVisualTransform || (!rotation && !flipH && !flipV)) {
+    return { matrix: baseMatrix, rotation: 0, flipH: false, flipV: false };
+  }
+
+  const radians = (rotation * Math.PI) / 180;
+  const cos = Math.cos(radians);
+  const sin = Math.sin(radians);
+  const flipScaleX = flipH ? -1 : 1;
+  const flipScaleY = flipV ? -1 : 1;
+  const centerX = x + width / 2;
+  const centerY = y + height / 2;
+  const visualMatrix = {
+    a: cos * flipScaleX,
+    b: sin * flipScaleX,
+    c: -sin * flipScaleY,
+    d: cos * flipScaleY,
+    e: centerX - (cos * flipScaleX * centerX + -sin * flipScaleY * centerY),
+    f: centerY - (sin * flipScaleX * centerX + cos * flipScaleY * centerY),
+  };
+
+  return { matrix: multiplyMatrix(visualMatrix, baseMatrix), rotation, flipH, flipV };
+};
+
+const composeShapeGroupTransform = (parent, child) => {
+  const matrix = multiplyMatrix(parent.matrix, child.matrix);
+  return {
+    matrix,
+    ...decomposeMatrixOrientation(matrix),
+  };
+};
+
+const composeShapeGroupChildOrientation = (rect, xfrm) => {
+  const parentMatrix = getVisualOrientationMatrix({
+    rotation: rect.rotation ?? 0,
+    flipH: Boolean(rect.flipH),
+    flipV: Boolean(rect.flipV),
+  });
+  const childMatrix = getVisualOrientationMatrix({
+    rotation: xfrm?.attributes?.['rot'] ? rotToDegrees(xfrm.attributes['rot']) : 0,
+    flipH: xfrm?.attributes?.['flipH'] === '1',
+    flipV: xfrm?.attributes?.['flipV'] === '1',
+  });
+
+  return decomposeMatrixOrientation(multiplyMatrix(parentMatrix, childMatrix));
+};
+
+const transformShapeGroupChildRect = (transform, rawX, rawY, rawWidth, rawHeight) => {
+  const matrix = transform.matrix ?? identityMatrix();
+  const width = Math.hypot(matrix.a, matrix.b) * rawWidth;
+  const height = Math.hypot(matrix.c, matrix.d) * rawHeight;
+  const center = transformPoint(matrix, rawX + rawWidth / 2, rawY + rawHeight / 2);
+
+  return {
+    x: emuToPixels(center.x - width / 2),
+    y: emuToPixels(center.y - height / 2),
+    width: emuToPixels(width),
+    height: emuToPixels(height),
+    rotation: transform.rotation ?? 0,
+    flipH: Boolean(transform.flipH),
+    flipV: Boolean(transform.flipV),
+  };
+};
+
+const resolveShapeGroupPicturePath = (pic, params) => {
+  const blipFill = findChildByLocalName(pic.elements, 'blipFill');
+  const blip = findChildByLocalName(blipFill?.elements, 'blip');
+  if (!blip) return null;
+
+  const rEmbed = blip.attributes?.['r:embed'];
+  if (!rEmbed) return null;
+
+  const currentFile = params.filename || 'document.xml';
+  let rels = params.docx[`word/_rels/${currentFile}.rels`];
+  if (!rels) rels = params.docx[`word/_rels/document.xml.rels`];
+
+  const relationships = rels?.elements.find((el) => el.name === 'Relationships');
+  const elements = relationships?.elements;
+  const rel = elements?.find((el) => el.attributes['Id'] === rEmbed);
+  if (!rel) return null;
+
+  return normalizeTargetPath(rel.attributes?.['Target']);
+};
+
+const parseShapeGroupVectorChild = (wsp, transform, params) => {
+  const spPr = findChildByLocalName(wsp.elements, 'spPr');
+  if (!spPr) return null;
+
+  const prstGeom = findChildByLocalName(spPr.elements, 'prstGeom');
+  const shapeKind = prstGeom?.attributes?.['prst'];
+  const customGeom = !shapeKind ? extractCustomGeometry(spPr) : null;
+  const shapeXfrm = findChildByLocalName(spPr.elements, 'xfrm');
+  const shapeOff = findChildByLocalName(shapeXfrm?.elements, 'off');
+  const shapeExt = findChildByLocalName(shapeXfrm?.elements, 'ext');
+  const rawX = parseEmuNumber(shapeOff?.attributes?.['x']);
+  const rawY = parseEmuNumber(shapeOff?.attributes?.['y']);
+  const rawWidth = parseEmuNumber(shapeExt?.attributes?.['cx'], 914400);
+  const rawHeight = parseEmuNumber(shapeExt?.attributes?.['cy'], 914400);
+  const rect = transformShapeGroupChildRect(transform, rawX, rawY, rawWidth, rawHeight);
+  const orientation = composeShapeGroupChildOrientation(rect, shapeXfrm);
+  const style = findChildByLocalName(wsp.elements, 'style');
+  const fillColor = extractFillColor(spPr, style);
+  const strokeColor = extractStrokeColor(spPr, style);
+  const strokeWidth = extractStrokeWidth(spPr);
+  const lineEnds = extractLineEnds(spPr);
+  const effects = extractShapeEffects(spPr);
+  const cNvPr = findChildByLocalName(wsp.elements, 'cNvPr');
+  const shapeId = cNvPr?.attributes?.['id'];
+  const shapeName = cNvPr?.attributes?.['name'];
+  const textBox = findChildByLocalName(wsp.elements, 'txbx');
+  const textBoxContent = findChildByLocalName(textBox?.elements, 'txbxContent');
+  const bodyPr = findChildByLocalName(wsp.elements, 'bodyPr');
+  const textContent = textBoxContent ? extractTextFromTextBox(textBoxContent, bodyPr, params) : null;
+  const textAlign = textContent?.horizontalAlign || 'left';
+
+  return {
+    shapeType: 'vectorShape',
+    attrs: {
+      kind: shapeKind,
+      customGeometry: customGeom || undefined,
+      ...rect,
+      ...orientation,
+      fillColor,
+      strokeColor,
+      strokeWidth,
+      lineEnds,
+      effects,
+      shapeId,
+      shapeName,
+      textContent,
+      textAlign,
+      textVerticalAlign: textContent?.verticalAlign,
+      textInsets: textContent?.insets,
+    },
+  };
+};
+
+const parseShapeGroupImageChild = (pic, transform, params) => {
+  const spPr = findChildByLocalName(pic.elements, 'spPr');
+  if (!spPr) return null;
+
+  const xfrm = findChildByLocalName(spPr.elements, 'xfrm');
+  const off = findChildByLocalName(xfrm?.elements, 'off');
+  const ext = findChildByLocalName(xfrm?.elements, 'ext');
+  const rawX = parseEmuNumber(off?.attributes?.['x']);
+  const rawY = parseEmuNumber(off?.attributes?.['y']);
+  const rawWidth = parseEmuNumber(ext?.attributes?.['cx'], 914400);
+  const rawHeight = parseEmuNumber(ext?.attributes?.['cy'], 914400);
+  const rect = transformShapeGroupChildRect(transform, rawX, rawY, rawWidth, rawHeight);
+  const orientation = composeShapeGroupChildOrientation(rect, xfrm);
+  const path = resolveShapeGroupPicturePath(pic, params);
+  if (!path) return null;
+
+  const blipFill = findChildByLocalName(pic.elements, 'blipFill');
+  const blip = findChildByLocalName(blipFill?.elements, 'blip');
+  const alphaModFix = extractAlphaModFix(blip);
+  const nvPicPr = findChildByLocalName(pic.elements, 'nvPicPr');
+  const cNvPr = findChildByLocalName(nvPicPr?.elements, 'cNvPr');
+  const picId = cNvPr?.attributes?.['id'];
+  const picName = cNvPr?.attributes?.['name'];
+  const { clipPath, shouldCover, shouldFillClippedStretch, shouldCoverShapeStretch, shapeClipPath } =
+    extractPicturePresentation(pic);
+
+  return {
+    shapeType: 'image',
+    attrs: {
+      ...rect,
+      ...orientation,
+      src: path,
+      imageId: picId,
+      imageName: picName,
+      ...(alphaModFix ? { alphaModFix } : {}),
+      ...(clipPath ? { clipPath } : {}),
+      ...(shapeClipPath ? { shapeClipPath } : {}),
+      ...(shouldFillClippedStretch || shouldCoverShapeStretch
+        ? { objectFit: shouldFillClippedStretch ? 'fill' : 'cover' }
+        : shouldCover
+          ? { objectFit: 'cover' }
+          : {}),
+    },
+  };
+};
+
+const collectShapeGroupChildren = (groupNode, transform, params) => {
+  const children = [];
+
+  for (const child of groupNode?.elements || []) {
+    const localName = getLocalName(child?.name);
+    if (localName === 'wsp') {
+      const shape = parseShapeGroupVectorChild(child, transform, params);
+      if (shape) children.push(shape);
+    } else if (localName === 'pic') {
+      const picture = parseShapeGroupImageChild(child, transform, params);
+      if (picture) children.push(picture);
+    } else if (localName === 'grpSp') {
+      const nestedTransform = composeShapeGroupTransform(
+        transform,
+        getGroupAffineTransform(getGroupXfrm(child), { includeVisualTransform: true }),
+      );
+      children.push(...collectShapeGroupChildren(child, nestedTransform, params));
+    }
+  }
+
+  return children;
+};
+
 /**
  * Handles a shape group (wpg:wgp) within a WordprocessingML graphic node.
  *
@@ -750,10 +1126,22 @@ function collectPreservedDrawingChildren(node) {
  * @param {{ horizontal?: number, left?: number, top?: number }} marginOffset - Group offsets relative to its anchor (in pixels).
  * @param {{ hRelativeFrom?: string, vRelativeFrom?: string, alignH?: string, alignV?: string }|null} anchorData - Anchor positioning data.
  * @param {{ type: string, attrs: Object }} wrap - Wrap configuration.
+ * @param {{ left?: number, top?: number, right?: number, bottom?: number }|null} effectExtent - Additional drawing paint bounds.
  * @param {boolean} isHidden - Whether the drawing should be hidden.
  * @returns {{ type: 'shapeGroup', attrs: Object }|null} A shapeGroup node representing the group, or null when no content exists.
  */
-const handleShapeGroup = (params, node, graphicData, size, padding, marginOffset, anchorData, wrap, isHidden) => {
+const handleShapeGroup = (
+  params,
+  node,
+  graphicData,
+  size,
+  padding,
+  marginOffset,
+  anchorData,
+  wrap,
+  effectExtent,
+  isHidden,
+) => {
   const wgp = graphicData.elements.find((el) => el.name === 'wpg:wgp');
   if (!wgp) {
     const placeholder = buildShapePlaceholder(node, size, padding, marginOffset, 'group');
@@ -763,229 +1151,9 @@ const handleShapeGroup = (params, node, graphicData, size, padding, marginOffset
     return placeholder;
   }
 
-  // Extract group properties
-  const grpSpPr = wgp.elements.find((el) => el.name === 'wpg:grpSpPr');
-  const xfrm = findChildByLocalName(grpSpPr?.elements, 'xfrm');
-
-  // Get group transform data
-  const groupTransform = {};
-  if (xfrm) {
-    const off = findChildByLocalName(xfrm.elements, 'off');
-    const ext = findChildByLocalName(xfrm.elements, 'ext');
-    const chOff = findChildByLocalName(xfrm.elements, 'chOff');
-    const chExt = findChildByLocalName(xfrm.elements, 'chExt');
-
-    if (off) {
-      groupTransform.x = emuToPixels(off.attributes?.['x'] || 0);
-      groupTransform.y = emuToPixels(off.attributes?.['y'] || 0);
-    }
-    if (ext) {
-      groupTransform.width = emuToPixels(ext.attributes?.['cx'] || 0);
-      groupTransform.height = emuToPixels(ext.attributes?.['cy'] || 0);
-    }
-    if (chOff) {
-      groupTransform.childX = emuToPixels(chOff.attributes?.['x'] || 0);
-      groupTransform.childY = emuToPixels(chOff.attributes?.['y'] || 0);
-      // Store raw EMU values for coordinate transformation
-      groupTransform.childOriginXEmu = parseFloat(chOff.attributes?.['x'] || 0);
-      groupTransform.childOriginYEmu = parseFloat(chOff.attributes?.['y'] || 0);
-    }
-    if (chExt) {
-      groupTransform.childWidth = emuToPixels(chExt.attributes?.['cx'] || 0);
-      groupTransform.childHeight = emuToPixels(chExt.attributes?.['cy'] || 0);
-    }
-  }
-
-  // Extract all child shapes and pictures
-  const childShapes = wgp.elements.filter((el) => el.name === 'wps:wsp');
-  const childPictures = wgp.elements.filter((el) => el.name === 'pic:pic');
-
-  // Process child shapes (wps:wsp)
-  const shapes = childShapes
-    .map((wsp) => {
-      const spPr = wsp.elements?.find((el) => el.name === 'wps:spPr');
-      if (!spPr) return null;
-
-      // Extract shape kind (preset geometry) or custom geometry
-      const prstGeom = findChildByLocalName(spPr.elements, 'prstGeom');
-      const shapeKind = prstGeom?.attributes?.['prst'];
-      const customGeom = !shapeKind ? extractCustomGeometry(spPr) : null;
-
-      // Extract size and transformations
-      const shapeXfrm = findChildByLocalName(spPr.elements, 'xfrm');
-      const shapeOff = findChildByLocalName(shapeXfrm?.elements, 'off');
-      const shapeExt = findChildByLocalName(shapeXfrm?.elements, 'ext');
-
-      // Get raw child coordinates in EMU
-      const rawX = shapeOff?.attributes?.['x'] ? parseFloat(shapeOff.attributes['x']) : 0;
-      const rawY = shapeOff?.attributes?.['y'] ? parseFloat(shapeOff.attributes['y']) : 0;
-      const rawWidth = shapeExt?.attributes?.['cx'] ? parseFloat(shapeExt.attributes['cx']) : 914400;
-      const rawHeight = shapeExt?.attributes?.['cy'] ? parseFloat(shapeExt.attributes['cy']) : 914400;
-
-      // Transform from child coordinate space to parent space if group transform exists
-      let x, y, width, height;
-      if (groupTransform.childWidth && groupTransform.childHeight) {
-        // Calculate scale factors
-        const scaleX = groupTransform.width / groupTransform.childWidth;
-        const scaleY = groupTransform.height / groupTransform.childHeight;
-
-        // Get child origin in EMU (default to 0 if not set)
-        const childOriginX = groupTransform.childOriginXEmu || 0;
-        const childOriginY = groupTransform.childOriginYEmu || 0;
-
-        // Transform to parent space: ((childPos - childOrigin) * scale) + groupPos
-        x = groupTransform.x + emuToPixels((rawX - childOriginX) * scaleX);
-        y = groupTransform.y + emuToPixels((rawY - childOriginY) * scaleY);
-        width = emuToPixels(rawWidth * scaleX);
-        height = emuToPixels(rawHeight * scaleY);
-      } else {
-        // Fallback: no transformation
-        x = emuToPixels(rawX);
-        y = emuToPixels(rawY);
-        width = emuToPixels(rawWidth);
-        height = emuToPixels(rawHeight);
-      }
-      const rotation = shapeXfrm?.attributes?.['rot'] ? rotToDegrees(shapeXfrm.attributes['rot']) : 0;
-      const flipH = shapeXfrm?.attributes?.['flipH'] === '1';
-      const flipV = shapeXfrm?.attributes?.['flipV'] === '1';
-
-      // Extract colors
-      const style = wsp.elements?.find((el) => el.name === 'wps:style');
-      const fillColor = extractFillColor(spPr, style);
-      const strokeColor = extractStrokeColor(spPr, style);
-      const strokeWidth = extractStrokeWidth(spPr);
-      const lineEnds = extractLineEnds(spPr);
-
-      // Get shape ID and name
-      const cNvPr = wsp.elements?.find((el) => el.name === 'wps:cNvPr');
-      const shapeId = cNvPr?.attributes?.['id'];
-      const shapeName = cNvPr?.attributes?.['name'];
-
-      // Extract textbox content if present
-      const textBox = wsp.elements?.find((el) => el.name === 'wps:txbx');
-      const textBoxContent = textBox?.elements?.find((el) => el.name === 'w:txbxContent');
-      const bodyPr = wsp.elements?.find((el) => el.name === 'wps:bodyPr');
-      let textContent = null;
-
-      if (textBoxContent) {
-        // Extract text from all paragraphs in the textbox
-        textContent = extractTextFromTextBox(textBoxContent, bodyPr, params);
-      }
-
-      // Extract horizontal alignment from text content (defaults to 'left' if not specified)
-      const textAlign = textContent?.horizontalAlign || 'left';
-
-      return {
-        shapeType: 'vectorShape',
-        attrs: {
-          kind: shapeKind,
-          customGeometry: customGeom || undefined,
-          x,
-          y,
-          width,
-          height,
-          rotation,
-          flipH,
-          flipV,
-          fillColor,
-          strokeColor,
-          strokeWidth,
-          lineEnds,
-          shapeId,
-          shapeName,
-          textContent,
-          textAlign,
-          textVerticalAlign: textContent?.verticalAlign,
-          textInsets: textContent?.insets,
-        },
-      };
-    })
-    .filter(Boolean);
-
-  // Process child pictures (pic:pic)
-  const pictures = childPictures
-    .map((pic) => {
-      // Extract picture properties
-      const spPr = pic.elements?.find((el) => el.name === 'pic:spPr');
-      if (!spPr) return null;
-
-      // Extract size and transformations
-      const xfrm = findChildByLocalName(spPr.elements, 'xfrm');
-      const off = findChildByLocalName(xfrm?.elements, 'off');
-      const ext = findChildByLocalName(xfrm?.elements, 'ext');
-
-      // Get raw coordinates in EMU
-      const rawX = off?.attributes?.['x'] ? parseFloat(off.attributes['x']) : 0;
-      const rawY = off?.attributes?.['y'] ? parseFloat(off.attributes['y']) : 0;
-      const rawWidth = ext?.attributes?.['cx'] ? parseFloat(ext.attributes['cx']) : 914400;
-      const rawHeight = ext?.attributes?.['cy'] ? parseFloat(ext.attributes['cy']) : 914400;
-
-      // Transform from child coordinate space to parent space if group transform exists
-      let x, y, width, height;
-      if (groupTransform.childWidth && groupTransform.childHeight) {
-        const scaleX = groupTransform.width / groupTransform.childWidth;
-        const scaleY = groupTransform.height / groupTransform.childHeight;
-        const childOriginX = groupTransform.childOriginXEmu || 0;
-        const childOriginY = groupTransform.childOriginYEmu || 0;
-
-        x = groupTransform.x + emuToPixels((rawX - childOriginX) * scaleX);
-        y = groupTransform.y + emuToPixels((rawY - childOriginY) * scaleY);
-        width = emuToPixels(rawWidth * scaleX);
-        height = emuToPixels(rawHeight * scaleY);
-      } else {
-        x = emuToPixels(rawX);
-        y = emuToPixels(rawY);
-        width = emuToPixels(rawWidth);
-        height = emuToPixels(rawHeight);
-      }
-
-      // Extract image reference from blipFill
-      const blipFill = pic.elements?.find((el) => el.name === 'pic:blipFill');
-      const blip = findChildByLocalName(blipFill?.elements, 'blip');
-      if (!blip) return null;
-      const alphaModFix = extractAlphaModFix(blip);
-
-      const rEmbed = blip.attributes?.['r:embed'];
-      if (!rEmbed) return null;
-
-      // Get the image path from relationships
-      const currentFile = params.filename || 'document.xml';
-      let rels = params.docx[`word/_rels/${currentFile}.rels`];
-      if (!rels) rels = params.docx[`word/_rels/document.xml.rels`];
-
-      const relationships = rels?.elements.find((el) => el.name === 'Relationships');
-      const { elements } = relationships || [];
-      const rel = elements?.find((el) => el.attributes['Id'] === rEmbed);
-      if (!rel) return null;
-
-      const targetPath = normalizeTargetPath(rel.attributes?.['Target']);
-      const path = targetPath;
-
-      // Extract picture name and ID
-      const nvPicPr = pic.elements?.find((el) => el.name === 'pic:nvPicPr');
-      const cNvPr = nvPicPr?.elements?.find((el) => el.name === 'pic:cNvPr');
-      const picId = cNvPr?.attributes?.['id'];
-      const picName = cNvPr?.attributes?.['name'];
-
-      return {
-        shapeType: 'image',
-        attrs: {
-          x,
-          y,
-          width,
-          height,
-          src: path,
-          imageId: picId,
-          imageName: picName,
-          ...(alphaModFix ? { alphaModFix } : {}),
-        },
-      };
-    })
-    .filter(Boolean);
-
-  // Combine shapes and pictures - pictures first (bottom layer), then shapes (top layer)
-  // In SVG, elements are rendered in order, so later elements appear on top
-  const allShapes = [...pictures, ...shapes];
+  const groupXfrm = getGroupXfrm(wgp);
+  const groupTransform = buildShapeGroupTransformAttrs(groupXfrm);
+  const allShapes = collectShapeGroupChildren(wgp, getGroupAffineTransform(groupXfrm), params);
 
   const schemaAttrs = {};
   const drawingNode = params.nodes?.[0];
@@ -1003,6 +1171,7 @@ const handleShapeGroup = (params, node, graphicData, size, padding, marginOffset
       size,
       padding,
       marginOffset,
+      effectExtent,
       anchorData,
       wrap,
       originalAttributes: node?.attributes,
@@ -1101,7 +1270,9 @@ function extractTextFromTextBox(textBoxContent, bodyPr, params = {}) {
   const processedContent = preProcessTextBoxContent(textBoxContent, params);
   const paragraphs = collectTextBoxParagraphs(processedContent?.elements || []);
   const textParts = [];
+  const paragraphMetadata = [];
   let horizontalAlign = null;
+  const { verticalAlign, insets, wrap, spcFirstLastPara } = extractBodyPrProperties(bodyPr);
 
   /**
    * Appends a field part (PAGE, NUMPAGES, or SECTIONPAGES) to textParts with formatting.
@@ -1235,6 +1406,13 @@ function extractTextFromTextBox(textBoxContent, bodyPr, params = {}) {
   // Process each paragraph
   paragraphs.forEach((paragraph, paragraphIndex) => {
     const paragraphProperties = resolveParagraphPropertiesForTextBox(paragraph, params);
+    paragraphMetadata.push({
+      spacing: extractTextBoxParagraphSpacing(paragraphProperties, {
+        paragraphIndex,
+        paragraphCount: paragraphs.length,
+        spcFirstLastPara,
+      }),
+    });
 
     // Extract horizontal alignment from first paragraph that has it
     if (!horizontalAlign) {
@@ -1258,14 +1436,14 @@ function extractTextFromTextBox(textBoxContent, bodyPr, params = {}) {
         formatting: {},
         isLineBreak: true,
         isEmptyParagraph: !paragraphHasText,
+        isParagraphBoundary: true,
       });
     }
   });
 
   if (textParts.length === 0) return null;
 
-  // Extract body properties (vertical alignment, insets, wrap mode)
-  const { verticalAlign, insets, wrap } = extractBodyPrProperties(bodyPr);
+  const hasParagraphSpacing = paragraphMetadata.some((paragraph) => paragraph.spacing);
 
   return {
     parts: textParts,
@@ -1273,6 +1451,7 @@ function extractTextFromTextBox(textBoxContent, bodyPr, params = {}) {
     verticalAlign,
     insets,
     wrap,
+    ...(hasParagraphSpacing ? { paragraphs: paragraphMetadata } : {}),
   };
 }
 
@@ -1563,6 +1742,7 @@ export function getVectorShape({
   const strokeColor = extractStrokeColor(spPr, style);
   const strokeWidth = extractStrokeWidth(spPr);
   const lineEnds = extractLineEnds(spPr);
+  const effects = extractShapeEffects(spPr);
   const effectExtent = extractEffectExtent(node);
 
   // Extract textbox content if present
@@ -1591,6 +1771,7 @@ export function getVectorShape({
         strokeColor,
         strokeWidth,
         lineEnds,
+        effects,
         effectExtent,
         marginOffset,
         anchorData,
@@ -1631,6 +1812,7 @@ export function getVectorShape({
       strokeColor,
       strokeWidth,
       lineEnds,
+      effects,
       effectExtent,
       marginOffset,
       anchorData,

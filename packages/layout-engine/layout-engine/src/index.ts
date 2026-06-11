@@ -64,7 +64,9 @@ import {
   collectAnchoredDrawings,
   collectAnchoredTables,
   collectPreRegisteredAnchors,
+  collectPageRelativeAnchorsByParagraph,
   isPageRelativeAnchor,
+  type AnchoredDrawing,
 } from './anchors.js';
 import { normalizeFragmentsForRegion } from './normalize-header-footer-fragments.js';
 import { createPaginator, type PageState, type ConstraintBoundary } from './paginator.js';
@@ -2042,10 +2044,86 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   // These images position themselves relative to the page, not a paragraph, so they
   // must be registered first so all paragraphs can wrap around them.
   const preRegisteredAnchors = collectPreRegisteredAnchors(blocks, measures);
+  const pageRelativeAnchorsByParagraph = collectPageRelativeAnchorsByParagraph(blocks, measures);
 
-  // Map to store pre-computed positions for page-relative anchors (for fragment creation later).
-  // Page placement is resolved at encounter time so anchors follow pagination (e.g., after page breaks).
-  const preRegisteredPositions = new Map<string, { anchorX: number; anchorY: number }>();
+  // Page-relative anchors need special placement when their block is encountered
+  // so they can resolve against the active page/section geometry.
+  const preRegisteredAnchorIds = new Set<string>();
+  const blockIndexById = new Map(blocks.map((candidateBlock, candidateIndex) => [candidateBlock.id, candidateIndex]));
+
+  const hasHardBreakBetween = (startIndex: number, endIndex: number): boolean => {
+    const first = Math.min(startIndex, endIndex) + 1;
+    const last = Math.max(startIndex, endIndex);
+    for (let candidateIndex = first; candidateIndex < last; candidateIndex += 1) {
+      const candidateBlock = blocks[candidateIndex];
+      if (
+        candidateBlock.kind === 'pageBreak' ||
+        candidateBlock.kind === 'sectionBreak' ||
+        candidateBlock.kind === 'columnBreak'
+      ) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  const shouldWrapParagraphWithPageRelativeAnchor = (
+    anchorBlock: ImageBlock | DrawingBlock,
+    paragraphIndex: number,
+    paragraphId: string,
+  ): boolean => {
+    const anchorParagraphId =
+      anchorBlock.attrs != null && typeof anchorBlock.attrs === 'object'
+        ? (anchorBlock.attrs as { anchorParagraphId?: unknown }).anchorParagraphId
+        : undefined;
+    if (typeof anchorParagraphId === 'string') {
+      return anchorParagraphId === paragraphId;
+    }
+
+    const anchorIndex = blockIndexById.get(anchorBlock.id);
+    if (anchorIndex == null || anchorIndex === paragraphIndex) {
+      return false;
+    }
+
+    return !hasHardBreakBetween(paragraphIndex, anchorIndex);
+  };
+
+  const isWrappingDrawingAnchor = (anchorBlock: ImageBlock | DrawingBlock): boolean => {
+    const wrapType = anchorBlock.wrap?.type ?? 'None';
+    return wrapType !== 'None' && wrapType !== 'Inline';
+  };
+
+  const collectLaterPageRelativeAnchorsForParagraph = (
+    paragraphIndex: number,
+    paragraphId: string,
+  ): AnchoredDrawing[] | undefined => {
+    const anchors: AnchoredDrawing[] = [];
+
+    for (const entry of preRegisteredAnchors) {
+      const anchorIndex = blockIndexById.get(entry.block.id);
+      if (anchorIndex == null || anchorIndex <= paragraphIndex) continue;
+      if (!isWrappingDrawingAnchor(entry.block)) continue;
+      if (!shouldWrapParagraphWithPageRelativeAnchor(entry.block, paragraphIndex, paragraphId)) continue;
+      anchors.push(entry);
+    }
+
+    return anchors.length > 0 ? anchors : undefined;
+  };
+
+  const mergeAnchoredDrawings = (...groups: Array<AnchoredDrawing[] | undefined>): AnchoredDrawing[] | undefined => {
+    const merged: AnchoredDrawing[] = [];
+    const seen = new Set<string>();
+
+    for (const group of groups) {
+      for (const entry of group ?? []) {
+        if (seen.has(entry.block.id)) continue;
+        seen.add(entry.block.id);
+        merged.push(entry);
+      }
+    }
+
+    return merged.length > 0 ? merged : undefined;
+  };
 
   const resolveParagraphlessAnchoredTableY = (block: TableBlock, measure: TableMeasure, state: PageState): number => {
     const contentTop = state.topMargin;
@@ -2062,71 +2140,47 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     });
   };
 
-  const resolveParagraphlessAnchoredDrawingY = (
+  const resolveAnchoredDrawingPosition = (
     block: ImageBlock | DrawingBlock,
     measure: ImageMeasure | DrawingMeasure,
     state: PageState,
-  ): number =>
-    resolveAnchoredGraphicY({
-      anchor: block.anchor,
-      objectHeight: measure.height ?? 0,
-      contentTop: state.topMargin,
-      contentBottom: state.contentBottom,
-      pageBottomMargin: state.page.margins?.bottom ?? activeBottomMargin,
-      preRegisteredFallbackToContentTop: true,
-    });
-
-  const resolveParagraphlessAnchoredDrawingX = (
-    block: ImageBlock | DrawingBlock,
-    measure: ImageMeasure | DrawingMeasure,
-    state: PageState,
-  ): number =>
-    block.anchor
-      ? computeAnchorX(
-          block.anchor,
-          state.columnIndex,
-          normalizeColumns(activeColumns, activePageSize.w - (activeLeftMargin + activeRightMargin)),
-          measure.width,
-          { left: activeLeftMargin, right: activeRightMargin },
-          activePageSize.w,
-        )
-      : columnX(state);
-
-  for (const entry of preRegisteredAnchors) {
-    // Ensure first page exists
-    const state = paginator.ensurePage();
-
+  ): { anchorX: number; anchorY: number } => {
     const contentTop = state.topMargin;
     const contentBottom = state.contentBottom;
     const anchorY = resolveAnchoredGraphicY({
-      anchor: entry.block.anchor,
-      objectHeight: entry.measure.height ?? 0,
+      anchor: block.anchor,
+      objectHeight: measure.height ?? 0,
       contentTop,
       contentBottom,
       pageBottomMargin: state.page.margins?.bottom ?? activeBottomMargin,
       preRegisteredFallbackToContentTop: true,
     });
 
-    // Compute anchor X position
-    const anchorX = entry.block.anchor
+    const columns = getActiveColumnsForState(state);
+    const pageMargins = {
+      top: state.page.margins?.top ?? activeTopMargin,
+      bottom: state.page.margins?.bottom ?? activeBottomMargin,
+      left: state.page.margins?.left ?? activeLeftMargin,
+      right: state.page.margins?.right ?? activeRightMargin,
+    };
+    const pageWidth = state.page.size?.w ?? activePageSize.w;
+    const contentWidth = pageWidth - ((pageMargins.left ?? 0) + (pageMargins.right ?? 0));
+    const anchorX = block.anchor
       ? computeAnchorX(
-          entry.block.anchor,
+          block.anchor,
           state.columnIndex,
-          normalizeColumns(activeColumns, activePageSize.w - (activeLeftMargin + activeRightMargin)),
-          entry.measure.width,
-          { left: activeLeftMargin, right: activeRightMargin },
-          activePageSize.w,
+          normalizeColumns(columns, contentWidth),
+          measure.width,
+          { left: pageMargins.left, right: pageMargins.right },
+          pageWidth,
         )
-      : activeLeftMargin;
+      : (pageMargins.left ?? activeLeftMargin);
 
-    // Register with float manager so all paragraphs see this exclusion
-    // NOTE: We only register exclusion zones here, NOT fragments.
-    // Fragments will be created when the image block is encountered in the layout loop.
-    // This prevents the section break logic from seeing "content" on the page and creating a new page.
-    floatManager.registerDrawing(entry.block, entry.measure, anchorY, state.columnIndex, state.page.number);
+    return { anchorX, anchorY };
+  };
 
-    // Store pre-computed position for later use when creating the fragment.
-    preRegisteredPositions.set(entry.block.id, { anchorX, anchorY });
+  for (const entry of preRegisteredAnchors) {
+    preRegisteredAnchorIds.add(entry.block.id);
   }
 
   // Pre-compute keepNext chains for correct pagination grouping.
@@ -2466,6 +2520,19 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
           (!paraBlock.runs[0].kind || paraBlock.runs[0].kind === 'text') &&
           (!(paraBlock.runs[0] as { text?: string }).text || (paraBlock.runs[0] as { text?: string }).text === ''));
 
+      const drawingAnchorsForPara = anchoredByParagraph.get(index);
+      const pageRelativeAnchorsForPara = pageRelativeAnchorsByParagraph.get(index);
+      const wrappingPageRelativeAnchorsForPara = pageRelativeAnchorsForPara?.filter(({ block: anchorBlock }) =>
+        shouldWrapParagraphWithPageRelativeAnchor(anchorBlock, index, paraBlock.id),
+      );
+      const laterPageRelativeAnchorsForPara = collectLaterPageRelativeAnchorsForParagraph(index, paraBlock.id);
+      const anchorsForPara = mergeAnchoredDrawings(
+        drawingAnchorsForPara,
+        wrappingPageRelativeAnchorsForPara,
+        laterPageRelativeAnchorsForPara,
+      );
+      const tablesForPara = anchoredTablesByParagraph.get(index);
+
       if (isEmpty) {
         const isSectPrMarker = paraBlock.attrs?.sectPrMarker === true;
         // Check if previous block was pageBreak and next block is sectionBreak
@@ -2482,17 +2549,16 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
             nextBreakType === 'oddPage' ||
             nextSectionBreak.attrs?.requirePageBoundary === true);
 
-        if (isSectPrMarker && nextBreakForcesPage) {
+        const hasAnchoredObjectsForMarker = Boolean(anchorsForPara?.length || tablesForPara?.length);
+
+        if (isSectPrMarker && nextBreakForcesPage && !hasAnchoredObjectsForMarker) {
           continue;
         }
 
-        if (prevBlock?.kind === 'pageBreak' && nextBlock?.kind === 'sectionBreak') {
+        if (prevBlock?.kind === 'pageBreak' && nextBlock?.kind === 'sectionBreak' && !hasAnchoredObjectsForMarker) {
           continue;
         }
       }
-
-      const anchorsForPara = anchoredByParagraph.get(index);
-      const tablesForPara = anchoredTablesByParagraph.get(index);
 
       /**
        * keepNext Chain-Aware Page Break Logic
@@ -2648,6 +2714,15 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
         }
       }
 
+      const hasPageRelativeAnchorForPara = Boolean(
+        pageRelativeAnchorsByParagraph.get(index)?.length ||
+          laterPageRelativeAnchorsForPara?.length ||
+          tablesForPara?.some(({ block: tableBlock }) => {
+            const vRelativeFrom = tableBlock.anchor?.vRelativeFrom;
+            return vRelativeFrom === 'page' || vRelativeFrom === 'margin';
+          }),
+      );
+
       layoutParagraphBlock(
         {
           block,
@@ -2676,6 +2751,9 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
                 left: activeLeftMargin,
                 right: activeRightMargin,
               },
+              sectionBaseTopMargin: activeSectionBaseTopMargin,
+              sectionHeaderDistance: activeHeaderDistance,
+              hasPageRelativeAnchorForParagraph: hasPageRelativeAnchorForPara,
               columns: getCurrentColumns(),
               placedAnchoredIds,
             }
@@ -2707,14 +2785,20 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       if (measure.kind !== 'image') {
         throw new Error(`layoutDocument: expected image measure for block ${block.id}`);
       }
+      if (placedAnchoredIds.has(block.id)) {
+        continue;
+      }
 
       // Check if this is a pre-registered page-relative anchor
-      const preRegPos = preRegisteredPositions.get(block.id);
-      if (preRegPos && Number.isFinite(preRegPos.anchorX) && Number.isFinite(preRegPos.anchorY)) {
-        // Use pre-computed coordinates, but place on the current pagination page where this block is encountered.
+      if (preRegisteredAnchorIds.has(block.id)) {
+        // Place on the current pagination page where this block is encountered.
+        // Resolve coordinates against the current section/page geometry; the
+        // pre-registration pass may have run before section margins changed.
         const state = paginator.ensurePage();
         const imgBlock = block as ImageBlock;
         const imgMeasure = measure as ImageMeasure;
+        const { anchorX, anchorY } = resolveAnchoredDrawingPosition(imgBlock, imgMeasure, state);
+        floatManager.registerDrawing(imgBlock, imgMeasure, anchorY, state.columnIndex, state.page.number);
 
         const pageContentHeight = Math.max(0, state.contentBottom - state.topMargin);
         const relativeFrom = imgBlock.anchor?.hRelativeFrom ?? 'column';
@@ -2745,8 +2829,8 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
         const fragment: ImageFragment = {
           kind: 'image',
           blockId: imgBlock.id,
-          x: preRegPos.anchorX,
-          y: preRegPos.anchorY,
+          x: anchorX,
+          y: anchorY,
           width: imgMeasure.width,
           height: imgMeasure.height,
           isAnchored: true,
@@ -2779,14 +2863,20 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       if (measure.kind !== 'drawing') {
         throw new Error(`layoutDocument: expected drawing measure for block ${block.id}`);
       }
+      if (placedAnchoredIds.has(block.id)) {
+        continue;
+      }
 
       // Check if this is a pre-registered page-relative anchor
-      const preRegPos = preRegisteredPositions.get(block.id);
-      if (preRegPos && Number.isFinite(preRegPos.anchorX) && Number.isFinite(preRegPos.anchorY)) {
-        // Use pre-computed coordinates, but place on the current pagination page where this block is encountered.
+      if (preRegisteredAnchorIds.has(block.id)) {
+        // Place on the current pagination page where this block is encountered.
+        // Resolve coordinates against the current section/page geometry; the
+        // pre-registration pass may have run before section margins changed.
         const state = paginator.ensurePage();
         const drawBlock = block as DrawingBlock;
         const drawMeasure = measure as DrawingMeasure;
+        const { anchorX, anchorY } = resolveAnchoredDrawingPosition(drawBlock, drawMeasure, state);
+        floatManager.registerDrawing(drawBlock, drawMeasure, anchorY, state.columnIndex, state.page.number);
         const contentMeasures =
           drawBlock.drawingKind === 'textboxShape' && typeof options.remeasureParagraph === 'function'
             ? layoutTextboxContent(drawBlock, options.remeasureParagraph)
@@ -2796,8 +2886,8 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
           kind: 'drawing',
           blockId: drawBlock.id,
           drawingKind: drawBlock.drawingKind,
-          x: preRegPos.anchorX,
-          y: preRegPos.anchorY,
+          x: anchorX,
+          y: anchorY,
           width: drawMeasure.width,
           height: drawMeasure.height,
           geometry: drawMeasure.geometry,
@@ -2924,8 +3014,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     for (const { block, measure } of paragraphlessAnchoredDrawings) {
       if (placedAnchoredIds.has(block.id)) continue;
 
-      const anchorX = resolveParagraphlessAnchoredDrawingX(block, measure, state);
-      const anchorY = resolveParagraphlessAnchoredDrawingY(block, measure, state);
+      const { anchorX, anchorY } = resolveAnchoredDrawingPosition(block, measure, state);
 
       if (block.kind === 'image' && measure.kind === 'image') {
         const pageContentHeight = Math.max(0, state.contentBottom - state.topMargin);
@@ -3431,6 +3520,19 @@ function getPageRelativeMeasurementBand(
   };
 }
 
+function isHeaderFooterAbsoluteOverlay(
+  block: ImageBlock | DrawingBlock,
+  kind: 'header' | 'footer' | undefined,
+  fragment: Fragment,
+  fragmentBottom: number,
+  canvasHeight: number,
+): boolean {
+  if (!kind) return false;
+  if (block.anchor?.isAnchored !== true) return false;
+  if (block.wrap?.type !== 'None') return false;
+  return fragment.y < 0 || fragmentBottom > canvasHeight;
+}
+
 /**
  * Determine whether a fragment should be excluded from measurement (pagination) bounds.
  *
@@ -3442,12 +3544,10 @@ function getPageRelativeMeasurementBand(
  * 3. Page-relative header/footer overlays that do not intersect the region's
  *    reserved margin band — they should still render, but must not reserve
  *    body space like true header/footer content.
- * 4. Header/footer anchored overlays with wrap=None that cover the full
- *    measurement canvas — `wrap=None` is OOXML's "absolute overlay, no flow
- *    exclusion zone", so by definition such fragments must not reserve body
- *    space. Combined with full-canvas bounds this catches page-covering
- *    background shapes regardless of vRelativeFrom/hRelativeFrom (which the
- *    authoring tool is free to set to column/paragraph for cover pages).
+ * 4. Header/footer anchored overlays with wrap=None that extend outside the
+ *    measurement canvas. OOXML wrapNone creates no text exclusion zone, so
+ *    out-of-band story overlays should render without reserving header/footer
+ *    text-band height. In-band wrapNone media remains measurable content.
  */
 function shouldExcludeFromMeasurement(
   fragment: Fragment,
@@ -3474,6 +3574,10 @@ function shouldExcludeFromMeasurement(
   // behindDoc fragments never affect measurement
   if (anchoredBlock.anchor?.behindDoc) return true;
 
+  if (isHeaderFooterAbsoluteOverlay(anchoredBlock, kind, fragment, fragmentBottom, canvasHeight)) {
+    return true;
+  }
+
   // Page-relative anchored fragments that sit entirely outside the measurement band
   // should not inflate pagination height.
   if (isPageRelativeAnchor(anchoredBlock)) {
@@ -3489,24 +3593,6 @@ function shouldExcludeFromMeasurement(
     if (measurementBand && !rangesIntersect(fragment.y, fragmentBottom, measurementBand.start, measurementBand.end)) {
       return true;
     }
-  }
-
-  // Only treat anchored content as a non-measurement overlay when it is
-  // unambiguously a page-covering decoration: wrap=None (no exclusion zone,
-  // so by definition the shape never reserves body space) AND fragment size
-  // covers the measurement canvas in both dimensions. Real anchored
-  // header/footer content uses wrap modes that affect flow (Square / Tight /
-  // TopAndBottom / Through), so it continues to reserve space.
-  const fragmentHeight = typeof fragment.height === 'number' ? fragment.height : fragmentBottom - fragment.y;
-  const fragmentWidth = typeof fragment.width === 'number' ? fragment.width : 0;
-  const heightCoversCanvas = Number.isFinite(fragmentHeight) && fragmentHeight >= canvasHeight;
-  const widthCoversCanvas =
-    Number.isFinite(constraints.width) && constraints.width > 0 && fragmentWidth >= constraints.width;
-  const wrapType = anchoredBlock.wrap?.type;
-  const isOverlayWrap = wrapType === 'None';
-
-  if (kind && heightCoversCanvas && widthCoversCanvas && isOverlayWrap) {
-    return true;
   }
 
   return false;

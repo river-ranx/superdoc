@@ -23,6 +23,8 @@ import type {
   Run,
   ShapeGroupChild,
   ShapeGroupDrawing,
+  ShapeEffects,
+  ShapeOuterShadowEffect,
   ShapeTextContent,
   SolidFillWithAlpha,
   SourceAnchor,
@@ -53,8 +55,12 @@ import {
   getCellSpacingPx,
   getColumnGeometry,
   getColumnSeparatorPositions as getColumnSeparatorPositionsFromGeometry,
+  getOuterShadowPaintExtent as getSharedOuterShadowPaintExtent,
+  getOuterShadowStdDeviation,
   normalizeColumnLayout,
+  normalizeZIndex,
   resolveColumnMode,
+  resolveOuterShadowOffset,
 } from '@superdoc/contracts';
 import { DATASET_KEYS, decodeLayoutStoryDataset, encodeLayoutStoryDataset } from '@superdoc/dom-contract';
 import { getPresetShapeSvg } from '@superdoc/preset-geometry';
@@ -137,6 +143,8 @@ type EffectExtent = {
   right: number;
   bottom: number;
 };
+
+const normalizeRotationDegrees = (rotation: number): number => ((rotation % 360) + 360) % 360;
 
 type ShapeTextDrawingWithEffects = (VectorShapeDrawing | TextboxDrawing) & {
   lineEnds?: LineEnds;
@@ -853,6 +861,9 @@ function collectLineTabsForSnapshot(lineEl: HTMLElement): PaintSnapshotTabStyle[
 const DEFAULT_PAGE_HEIGHT_PX = 1056;
 /** Default gap used when virtualization is enabled (kept in sync with PresentationEditor layout defaults). */
 const DEFAULT_VIRTUALIZED_PAGE_GAP = 72;
+// Keeps non-behindDoc header/footer wrapNone decorations above the behindDoc
+// background tier while the whole page-background story still uses CSS z-index 0.
+const PAGE_BACKGROUND_OVERLAY_Z_ORDER_OFFSET = 1_000_000;
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const WORDART_LINE_FILL_RATIO = 0.9;
 // Comment highlight color tokens moved to CommentHighlightDecorator (super-editor).
@@ -2071,6 +2082,96 @@ export class DomPainter {
   }
 
   /**
+   * Whether an anchored header/footer fragment is page-relative on the HORIZONTAL
+   * axis (`hRelativeFrom === 'page'`). Page-horizontal anchors already carry
+   * page-local x from the layout engine, so the renderer must not add the left
+   * margin again; margin/column-relative anchors carry content-local x and do.
+   * This is the horizontal counterpart to {@link isPageRelativeAnchoredFragment}:
+   * the two axes are independent, so the left offset must key off hRelativeFrom,
+   * not vRelativeFrom (which governs only the top offset).
+   */
+  private isHorizontallyPageRelativeAnchoredFragment(
+    fragment: Fragment,
+    resolvedItem: ResolvedPaintItem | undefined,
+  ): boolean {
+    if (fragment.kind !== 'image' && fragment.kind !== 'drawing') {
+      return false;
+    }
+    const block = resolvedItem && 'block' in resolvedItem ? resolvedItem.block : undefined;
+    if (!block || (block.kind !== 'image' && block.kind !== 'drawing')) {
+      return false;
+    }
+    return block.anchor?.hRelativeFrom === 'page';
+  }
+
+  private isHeaderFooterAbsoluteOverlayFragment(
+    fragment: Fragment,
+    kind: 'header' | 'footer',
+    resolvedItem: ResolvedPaintItem | undefined,
+  ): boolean {
+    if (kind !== 'header' && kind !== 'footer') return false;
+    if (fragment.kind !== 'image' && fragment.kind !== 'drawing') return false;
+    if (fragment.isAnchored !== true) return false;
+    const block = resolvedItem && 'block' in resolvedItem ? resolvedItem.block : undefined;
+    if (!block || (block.kind !== 'image' && block.kind !== 'drawing')) return false;
+    if (block.anchor?.isAnchored !== true) return false;
+    if (block.wrap?.type !== 'None') return false;
+    if (fragment.behindDoc === true || block.anchor?.behindDoc === true) return false;
+
+    return true;
+  }
+
+  private getPageBackgroundDecorationZOrder(fragment: Fragment, resolvedItem: ResolvedPaintItem | undefined): number {
+    const block = resolvedItem && 'block' in resolvedItem ? resolvedItem.block : undefined;
+    const isDrawingBlock = block?.kind === 'image' || block?.kind === 'drawing';
+    const originalAttributes = isDrawingBlock
+      ? (block.attrs as { originalAttributes?: unknown } | undefined)?.originalAttributes
+      : undefined;
+    const normalizedZIndex = normalizeZIndex(originalAttributes);
+    const isBehindDoc =
+      ((fragment.kind === 'image' || fragment.kind === 'drawing') && fragment.behindDoc === true) ||
+      (isDrawingBlock && block.anchor?.behindDoc === true);
+
+    if (isBehindDoc && normalizedZIndex != null) {
+      return normalizedZIndex;
+    }
+
+    if ((fragment.kind === 'image' || fragment.kind === 'drawing') && typeof fragment.zIndex === 'number') {
+      return isBehindDoc ? fragment.zIndex : PAGE_BACKGROUND_OVERLAY_Z_ORDER_OFFSET + Math.max(1, fragment.zIndex);
+    }
+
+    if (normalizedZIndex != null) {
+      return PAGE_BACKGROUND_OVERLAY_Z_ORDER_OFFSET + Math.max(1, normalizedZIndex);
+    }
+
+    return 0;
+  }
+
+  private insertPageBackgroundDecoration(pageEl: HTMLElement, fragEl: HTMLElement, zOrder: number): void {
+    fragEl.dataset.pageBackgroundZIndex = String(zOrder);
+    let lastBackgroundDecoration: Element | null = null;
+    let insertBefore: Element | null = null;
+    // Patch renders can temporarily leave stale decoration nodes after body
+    // fragments. Only the leading decoration run is the page background layer.
+    for (const child of Array.from(pageEl.children)) {
+      const el = child as HTMLElement;
+      if (el.dataset.behindDocSection != null || el.dataset.headerFooterOverlaySection != null) {
+        const existingZOrder = Number(el.dataset.pageBackgroundZIndex ?? 0);
+        if (existingZOrder > zOrder) {
+          insertBefore = el;
+          break;
+        }
+        lastBackgroundDecoration = el;
+        continue;
+      }
+
+      break;
+    }
+
+    pageEl.insertBefore(fragEl, insertBefore ?? lastBackgroundDecoration?.nextSibling ?? pageEl.firstChild);
+  }
+
+  /**
    * Header/footer layout emits normalized anchor Y coordinates:
    * - headers: local to the header container origin
    * - footers: local to the top of the footer band (pageHeight - bottomMargin)
@@ -2125,9 +2226,13 @@ export class DomPainter {
     const className = kind === 'header' ? CLASS_NAMES.pageHeader : CLASS_NAMES.pageFooter;
     const existing = pageEl.querySelector(`.${className}`);
     const data = provider ? provider(page.number, page.margins, page) : null;
+    const behindDocSelector = `[data-behind-doc-section="${kind}"]`;
+    const overlaySelector = `[data-header-footer-overlay-section="${kind}"]`;
 
     if (!data || data.fragments.length === 0) {
       existing?.remove();
+      pageEl.querySelectorAll(behindDocSelector).forEach((el) => el.remove());
+      pageEl.querySelectorAll(overlaySelector).forEach((el) => el.remove());
       return;
     }
 
@@ -2233,35 +2338,41 @@ export class DomPainter {
     const decorationItems = data.items ?? [];
     const betweenBorderFlags = computeBetweenBorderFlags(decorationItems);
 
-    // Separate behindDoc fragments from normal fragments.
+    // Separate page-level behindDoc and foreground wrapNone overlay fragments
+    // from normal header/footer container content.
     // Prefer explicit fragment.behindDoc when present. Keep zIndex===0 as a
     // compatibility fallback for older layouts that predate explicit metadata.
     // Track original index for between-border flag lookup.
     const behindDocFragments: { fragment: (typeof data.fragments)[number]; originalIndex: number }[] = [];
+    const absoluteOverlayFragments: { fragment: (typeof data.fragments)[number]; originalIndex: number }[] = [];
     const normalFragments: { fragment: (typeof data.fragments)[number]; originalIndex: number }[] = [];
 
     for (let fi = 0; fi < data.fragments.length; fi += 1) {
       const fragment = data.fragments[fi];
+      const resolvedItem = decorationItems[fi];
       let isBehindDoc = false;
       if (fragment.kind === 'image' || fragment.kind === 'drawing') {
-        const resolvedItem = decorationItems[fi] as ResolvedDrawingItem | undefined;
+        const resolvedMediaItem = resolvedItem as ResolvedImageItem | ResolvedDrawingItem | undefined;
         isBehindDoc =
           fragment.behindDoc === true ||
           (fragment.behindDoc == null && 'zIndex' in fragment && fragment.zIndex === 0) ||
-          this.shouldRenderBehindPageContent(fragment, kind, resolvedItem);
+          this.shouldRenderBehindPageContent(fragment, kind, resolvedMediaItem);
       }
       if (isBehindDoc) {
         behindDocFragments.push({ fragment, originalIndex: fi });
+      } else if (this.isHeaderFooterAbsoluteOverlayFragment(fragment, kind, resolvedItem)) {
+        absoluteOverlayFragments.push({ fragment, originalIndex: fi });
       } else {
         normalFragments.push({ fragment, originalIndex: fi });
       }
     }
 
-    // Remove any previously rendered behindDoc fragments for this section before re-rendering.
-    // Unlike the header/footer container (which uses innerHTML = '' to clear), behindDoc
-    // fragments are placed directly on the page element and must be explicitly removed.
-    const behindDocSelector = `[data-behind-doc-section="${kind}"]`;
+    // Remove any previously rendered page-level decoration fragments for this
+    // section before re-rendering. Unlike the header/footer container (which
+    // uses innerHTML = '' to clear), these fragments are placed directly on
+    // the page element and must be explicitly removed.
     pageEl.querySelectorAll(behindDocSelector).forEach((el) => el.remove());
+    pageEl.querySelectorAll(overlaySelector).forEach((el) => el.remove());
 
     // Render behindDoc fragments directly on the page with z-index: 0
     // and insert them at the beginning of the page so they render behind body content.
@@ -2291,12 +2402,16 @@ export class DomPainter {
         pageY = effectiveOffset + fragment.y + (kind === 'footer' ? footerYOffset : 0);
       }
 
+      const isHorizontallyPageRelative = this.isHorizontallyPageRelativeAnchoredFragment(fragment, resolvedItem);
       fragEl.style.top = `${pageY}px`;
-      fragEl.style.left = `${isPageRelative ? fragment.x : marginLeft + fragment.x}px`;
+      fragEl.style.left = `${isHorizontallyPageRelative ? fragment.x : marginLeft + fragment.x}px`;
       fragEl.style.zIndex = '0'; // Same level as page, but inserted first so renders behind
       fragEl.dataset.behindDocSection = kind; // Track for cleanup on re-render
-      // Insert at beginning of page so it renders behind body content due to DOM order
-      pageEl.insertBefore(fragEl, pageEl.firstChild);
+      this.insertPageBackgroundDecoration(
+        pageEl,
+        fragEl,
+        this.getPageBackgroundDecorationZOrder(fragment, resolvedItem),
+      );
     });
 
     // Render normal fragments in the header/footer container
@@ -2330,6 +2445,47 @@ export class DomPainter {
     if (!existing) {
       pageEl.appendChild(container);
     }
+
+    absoluteOverlayFragments.forEach(({ fragment, originalIndex }) => {
+      const resolvedItem = data.items?.[originalIndex];
+      const fragEl = this.renderFragment(
+        fragment,
+        context,
+        undefined,
+        betweenBorderFlags.get(originalIndex),
+        resolvedItem,
+      );
+      const isPageRelative = this.isPageRelativeAnchoredFragment(fragment, resolvedItem);
+      this.applyHeaderFooterTextWatermarkPreviewOpacity(fragEl, data.isActiveHeaderFooter === true);
+
+      let pageY: number;
+      if (isPageRelative && kind === 'footer') {
+        pageY = footerAnchorPageOriginY + fragment.y;
+      } else if (isPageRelative) {
+        pageY = fragment.y;
+      } else {
+        pageY = effectiveOffset + fragment.y + (kind === 'footer' ? footerYOffset : 0);
+      }
+
+      const isHorizontallyPageRelative = this.isHorizontallyPageRelativeAnchoredFragment(fragment, resolvedItem);
+      fragEl.style.top = `${pageY}px`;
+      fragEl.style.left = `${isHorizontallyPageRelative ? fragment.x : marginLeft + fragment.x}px`;
+      // Header/footer wrapNone shapes still belong to the page background story:
+      // keep their authored z-order within that story, but do not let their high
+      // OOXML z-index lift them above body content.
+      fragEl.style.zIndex = '0';
+      // Word parity: header/footer overlay content is inert while editing the
+      // body, but becomes clickable once its header/footer session is active.
+      if (data.isActiveHeaderFooter !== true) {
+        fragEl.style.pointerEvents = 'none';
+      }
+      fragEl.dataset.headerFooterOverlaySection = kind;
+      this.insertPageBackgroundDecoration(
+        pageEl,
+        fragEl,
+        this.getPageBackgroundDecorationZOrder(fragment, resolvedItem),
+      );
+    });
   }
 
   private resetState(): void {
@@ -2971,6 +3127,16 @@ export class DomPainter {
       innerWrapper.style.width = `${fragment.geometry.width}px`;
       innerWrapper.style.height = `${fragment.geometry.height}px`;
       innerWrapper.style.transformOrigin = 'center';
+      if (block.drawingKind === 'shapeGroup' && block.groupTransform) {
+        const effectExtent = block.effectExtent ?? { left: 0, top: 0, right: 0, bottom: 0 };
+        const groupWidth =
+          block.groupTransform.width ?? Math.max(0, block.geometry.width - effectExtent.left - effectExtent.right);
+        const groupHeight =
+          block.groupTransform.height ?? Math.max(0, block.geometry.height - effectExtent.top - effectExtent.bottom);
+        const originX = effectExtent.left + groupWidth / 2;
+        const originY = effectExtent.top + groupHeight / 2;
+        innerWrapper.style.transformOrigin = `${originX}px ${originY}px`;
+      }
 
       const scale = fragment.scale ?? 1;
       const transforms: string[] = ['translate(-50%, -50%)'];
@@ -3005,7 +3171,7 @@ export class DomPainter {
       return this.createVectorShapeElement(block, fragment.geometry, false, 1, 1, context, fragment);
     }
     if (block.drawingKind === 'shapeGroup') {
-      return this.createShapeGroupElement(block, context);
+      return this.createShapeGroupElement(block, context, fragment.geometry);
     }
     if (block.drawingKind === 'chart') {
       return this.createChartElement(block);
@@ -3056,6 +3222,7 @@ export class DomPainter {
         svgElement.setAttribute('width', '100%');
         svgElement.setAttribute('height', '100%');
         svgElement.style.display = 'block';
+        svgElement.style.overflow = 'visible';
 
         // Apply gradient fill if present
         if (block.fillColor && typeof block.fillColor === 'object') {
@@ -3066,6 +3233,9 @@ export class DomPainter {
           }
         }
 
+        // Shadows paint inside the docx-provided effectExtent box. Do not derive extra visual room here;
+        // files with missing or undersized effectExtent can still clip large outer shadows.
+        this.applyShapeEffects(svgElement, block);
         this.applyLineEnds(svgElement, block);
         contentContainer.appendChild(svgElement);
 
@@ -3454,26 +3624,53 @@ export class DomPainter {
       textDiv.style.textAlign = 'left';
     }
 
+    const paragraphSpacing = textContent.paragraphs;
+    const spacingBefore = (index: number) => paragraphSpacing?.[index]?.spacing?.before;
+    const spacingAfter = (index: number) => paragraphSpacing?.[index]?.spacing?.after;
+    const createParagraphElement = () => {
+      const paragraph = this.doc!.createElement('div');
+      // Set width to 100% to enable text wrapping within the shape bounds
+      paragraph.style.width = '100%';
+      // min-width: 0 prevents flex item from overflowing (flexbox default is min-width: auto)
+      paragraph.style.minWidth = '0';
+      // Override inherited white-space: pre from parent fragment to allow text wrapping
+      paragraph.style.whiteSpace = 'normal';
+      paragraph.style.marginLeft = '0';
+      paragraph.style.marginRight = '0';
+      return paragraph;
+    };
+
     // Create paragraphs by splitting on line breaks
-    let currentParagraph = this.doc!.createElement('div');
-    // Set width to 100% to enable text wrapping within the shape bounds
-    currentParagraph.style.width = '100%';
-    // min-width: 0 prevents flex item from overflowing (flexbox default is min-width: auto)
-    currentParagraph.style.minWidth = '0';
-    // Override inherited white-space: pre from parent fragment to allow text wrapping
-    currentParagraph.style.whiteSpace = 'normal';
+    let logicalParagraphIndex = 0;
+    let currentParagraph = createParagraphElement();
+    const firstParagraphBefore = spacingBefore(logicalParagraphIndex);
+    if (typeof firstParagraphBefore === 'number') {
+      currentParagraph.style.marginTop = `${firstParagraphBefore}px`;
+    }
 
     textContent.parts.forEach((part) => {
       if (part.isLineBreak) {
+        if (part.isParagraphBoundary) {
+          const currentParagraphAfter = spacingAfter(logicalParagraphIndex);
+          if (typeof currentParagraphAfter === 'number') {
+            currentParagraph.style.marginBottom = `${currentParagraphAfter}px`;
+          }
+        }
+
         // Finish current paragraph and start a new one
         textDiv.appendChild(currentParagraph);
-        currentParagraph = this.doc!.createElement('div');
-        currentParagraph.style.width = '100%';
-        currentParagraph.style.minWidth = '0';
-        currentParagraph.style.whiteSpace = 'normal';
+        currentParagraph = createParagraphElement();
         // Empty paragraphs create extra spacing (blank line)
         if (part.isEmptyParagraph) {
           currentParagraph.style.minHeight = '1em';
+        }
+
+        if (part.isParagraphBoundary) {
+          logicalParagraphIndex += 1;
+          const nextParagraphBefore = spacingBefore(logicalParagraphIndex);
+          if (typeof nextParagraphBefore === 'number') {
+            currentParagraph.style.marginTop = `${nextParagraphBefore}px`;
+          }
         }
       } else if (part.kind === 'image' && part.src) {
         currentParagraph.appendChild(createShapeTextImageElement(this.doc!, part));
@@ -3509,6 +3706,10 @@ export class DomPainter {
     });
 
     // Add the final paragraph
+    const finalParagraphAfter = spacingAfter(logicalParagraphIndex);
+    if (typeof finalParagraphAfter === 'number') {
+      currentParagraph.style.marginBottom = `${finalParagraphAfter}px`;
+    }
     textDiv.appendChild(currentParagraph);
 
     return textDiv;
@@ -3594,6 +3795,9 @@ export class DomPainter {
     // Degenerate: zero-dimension viewBox is invalid SVG — skip rendering.
     if (viewW === 0 || viewH === 0) return null;
 
+    const hasLargeCoordinateScale = viewW / width > 10 || viewH / height > 10;
+    const explicitStrokeEffect = hasLargeCoordinateScale ? ' vector-effect="non-scaling-stroke"' : '';
+
     // When the SVG viewBox maps to a non-uniform aspect ratio (common with group transforms),
     // thin fill borders can become sub-pixel on one axis. Add a hairline stroke matching the
     // fill color with vector-effect="non-scaling-stroke" so edges remain at least 0.5px visible.
@@ -3612,7 +3816,9 @@ export class DomPainter {
         const scaleY = viewH / pathH;
         const transform = needsTransform ? ` transform="scale(${scaleX}, ${scaleY})"` : '';
         const strokeAttr =
-          strokeColor !== 'none' ? ` stroke="${strokeColor}" stroke-width="${strokeWidth}"` : edgeStroke;
+          strokeColor !== 'none'
+            ? ` stroke="${strokeColor}" stroke-width="${strokeWidth}"${explicitStrokeEffect}`
+            : edgeStroke;
         return `<path d="${p.d}" fill="${fillColor}" fill-rule="evenodd"${strokeAttr}${transform} />`;
       })
       .join('\n  ');
@@ -3718,6 +3924,132 @@ export class DomPainter {
       );
       target.setAttribute('marker-end', `url(#${id})`);
     }
+  }
+
+  private applyShapeEffects(svgElement: SVGElement, block: ShapeTextDrawingWithEffects): void {
+    const outerShadow = block.effects?.outerShadow;
+    if (!outerShadow) return;
+    this.applyOuterShadowEffect(svgElement, block.id, outerShadow);
+  }
+
+  private applyOuterShadowEffect(svgElement: SVGElement, blockId: string, shadow: ShapeOuterShadowEffect): void {
+    const targets = this.findShapeEffectTargets(svgElement);
+    if (!targets.length) return;
+
+    const defs = this.ensureSvgDefs(svgElement);
+    const filterId = this.sanitizeSvgId(`sd-shadow-${blockId}`);
+    const outlineFilterId = this.sanitizeSvgId(`sd-shadow-outline-${blockId}`);
+    if (!defs.querySelector(`#${filterId}`)) {
+      const filter = this.doc!.createElementNS('http://www.w3.org/2000/svg', 'filter');
+      filter.setAttribute('id', filterId);
+      filter.setAttribute('x', '-50%');
+      filter.setAttribute('y', '-50%');
+      filter.setAttribute('width', '200%');
+      filter.setAttribute('height', '200%');
+
+      const { dx, dy } = resolveOuterShadowOffset(shadow);
+      const dropShadow = this.doc!.createElementNS('http://www.w3.org/2000/svg', 'feDropShadow');
+      dropShadow.setAttribute('dx', this.formatSvgNumber(dx));
+      dropShadow.setAttribute('dy', this.formatSvgNumber(dy));
+      dropShadow.setAttribute('stdDeviation', this.formatSvgNumber(getOuterShadowStdDeviation(shadow)));
+      dropShadow.setAttribute('flood-color', shadow.color);
+      dropShadow.setAttribute('flood-opacity', this.formatSvgNumber(shadow.opacity));
+
+      filter.appendChild(dropShadow);
+      defs.appendChild(filter);
+    }
+
+    targets.forEach((target) => {
+      if (this.shouldRenderFilledShadowClone(target)) {
+        this.appendFilledShadowClone(svgElement, defs, target, outlineFilterId, shadow);
+        return;
+      }
+      target.setAttribute('filter', `url(#${filterId})`);
+    });
+  }
+
+  private findShapeEffectTargets(svgElement: SVGElement): SVGElement[] {
+    return Array.from(svgElement.querySelectorAll('path, line, polyline, polygon, rect, ellipse, circle')).filter(
+      (target) => !target.closest('defs') && !target.hasAttribute('data-sd-shadow-clone'),
+    ) as SVGElement[];
+  }
+
+  private shouldRenderFilledShadowClone(target: SVGElement): boolean {
+    const fill = target.getAttribute('fill');
+    if (fill !== 'none') return false;
+    if (target.tagName.toLowerCase() === 'path') {
+      return /z\s*$/i.test(target.getAttribute('d') ?? '');
+    }
+    return ['polygon', 'rect', 'ellipse', 'circle'].includes(target.tagName.toLowerCase());
+  }
+
+  private appendFilledShadowClone(
+    svgElement: SVGElement,
+    defs: SVGDefsElement,
+    target: SVGElement,
+    filterId: string,
+    shadow: ShapeOuterShadowEffect,
+  ): void {
+    this.ensureOuterShadowOnlyFilter(defs, filterId, shadow);
+
+    const clone = target.cloneNode(false) as SVGElement;
+    clone.setAttribute('data-sd-shadow-clone', filterId);
+    clone.setAttribute('aria-hidden', 'true');
+    clone.setAttribute('fill', '#000000');
+    clone.setAttribute('stroke', 'none');
+    clone.setAttribute('filter', `url(#${filterId})`);
+    target.parentNode?.insertBefore(clone, target);
+  }
+
+  private ensureOuterShadowOnlyFilter(defs: SVGDefsElement, filterId: string, shadow: ShapeOuterShadowEffect): void {
+    if (defs.querySelector(`#${filterId}`)) return;
+
+    const filter = this.doc!.createElementNS('http://www.w3.org/2000/svg', 'filter');
+    filter.setAttribute('id', filterId);
+    filter.setAttribute('x', '-50%');
+    filter.setAttribute('y', '-50%');
+    filter.setAttribute('width', '200%');
+    filter.setAttribute('height', '200%');
+
+    const blur = this.doc!.createElementNS('http://www.w3.org/2000/svg', 'feGaussianBlur');
+    blur.setAttribute('in', 'SourceAlpha');
+    blur.setAttribute('stdDeviation', this.formatSvgNumber(getOuterShadowStdDeviation(shadow)));
+    blur.setAttribute('result', 'blur');
+
+    const { dx, dy } = resolveOuterShadowOffset(shadow);
+    const offset = this.doc!.createElementNS('http://www.w3.org/2000/svg', 'feOffset');
+    offset.setAttribute('in', 'blur');
+    offset.setAttribute('dx', this.formatSvgNumber(dx));
+    offset.setAttribute('dy', this.formatSvgNumber(dy));
+    offset.setAttribute('result', 'offsetBlur');
+
+    const flood = this.doc!.createElementNS('http://www.w3.org/2000/svg', 'feFlood');
+    flood.setAttribute('flood-color', shadow.color);
+    flood.setAttribute('flood-opacity', this.formatSvgNumber(shadow.opacity));
+    flood.setAttribute('result', 'shadowColor');
+
+    const composite = this.doc!.createElementNS('http://www.w3.org/2000/svg', 'feComposite');
+    composite.setAttribute('in', 'shadowColor');
+    composite.setAttribute('in2', 'offsetBlur');
+    composite.setAttribute('operator', 'in');
+    composite.setAttribute('result', 'shadow');
+
+    const outsideOnly = this.doc!.createElementNS('http://www.w3.org/2000/svg', 'feComposite');
+    outsideOnly.setAttribute('in', 'shadow');
+    outsideOnly.setAttribute('in2', 'SourceAlpha');
+    outsideOnly.setAttribute('operator', 'out');
+    outsideOnly.setAttribute('result', 'outerShadow');
+
+    filter.appendChild(blur);
+    filter.appendChild(offset);
+    filter.appendChild(flood);
+    filter.appendChild(composite);
+    filter.appendChild(outsideOnly);
+    defs.appendChild(filter);
+  }
+
+  private formatSvgNumber(value: number): string {
+    return Number.isFinite(value) ? Number(value.toFixed(4)).toString() : '0';
   }
 
   private findLineEndTarget(svgElement: SVGElement): SVGElement | null {
@@ -3826,7 +4158,11 @@ export class DomPainter {
     }
   }
 
-  private createShapeGroupElement(block: ShapeGroupDrawing, context?: FragmentRenderContext): HTMLElement {
+  private createShapeGroupElement(
+    block: ShapeGroupDrawing,
+    context?: FragmentRenderContext,
+    fragmentGeometry?: DrawingGeometry,
+  ): HTMLElement {
     const groupEl = this.doc!.createElement('div');
     groupEl.classList.add('superdoc-shape-group');
     groupEl.style.position = 'relative';
@@ -3835,38 +4171,73 @@ export class DomPainter {
 
     const groupTransform = block.groupTransform;
     let contentContainer: HTMLElement = groupEl;
+    const groupEffectExtent = block.effectExtent ?? { left: 0, top: 0, right: 0, bottom: 0 };
+    const hasGroupEffectExtent =
+      groupEffectExtent.left > 0 ||
+      groupEffectExtent.top > 0 ||
+      groupEffectExtent.right > 0 ||
+      groupEffectExtent.bottom > 0;
 
-    const visibleWidth = groupTransform?.width ?? block.geometry.width ?? 0;
-    const visibleHeight = groupTransform?.height ?? block.geometry.height ?? 0;
+    const visibleWidth =
+      groupTransform?.width ??
+      Math.max(0, (block.geometry.width ?? 0) - groupEffectExtent.left - groupEffectExtent.right);
+    const visibleHeight =
+      groupTransform?.height ??
+      Math.max(0, (block.geometry.height ?? 0) - groupEffectExtent.top - groupEffectExtent.bottom);
 
-    if (groupTransform) {
+    if (groupTransform || hasGroupEffectExtent) {
       const inner = this.doc!.createElement('div');
       inner.style.position = 'absolute';
-      inner.style.left = '0';
-      inner.style.top = '0';
+      inner.style.left = `${groupEffectExtent.left}px`;
+      inner.style.top = `${groupEffectExtent.top}px`;
       // Container at visible dimensions. Children use pre-scaled positions/sizes.
       inner.style.width = `${Math.max(1, visibleWidth)}px`;
       inner.style.height = `${Math.max(1, visibleHeight)}px`;
+      const groupTransforms: string[] = [];
+      const normalizedGroupRotation =
+        typeof groupTransform?.rotation === 'number' ? normalizeRotationDegrees(groupTransform.rotation) : 0;
+      const normalizedFragmentRotation =
+        typeof fragmentGeometry?.rotation === 'number' ? normalizeRotationDegrees(fragmentGeometry.rotation) : 0;
+      const groupRotation =
+        normalizedGroupRotation && normalizedGroupRotation !== normalizedFragmentRotation
+          ? (groupTransform?.rotation ?? 0)
+          : 0;
+      const groupFlipH = groupTransform?.flipH && groupTransform.flipH !== fragmentGeometry?.flipH;
+      const groupFlipV = groupTransform?.flipV && groupTransform.flipV !== fragmentGeometry?.flipV;
+      if (groupRotation) {
+        groupTransforms.push(`rotate(${groupRotation}deg)`);
+      }
+      if (groupFlipH) {
+        groupTransforms.push('scaleX(-1)');
+      }
+      if (groupFlipV) {
+        groupTransforms.push('scaleY(-1)');
+      }
+      if (groupTransforms.length > 0) {
+        inner.style.transformOrigin = 'center';
+        inner.style.transform = groupTransforms.join(' ');
+      }
       groupEl.appendChild(inner);
       contentContainer = inner;
     }
 
-    block.shapes.forEach((child) => {
-      const childContent = this.createGroupChildContent(child, 1, 1, context);
-      if (!childContent) return;
+    block.shapes.forEach((child, childIndex) => {
       const attrs = (child as ShapeGroupChild).attrs ?? {};
+      const paintExtent = this.getShapeGroupChildPaintExtent(child);
+      const childContent = this.createGroupChildContent(child, 1, 1, context, paintExtent, block.id, childIndex);
+      if (!childContent) return;
       const wrapper = this.doc!.createElement('div');
       wrapper.classList.add('superdoc-shape-group__child');
       wrapper.style.position = 'absolute';
 
       // Children use pre-scaled (visual-space) positions/sizes from import.
-      wrapper.style.left = `${Number(attrs.x ?? 0)}px`;
-      wrapper.style.top = `${Number(attrs.y ?? 0)}px`;
+      wrapper.style.left = `${Number(attrs.x ?? 0) - paintExtent.left}px`;
+      wrapper.style.top = `${Number(attrs.y ?? 0) - paintExtent.top}px`;
 
       const childW = typeof attrs.width === 'number' ? attrs.width : block.geometry.width;
       const childH = typeof attrs.height === 'number' ? attrs.height : block.geometry.height;
-      wrapper.style.width = `${Math.max(1, childW)}px`;
-      wrapper.style.height = `${Math.max(1, childH)}px`;
+      wrapper.style.width = `${Math.max(1, childW + paintExtent.left + paintExtent.right)}px`;
+      wrapper.style.height = `${Math.max(1, childH + paintExtent.top + paintExtent.bottom)}px`;
 
       wrapper.style.transformOrigin = 'center';
       const transforms: string[] = [];
@@ -3891,11 +4262,50 @@ export class DomPainter {
     return groupEl;
   }
 
+  private getShapeGroupChildPaintExtent(child: ShapeGroupChild): EffectExtent {
+    if (child.shapeType !== 'vectorShape' || !('fillColor' in child.attrs)) {
+      return { left: 0, top: 0, right: 0, bottom: 0 };
+    }
+    const attrs = child.attrs as VectorShapeStyle;
+    // Producers must include equivalent group-level effectExtent for edge children so the fragment can grow.
+    // Line-end markers use effectExtent for marker sizing; do not overload it with stroke paint room.
+    const shadowExtent = attrs.effects?.outerShadow
+      ? getSharedOuterShadowPaintExtent(attrs.effects.outerShadow)
+      : { left: 0, top: 0, right: 0, bottom: 0 };
+    if (attrs.lineEnds) {
+      return { left: 0, top: 0, right: 0, bottom: 0 };
+    }
+    if (attrs.strokeColor === null) {
+      return shadowExtent;
+    }
+    const rawStrokeWidth = (child.attrs as { strokeWidth?: unknown }).strokeWidth;
+    const parsedStrokeWidth =
+      typeof rawStrokeWidth === 'number'
+        ? rawStrokeWidth
+        : typeof rawStrokeWidth === 'string' && rawStrokeWidth.trim() !== ''
+          ? Number(rawStrokeWidth)
+          : undefined;
+    const strokeWidth = parsedStrokeWidth != null && Number.isFinite(parsedStrokeWidth) ? parsedStrokeWidth : 1;
+    if (strokeWidth <= 0) {
+      return shadowExtent;
+    }
+    const extent = strokeWidth / 2;
+    return {
+      left: Math.max(extent, shadowExtent.left),
+      top: Math.max(extent, shadowExtent.top),
+      right: Math.max(extent, shadowExtent.right),
+      bottom: Math.max(extent, shadowExtent.bottom),
+    };
+  }
+
   private createGroupChildContent(
     child: ShapeGroupChild,
     groupScaleX: number = 1,
     groupScaleY: number = 1,
     context?: FragmentRenderContext,
+    paintExtent: EffectExtent = { left: 0, top: 0, right: 0, bottom: 0 },
+    groupId?: string,
+    childIndex?: number,
   ): HTMLElement | null {
     // Type narrowing with explicit checks to help TypeScript distinguish union members
     if (child.shapeType === 'vectorShape' && 'fillColor' in child.attrs) {
@@ -3909,18 +4319,24 @@ export class DomPainter {
           textContent?: ShapeTextContent;
           textAlign?: string;
           lineEnds?: LineEnds;
+          effects?: ShapeEffects;
         };
       const childGeometry = {
-        width: attrs.width ?? 0,
-        height: attrs.height ?? 0,
+        width: (attrs.width ?? 0) + paintExtent.left + paintExtent.right,
+        height: (attrs.height ?? 0) + paintExtent.top + paintExtent.bottom,
         rotation: attrs.rotation ?? 0,
         flipH: attrs.flipH ?? false,
         flipV: attrs.flipV ?? false,
       };
+      const hasPaintExtent =
+        paintExtent.left > 0 || paintExtent.top > 0 || paintExtent.right > 0 || paintExtent.bottom > 0;
       const vectorChild: ShapeTextDrawingWithEffects = {
         drawingKind: 'vectorShape',
         kind: 'drawing',
-        id: `${attrs.shapeId ?? child.shapeType}`,
+        id:
+          groupId != null
+            ? `${groupId}-${childIndex ?? 0}-${attrs.shapeId ?? child.shapeType}`
+            : `${attrs.shapeId ?? child.shapeType}`,
         geometry: childGeometry,
         padding: undefined,
         margin: undefined,
@@ -3935,10 +4351,12 @@ export class DomPainter {
         strokeColor: attrs.strokeColor,
         strokeWidth: attrs.strokeWidth,
         lineEnds: attrs.lineEnds,
+        effects: attrs.effects,
         textContent: attrs.textContent,
         textAlign: attrs.textAlign,
         textVerticalAlign: attrs.textVerticalAlign,
         textInsets: attrs.textInsets,
+        effectExtent: hasPaintExtent ? paintExtent : undefined,
       };
       // Pass geometry and scale factors to ensure text overlay has correct dimensions
       return this.createVectorShapeElement(vectorChild, childGeometry, false, groupScaleX, groupScaleY, context);
