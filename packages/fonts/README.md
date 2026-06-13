@@ -1,4 +1,4 @@
-# @superdoc/fonts
+# @superdoc-dev/fonts
 
 The reviewed metric-compatible font substitutes SuperDoc renders when a document asks for a
 proprietary font (Carlito for Calibri, Liberation Serif for Times New Roman, and so on). This
@@ -19,7 +19,7 @@ lazily in the browser: only the few a document actually uses are fetched.
 
 ```js
 import { SuperDoc } from 'superdoc';
-import { resolveBundledFontAssetUrl } from '@superdoc/fonts';
+import { resolveBundledFontAssetUrl } from '@superdoc-dev/fonts';
 
 new SuperDoc({
   selector: '#editor',
@@ -31,7 +31,7 @@ new SuperDoc({
 Or pass the ready-made config object:
 
 ```js
-import { superdocFonts } from '@superdoc/fonts';
+import { superdocFonts } from '@superdoc-dev/fonts';
 
 new SuperDoc({ selector: '#editor', document, fonts: superdocFonts });
 ```
@@ -39,6 +39,25 @@ new SuperDoc({ selector: '#editor', document, fonts: superdocFonts });
 That is the whole setup. No copying files into `public/`, no `assetBaseUrl`. The asset URLs are
 written as `new URL('../assets/<file>', import.meta.url)`, which Vite, Webpack 5, Next, Nuxt,
 esbuild, and Parcel all detect, emit, and rewrite to the final hashed path.
+
+### Choosing which fonts
+
+`superdocFonts` enables every reviewed family. To narrow the set, use `createSuperDocFonts` and name
+the families by their Word name (`Calibri`, not the substitute `Carlito`):
+
+```js
+import { createSuperDocFonts } from '@superdoc-dev/fonts';
+
+// Everything except a couple:
+new SuperDoc({ selector: '#editor', document, fonts: createSuperDocFonts({ exclude: ['Cooper Black'] }) });
+
+// Or only an explicit set:
+new SuperDoc({ selector: '#editor', document, fonts: createSuperDocFonts({ include: ['Calibri', 'Cambria'] }) });
+```
+
+`include` is an allow-list; `exclude` keeps everything but the named families. Curation drives the
+toolbar list and which families SuperDoc substitutes. Your own licensed fonts stay separate
+(`fonts.families`).
 
 ### Hosting the assets another way
 
@@ -48,7 +67,7 @@ resolver. Point SuperDoc at your location with `fonts.assetBaseUrl` or your own
 
 ## Versioning
 
-`@superdoc/fonts` and `superdoc` version independently, but they share the bundled font set.
+`@superdoc-dev/fonts` and `superdoc` version independently, but they share the bundled font set.
 Update them together. If the two drift, the resolver throws on an unknown face filename rather
 than degrading silently, so a mismatch surfaces immediately instead of turning into a missing
 font at render time.
