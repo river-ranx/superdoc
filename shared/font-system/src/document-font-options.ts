@@ -102,10 +102,16 @@ export function buildFontFamilyOptions(
     const key = normalizeKey(offering.logicalFamily);
     if (seen.has(key)) continue;
     seen.add(key);
+    // Preview in the physical clone (e.g. Carlito) only when the pack is configured and thus served.
+    // In baseline the clone is neither registered nor served, so previewing in it would render a
+    // generic fallback that misrepresents the painted text - use the logical family that renders.
+    const previewFamily = activation.packConfigured
+      ? offering.physicalFamily || offering.logicalFamily
+      : offering.logicalFamily;
     options.push({
       label: offering.logicalFamily,
       value: offering.logicalFamily,
-      previewFamily: offering.physicalFamily || offering.logicalFamily,
+      previewFamily,
     });
   }
   for (const option of documentOptions) {

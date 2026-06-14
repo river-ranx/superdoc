@@ -144,6 +144,16 @@ describe('buildFontFamilyOptions (custom UI font picker rows)', () => {
     expect(options.every((option) => !('status' in option))).toBe(true);
   });
 
+  it('baseline built-in rows preview in the logical family; configured rows preview in the physical clone', () => {
+    // In baseline the physical clone (e.g. Liberation Serif) is neither registered nor served, so the
+    // row must preview in the logical family that actually renders - not the clone.
+    const baselineTnr = buildFontFamilyOptions([], BASELINE_BUNDLED).find((o) => o.label === 'Times New Roman');
+    expect(baselineTnr?.previewFamily).toBe('Times New Roman');
+    // With the pack configured the clone is served, so the preview uses the physical clone.
+    const richTnr = buildFontFamilyOptions([], FULLY_ACTIVE_BUNDLED).find((o) => o.label === 'Times New Roman');
+    expect(richTnr?.previewFamily).not.toBe('Times New Roman');
+  });
+
   it('with the pack configured: the full built-in set plus document fonts', () => {
     const options = buildFontFamilyOptions(documentOptions, FULLY_ACTIVE_BUNDLED);
     expect(options.map((option) => option.label)).toEqual([
