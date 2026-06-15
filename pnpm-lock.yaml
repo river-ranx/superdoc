@@ -3409,31 +3409,6 @@ importers:
         specifier: 'catalog:'
         version: 3.2.4(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/debug@4.1.13)(@types/node@25.6.0)(esbuild@0.27.7)(happy-dom@20.4.0)(jiti@2.6.1)(jsdom@27.3.0(canvas@3.2.3))(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
 
-  tests/visual:
-    dependencies:
-      superdoc:
-        specifier: workspace:*
-        version: link:../../packages/superdoc
-    devDependencies:
-      '@aws-sdk/client-s3':
-        specifier: ^3.988.0
-        version: 3.1019.0
-      '@clack/prompts':
-        specifier: ^1.0.0
-        version: 1.1.0
-      '@playwright/test':
-        specifier: 'catalog:'
-        version: 1.58.2
-      dotenv:
-        specifier: 'catalog:'
-        version: 16.6.1
-      tsx:
-        specifier: 'catalog:'
-        version: 4.21.0
-      vite:
-        specifier: npm:rolldown-vite@7.3.1
-        version: rolldown-vite@7.3.1(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
-
 packages:
 
   '@acemir/cssom@0.9.31':

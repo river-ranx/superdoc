@@ -1,6 +1,6 @@
 # Writing Behavior Tests - Agent Guide
 
-> **Other test suites:** `pnpm test` (unit), `pnpm --dir tests/visual test` (pixel diff). See root `CLAUDE.md` for the full testing overview.
+> **Other test suites:** `pnpm test` (unit), `pnpm test:document-api-smoke`, and `pnpm check:public`. See root `CLAUDE.md` for the full testing overview.
 
 ## Explicit: Run and Debug with Playwright CLI
 
