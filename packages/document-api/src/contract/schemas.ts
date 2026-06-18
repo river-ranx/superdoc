@@ -8053,7 +8053,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       oneOf: [
         objectSchema(
           { at: textTargetSchema, type: { enum: ['footnote', 'endnote'] }, content: { type: 'string' } },
-          ['at', 'type', 'content'],
+          ['type', 'content'],
         ),
         objectSchema(
           {
@@ -8061,7 +8061,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
             type: { enum: ['footnote', 'endnote'] },
             body: { ...sdFragmentSchema, description: 'Structured SDM/1 note body.' },
           },
-          ['at', 'type', 'body'],
+          ['type', 'body'],
         ),
       ],
     },

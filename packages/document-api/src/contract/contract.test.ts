@@ -305,10 +305,10 @@ describe('document-api contract catalog', () => {
 
     const [contentVariant, bodyVariant] = insertInput.oneOf!;
     expect(Object.keys(contentVariant.properties ?? {}).sort()).toEqual(['at', 'content', 'type']);
-    expect(contentVariant.required).toEqual(['at', 'type', 'content']);
+    expect(contentVariant.required).toEqual(['type', 'content']);
 
     expect(Object.keys(bodyVariant.properties ?? {}).sort()).toEqual(['at', 'body', 'type']);
-    expect(bodyVariant.required).toEqual(['at', 'type', 'body']);
+    expect(bodyVariant.required).toEqual(['type', 'body']);
 
     const bodySchema = bodyVariant.properties!.body as { oneOf?: Array<{ type?: string }> };
     expect(Array.isArray(bodySchema.oneOf)).toBe(true);

@@ -5405,7 +5405,7 @@ export const OPERATION_DEFINITIONS = {
   },
   'footnotes.insert': {
     memberPath: 'footnotes.insert',
-    description: `Insert a new footnote or endnote at a target location.${FOOTNOTE_STRUCTURED_BODY_V1_NOTE}`,
+    description: `Insert a new footnote or endnote at a target location or the current selection.${FOOTNOTE_STRUCTURED_BODY_V1_NOTE}`,
     expectedResult: 'Returns a FootnoteMutationResult indicating success with the footnote address or a failure.',
     requiresDocumentContext: true,
     metadata: mutationOperation({

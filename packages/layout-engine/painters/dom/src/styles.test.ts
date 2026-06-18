@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   ensureDocumentSurfaceStyles,
+  ensureFootnoteStyles,
   ensureLinkStyles,
   ensureSdtContainerStyles,
   ensureTrackChangeStyles,
@@ -33,6 +34,33 @@ describe('lineStyles', () => {
   });
 });
 
+describe('ensureFootnoteStyles', () => {
+  it('renders a text cursor over footnote and endnote note content (SD-3400)', () => {
+    ensureFootnoteStyles(document);
+
+    const styleEl = document.querySelector('[data-superdoc-footnote-styles="true"]');
+    const cssText = styleEl?.textContent ?? '';
+
+    // Note fragments are generic .superdoc-fragment elements keyed by block-id prefix.
+    expect(cssText).toContain('[data-block-id^="footnote-"]');
+    expect(cssText).toContain('[data-block-id^="endnote-"]');
+    expect(cssText).toContain('[data-block-id^="__sd_semantic_footnote-"]');
+    expect(cssText).toContain('cursor: text;');
+  });
+  it('signals clickability on body reference markers and highlights the active note (SD-3400)', () => {
+    ensureFootnoteStyles(document);
+
+    const styleEl = document.querySelector('[data-superdoc-footnote-styles="true"]');
+    const cssText = styleEl?.textContent ?? '';
+
+    expect(cssText).toContain('[data-note-reference]');
+    expect(cssText).toContain('cursor: pointer;');
+    expect(cssText).toContain('[data-note-reference]:hover');
+    expect(cssText).toContain('.sd-note-session-active');
+    expect(cssText).toContain('sd-note-activate-pulse');
+  });
+});
+
 describe('ensureDocumentSurfaceStyles', () => {
   it('injects scoped foreground isolation without using important overrides', () => {
     ensureDocumentSurfaceStyles(document);
@@ -55,9 +83,12 @@ describe('style injection', () => {
     ensureLinkStyles(firstDoc);
     ensureLinkStyles(firstDoc);
     ensureLinkStyles(secondDoc);
+    ensureFootnoteStyles(secondDoc);
+    ensureFootnoteStyles(secondDoc);
 
     expect(firstDoc.head.querySelectorAll('[data-superdoc-link-styles="true"]')).toHaveLength(1);
     expect(secondDoc.head.querySelectorAll('[data-superdoc-link-styles="true"]')).toHaveLength(1);
+    expect(secondDoc.head.querySelectorAll('[data-superdoc-footnote-styles="true"]')).toHaveLength(1);
   });
 });
 
