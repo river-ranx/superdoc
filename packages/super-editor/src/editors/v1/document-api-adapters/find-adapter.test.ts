@@ -770,6 +770,22 @@ describe('findLegacyAdapter — text selectors', () => {
     expect(capturedOptions!.searchModel).toBe('visible');
   });
 
+  it('uses raw search model when includeDeletedText is true', () => {
+    let capturedOptions: Record<string, unknown> | undefined;
+    const doc = buildDoc({ typeName: 'paragraph', attrs: { sdBlockId: 'p1' }, nodeSize: 50, offset: 0 });
+    const search: SearchFn = (_pattern, options) => {
+      capturedOptions = options as Record<string, unknown>;
+      return [];
+    };
+    const editor = makeEditor(doc, search);
+    const query: Query = { select: { type: 'text', pattern: 'deleted', includeDeletedText: true } };
+
+    findLegacyAdapter(editor, query);
+
+    expect(capturedOptions).toBeDefined();
+    expect(capturedOptions!.searchModel).toBe('raw');
+  });
+
   it('throws when editor has no search command', () => {
     const doc = buildDoc({ typeName: 'paragraph', attrs: { sdBlockId: 'p1' }, nodeSize: 50, offset: 0 });
     const editor = makeEditor(doc); // no search command

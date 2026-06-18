@@ -1150,6 +1150,24 @@ const textSelectorSchema = objectSchema(
     },
     caseSensitive: { type: 'boolean', description: 'Case-sensitive matching. Default: false.' },
     wholeWord: { type: 'boolean', description: 'Require word-boundary matches. Default: false.' },
+    includeDeletedText: { type: 'boolean', description: 'When true, includes text from pending tracked deletions. Default: false.' },
+  },
+  ['type', 'pattern'],
+);
+// Intentionally omits includeDeletedText — plan engine (apply/preview) and query.match do not support raw search.
+const planTextSelectorSchema = objectSchema(
+  {
+    type: { const: 'text', description: "Must be 'text' for text pattern search." },
+    pattern: {
+      type: 'string',
+      description: 'Text to match. In regex mode, patterns are validated for syntax, maximum length, and safety before execution.',
+    },
+    mode: {
+      enum: ['contains', 'regex'],
+      description: "Match mode: 'contains' (literal substring, recommended for literal text) or 'regex' (validated regular expression).",
+    },
+    caseSensitive: { type: 'boolean', description: 'Case-sensitive matching. Default: false.' },
+    wholeWord: { type: 'boolean', description: 'Require word-boundary matches. Default: false.' },
   },
   ['type', 'pattern'],
 );
@@ -1181,6 +1199,7 @@ const sdTextSelectorSchema = objectSchema(
     mode: { enum: ['contains', 'regex'] },
     caseSensitive: { type: 'boolean' },
     wholeWord: { type: 'boolean' },
+    includeDeletedText: { type: 'boolean' },
   },
   ['type', 'pattern'],
 );
@@ -5775,7 +5794,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
         select: {
           description:
             "Search selector. Use {type:'text', pattern:'...'} for text search or {type:'node', nodeType:'paragraph'|'heading'|...} for node search.",
-          oneOf: [textSelectorSchema, nodeSelectorSchema],
+          oneOf: [planTextSelectorSchema, nodeSelectorSchema],
         },
         within: {
           ...blockNodeAddressSchema,
@@ -5838,7 +5857,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     const selectWhereSchema = objectSchema(
       {
         by: { const: 'select', type: 'string' },
-        select: { oneOf: [textSelectorSchema, nodeSelectorSchema] },
+        select: { oneOf: [planTextSelectorSchema, nodeSelectorSchema] },
         within: blockNodeAddressSchema,
         require: { enum: ['first', 'exactlyOne', 'all'] },
       },
@@ -5876,7 +5895,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
         objectSchema(
           {
             by: { const: 'select', type: 'string' },
-            select: { oneOf: [textSelectorSchema, nodeSelectorSchema] },
+            select: { oneOf: [planTextSelectorSchema, nodeSelectorSchema] },
             within: blockNodeAddressSchema,
             require: { enum: ['first', 'exactlyOne'] },
           },
@@ -5891,7 +5910,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     const assertWhereSchema = objectSchema(
       {
         by: { const: 'select', type: 'string' },
-        select: { oneOf: [textSelectorSchema, nodeSelectorSchema] },
+        select: { oneOf: [planTextSelectorSchema, nodeSelectorSchema] },
         within: blockNodeAddressSchema,
       },
       ['by', 'select'],

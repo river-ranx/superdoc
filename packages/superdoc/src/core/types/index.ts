@@ -1085,6 +1085,8 @@ export interface FindReplaceConfig {
   ignoreDiacriticsAriaLabel?: string;
   /** Whether replace is available (default: true). */
   replaceEnabled?: boolean;
+  /** When true, search includes text from pending tracked deletions. Defaults to false. */
+  includeDeletedText?: boolean;
   /** Vue component to render as custom find/replace content. Mutually exclusive with `render`. */
   component?: unknown;
   /** Extra props passed to the custom Vue component. */

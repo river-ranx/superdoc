@@ -24,6 +24,15 @@ export interface TextSelector {
    * Defaults to false.
    */
   wholeWord?: boolean;
+  /**
+   * When true, includes text from pending tracked deletions in search results.
+   * Defaults to false (Word-compatible behavior: deleted text is not searchable).
+   *
+   * Note: this flag controls match discovery only. The `node` payload in each
+   * result item is still projected using the visible text model, so deleted runs
+   * will not appear in `item.node` even when they caused the match.
+   */
+  includeDeletedText?: boolean;
 }
 
 export interface NodeSelector {

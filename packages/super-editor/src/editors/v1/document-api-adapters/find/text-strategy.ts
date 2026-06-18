@@ -99,7 +99,7 @@ export function executeTextSelector(
   if (!pattern) return { matches: [], total: 0 };
 
   const search = requireEditorCommand(editor.commands?.search, 'find (search)');
-  const searchModel = options.searchModel ?? 'visible';
+  const searchModel = options.searchModel ?? (selector.includeDeletedText ? 'raw' : 'visible');
   const textOffsetOptions = { textModel: searchModel };
 
   pattern.lastIndex = 0;
