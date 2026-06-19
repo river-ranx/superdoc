@@ -5,6 +5,10 @@ on:
   merge_group:
   workflow_dispatch:
 
+concurrency:
+  group: ci-examples-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
 jobs:
   detect:
     runs-on: ubuntu-latest
@@ -88,7 +92,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
         example: [react, vue, vanilla, cdn, angular, nuxt, laravel, solid]
     steps:
@@ -163,7 +167,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
         example: [superdoc-yjs, hocuspocus, liveblocks]
     steps:
@@ -242,7 +246,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
         example: [track-changes, comments, toolbar]
     steps:
@@ -301,7 +305,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
         example: [selection-capture, configurable-toolbar]
     steps:
@@ -360,7 +364,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
         example: [redlining]
     steps:
@@ -419,7 +423,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
         example: [react-shadcn, react-mui, vue-vuetify, svelte-shadcn, vanilla]
     steps:
@@ -478,7 +482,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
         example: [custom-mark, custom-node]
     steps:
