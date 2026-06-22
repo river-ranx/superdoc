@@ -668,6 +668,67 @@ describe('useFindReplace', () => {
         }),
       );
     });
+
+    describe('debounce', () => {
+      beforeEach(() => {
+        vi.useFakeTimers();
+      });
+
+      afterEach(() => {
+        vi.useRealTimers();
+      });
+
+      it('coalesces two query changes within 150ms into one final search', async () => {
+        handle.findQuery.value = 'tr';
+        await nextTick();
+
+        vi.advanceTimersByTime(100);
+
+        handle.findQuery.value = 'tracked';
+        await nextTick();
+
+        vi.advanceTimersByTime(149);
+        expect(editor.commands.setSearchSession).not.toHaveBeenCalled();
+
+        vi.advanceTimersByTime(1);
+
+        expect(editor.commands.setSearchSession).toHaveBeenCalledTimes(1);
+        expect(editor.commands.setSearchSession).toHaveBeenCalledWith(
+          'tracked',
+          expect.objectContaining({
+            searchModel: 'visible',
+          }),
+        );
+      });
+
+      it('runs separate searches when query changes are more than 150ms apart', async () => {
+        handle.findQuery.value = 'tr';
+        await nextTick();
+
+        vi.advanceTimersByTime(150);
+
+        handle.findQuery.value = 'tracked';
+        await nextTick();
+
+        vi.advanceTimersByTime(150);
+
+        expect(editor.commands.setSearchSession).toHaveBeenCalledTimes(2);
+        expect(editor.commands.setSearchSession).toHaveBeenNthCalledWith(
+          1,
+          'tr',
+          expect.objectContaining({
+            searchModel: 'visible',
+          }),
+        );
+        expect(editor.commands.setSearchSession).toHaveBeenNthCalledWith(
+          2,
+          'tracked',
+          expect.objectContaining({
+            searchModel: 'visible',
+          }),
+        );
+      });
+    });
   });
 
   describe('handle reactive state', () => {
